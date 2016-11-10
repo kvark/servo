@@ -13,8 +13,7 @@ pub struct WebMetalCommandBuffer {
 }
 
 impl WebMetalCommandBuffer {
-    pub fn new(global: &GlobalScope)
-               -> Root<WebMetalCommandBuffer> {
+    pub fn new(global: &GlobalScope) -> Root<WebMetalCommandBuffer> {
         let object = box WebMetalCommandBuffer {
             reflector: Reflector::new(),
         };

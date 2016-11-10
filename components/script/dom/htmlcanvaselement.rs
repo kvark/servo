@@ -9,7 +9,7 @@ use dom::bindings::codegen::Bindings::CanvasRenderingContext2DBinding::CanvasRen
 use dom::bindings::codegen::Bindings::HTMLCanvasElementBinding;
 use dom::bindings::codegen::Bindings::HTMLCanvasElementBinding::HTMLCanvasElementMethods;
 use dom::bindings::codegen::Bindings::WebGLRenderingContextBinding::WebGLContextAttributes;
-use dom::bindings::codegen::UnionTypes::CanvasRenderingContext2DOrWebGLRenderingContext;
+use dom::bindings::codegen::UnionTypes::CanvasRenderingContext2DOrWebGLRenderingContextOrWebMetalRenderingContext as RenderingContext;
 use dom::bindings::conversions::ConversionResult;
 use dom::bindings::error::{Error, Fallible};
 use dom::bindings::inheritance::Castable;
@@ -24,6 +24,7 @@ use dom::htmlelement::HTMLElement;
 use dom::node::{Node, window_from_node};
 use dom::virtualmethods::VirtualMethods;
 use dom::webglrenderingcontext::{LayoutCanvasWebGLRenderingContextHelpers, WebGLRenderingContext};
+use dom::webmetalrenderingcontext::{LayoutCanvasWebMetalRenderingContextHelpers, WebMetalRenderingContext};
 use euclid::size::Size2D;
 use html5ever_atoms::LocalName;
 use image::ColorType;
@@ -45,6 +46,7 @@ const DEFAULT_HEIGHT: u32 = 150;
 pub enum CanvasContext {
     Context2d(JS<CanvasRenderingContext2D>),
     WebGL(JS<WebGLRenderingContext>),
+    WebMetal(JS<WebMetalRenderingContext>),
 }
 
 impl HeapGCValue for CanvasContext {}
@@ -80,6 +82,7 @@ impl HTMLCanvasElement {
             match *context {
                 CanvasContext::Context2d(ref context) => context.set_bitmap_dimensions(size),
                 CanvasContext::WebGL(ref context) => context.recreate(size),
+                CanvasContext::WebMetal(ref context) => context.recreate(size),
             }
         }
     }
@@ -109,10 +112,13 @@ impl LayoutHTMLCanvasElementHelpers for LayoutJS<HTMLCanvasElement> {
                 match *context {
                     CanvasContext::Context2d(ref context) => {
                         context.to_layout().get_ipc_renderer()
-                    },
+                    }
                     CanvasContext::WebGL(ref context) => {
                         context.to_layout().get_ipc_renderer()
-                    },
+                    }
+                    CanvasContext::WebMetal(ref context) => {
+                        context.to_layout().get_ipc_renderer()
+                    }
                 }
             });
 
@@ -134,6 +140,7 @@ impl HTMLCanvasElement {
             match *context {
                 CanvasContext::Context2d(ref context) => context.ipc_renderer(),
                 CanvasContext::WebGL(ref context) => context.ipc_renderer(),
+                CanvasContext::WebMetal(ref context) => context.ipc_renderer(),
             }
         })
     }
@@ -183,6 +190,27 @@ impl HTMLCanvasElement {
         }
 
         if let Some(CanvasContext::WebGL(ref context)) = *self.context.borrow() {
+            Some(Root::from_ref(&*context))
+        } else {
+            None
+        }
+    }
+
+    #[allow(unsafe_code)]
+    pub fn get_or_init_webmetal_context(&self,
+                                        cx: *mut JSContext,
+                                        _attrs: Option<HandleValue>)
+                                        -> Option<Root<WebMetalRenderingContext>> {
+        if self.context.borrow().is_none() {
+            let window = window_from_node(self);
+            let size = self.get_size();
+
+            let maybe_ctx = WebMetalRenderingContext::new(window.upcast(), self, size);
+
+            *self.context.borrow_mut() = maybe_ctx.map(|ctx| CanvasContext::WebMetal(JS::from_ref(&*ctx)));
+        }
+
+        if let Some(CanvasContext::WebMetal(ref context)) = *self.context.borrow() {
             Some(Root::from_ref(&*context))
         } else {
             None
@@ -241,15 +269,19 @@ impl HTMLCanvasElementMethods for HTMLCanvasElement {
                   cx: *mut JSContext,
                   id: DOMString,
                   attributes: Vec<HandleValue>)
-        -> Option<CanvasRenderingContext2DOrWebGLRenderingContext> {
+                  -> Option<RenderingContext> {
         match &*id {
             "2d" => {
                 self.get_or_init_2d_context()
-                    .map(CanvasRenderingContext2DOrWebGLRenderingContext::CanvasRenderingContext2D)
+                    .map(RenderingContext::CanvasRenderingContext2D)
             }
             "webgl" | "experimental-webgl" => {
                 self.get_or_init_webgl_context(cx, attributes.get(0).cloned())
-                    .map(CanvasRenderingContext2DOrWebGLRenderingContext::WebGLRenderingContext)
+                    .map(RenderingContext::WebGLRenderingContext)
+            }
+            "experimental-webmetal" => {
+                self.get_or_init_webmetal_context(cx, attributes.get(0).cloned())
+                    .map(RenderingContext::WebMetalRenderingContext)
             }
             _ => None
         }

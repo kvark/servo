@@ -14,8 +14,7 @@ pub struct WebMetalCommandQueue {
 }
 
 impl WebMetalCommandQueue {
-    pub fn new(global: &GlobalScope)
-               -> Root<WebMetalCommandQueue> {
+    pub fn new(global: &GlobalScope) -> Root<WebMetalCommandQueue> {
         let object = box WebMetalCommandQueue {
             reflector: Reflector::new(),
         };

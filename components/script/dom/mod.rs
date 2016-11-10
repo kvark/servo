@@ -444,6 +444,7 @@ pub mod webgluniformlocation;
 pub mod webmetalcommandbuffer;
 pub mod webmetalcommandqueue;
 pub mod webmetaldevice;
+pub mod webmetalrenderingcontext;
 pub mod websocket;
 pub mod window;
 pub mod worker;

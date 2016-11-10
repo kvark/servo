@@ -4,16 +4,22 @@
 
 use dom::bindings::codegen::Bindings::WebMetalDeviceBinding as binding;
 use dom::bindings::js::Root;
-use dom::bindings::reflector::{Reflectable, Reflector, reflect_dom_object};
-use dom::webmetalcommandqueue::WebMetalCommandQueue;
+use dom::bindings::reflector::{Reflector, reflect_dom_object};
+use dom::globalscope::GlobalScope;
 
 #[dom_struct]
 pub struct WebMetalDevice {
     reflector: Reflector,
 }
 
-impl binding::WebMetalDeviceMethods for WebMetalDevice {
-    fn GetCommandQueue(&self) -> Root<WebMetalCommandQueue> {
-        WebMetalCommandQueue::new(&self.global())
+impl WebMetalDevice {
+    pub fn new(global: &GlobalScope) -> Root<WebMetalDevice> {
+        let object = box WebMetalDevice {
+            reflector: Reflector::new(),
+        };
+        reflect_dom_object(object, global, binding::Wrap)
     }
 }
+
+//impl binding::WebMetalDeviceMethods for WebMetalDevice {
+//}

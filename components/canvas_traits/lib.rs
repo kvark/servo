@@ -49,6 +49,7 @@ pub enum CanvasMsg {
     FromLayout(FromLayoutMsg),
     FromScript(FromScriptMsg),
     WebGL(WebGLCommand),
+    //WebMetal(WebMetalCommand),
 }
 
 #[derive(Clone, Deserialize, Serialize)]
