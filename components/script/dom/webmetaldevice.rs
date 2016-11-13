@@ -4,8 +4,10 @@
 
 use dom::bindings::codegen::Bindings::WebMetalDeviceBinding as binding;
 use dom::bindings::js::Root;
-use dom::bindings::reflector::{Reflector, reflect_dom_object};
+use dom::bindings::reflector::{Reflectable, Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
+use dom::webmetalbuffer::WebMetalBuffer;
+use js::jsapi::{JSContext, JSObject};
 
 #[dom_struct]
 pub struct WebMetalDevice {
@@ -21,5 +23,8 @@ impl WebMetalDevice {
     }
 }
 
-//impl binding::WebMetalDeviceMethods for WebMetalDevice {
-//}
+impl binding::WebMetalDeviceMethods for WebMetalDevice {
+    fn MakeBuffer(&self, _cx: *mut JSContext, _size: u32, _data: *mut JSObject) -> Root<WebMetalBuffer> {
+        WebMetalBuffer::new(&self.global())
+    }
+}

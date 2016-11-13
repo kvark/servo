@@ -441,6 +441,7 @@ pub mod webglshader;
 pub mod webglshaderprecisionformat;
 pub mod webgltexture;
 pub mod webgluniformlocation;
+pub mod webmetalbuffer;
 pub mod webmetalcommandbuffer;
 pub mod webmetalcommandqueue;
 pub mod webmetaldevice;

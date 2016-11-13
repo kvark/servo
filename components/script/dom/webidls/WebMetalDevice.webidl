@@ -3,17 +3,13 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 interface WebMetalDevice {
-//  WebMetalBuffer                  makeBuffer();
+    WebMetalBuffer                  makeBuffer(MetalSize size, object? data);
 //    WebMetalTexture                 makeTexture();
 //  WebMetalFence                   makeFence();
 //    WebMetalSamplerState            makeSamplerState();
 //    WebMetalRenderPipelineState     makeRenderPipelineState();
 //  WebMetalComputePipelineState    makeComputePipelineState();
 };
-
-//interface WebMetalBuffer
-//{
-//};
 
 //interface WebMetalTexture
 //{

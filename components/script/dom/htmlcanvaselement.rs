@@ -198,7 +198,7 @@ impl HTMLCanvasElement {
 
     #[allow(unsafe_code)]
     pub fn get_or_init_webmetal_context(&self,
-                                        cx: *mut JSContext,
+                                        _cx: *mut JSContext,
                                         _attrs: Option<HandleValue>)
                                         -> Option<Root<WebMetalRenderingContext>> {
         if self.context.borrow().is_none() {
