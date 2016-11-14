@@ -1,0 +1,18 @@
+[package]
+name = "webmetal"
+version = "0.1.0"
+authors = ["Dzmitry Malyshau <kvark@mozilla.com>"]
+license = "MPL-2.0"
+publish = false
+
+[lib]
+name = "webmetal"
+path = "lib.rs"
+
+[dependencies]
+plugins = {path = "../plugins"}
+serde = {version = "0.8", features = ["unstable"]}
+serde_derive = "0.8"
+shared_library = "0.1"
+#winit = "0.5"
+vk-sys = "0.2"

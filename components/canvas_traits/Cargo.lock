@@ -10,6 +10,7 @@ dependencies = [
  "ipc-channel 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "plugins 0.0.1",
  "serde 0.8.17 (registry+https://github.com/rust-lang/crates.io-index)",
+ "webmetal 0.1.0",
  "serde_derive 0.8.17 (registry+https://github.com/rust-lang/crates.io-index)",
  "webrender_traits 0.8.0 (git+https://github.com/servo/webrender)",
 ]
@@ -960,6 +961,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "vk-sys"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
 name = "wayland-client"
 version = "0.5.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1009,6 +1015,17 @@ dependencies = [
  "byteorder 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "tempfile 2.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "wayland-client 0.5.12 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "webmetal"
+version = "0.1.0"
+dependencies = [
+ "plugins 0.0.1",
+ "serde 0.8.17 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_derive 0.8.17 (registry+https://github.com/rust-lang/crates.io-index)",
+ "shared_library 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "vk-sys 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1173,6 +1190,7 @@ dependencies = [
 "checksum unicode-xid 0.0.3 (registry+https://github.com/rust-lang/crates.io-index)" = "36dff09cafb4ec7c8cf0023eb0b686cb6ce65499116a12201c9e11840ca01beb"
 "checksum user32-sys 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "4ef4711d107b21b410a3a974b1204d9accc8b10dad75d8324b5d755de1617d47"
 "checksum uuid 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "1a9ff57156caf7e22f37baf3c9d8f6ce8194842c23419dafcb0716024514d162"
+"checksum vk-sys 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "7d08f2774729b3757748aa312332387ee8bae001c3bb7459bf49b127282acceb"
 "checksum wayland-client 0.5.12 (registry+https://github.com/rust-lang/crates.io-index)" = "ced3094c157b5cc0a08d40530e1a627d9f88b9a436971338d2646439128a559e"
 "checksum wayland-kbd 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)" = "73bc10e84c1da90777beffecd24742baea17564ffc2a9918af41871c748eb050"
 "checksum wayland-scanner 0.5.11 (registry+https://github.com/rust-lang/crates.io-index)" = "5a1869370d6bafcbabae8724511d803f4e209a70e94ad94a4249269534364f66"
