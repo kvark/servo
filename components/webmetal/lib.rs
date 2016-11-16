@@ -8,8 +8,6 @@
 #![feature(proc_macro)]
 #![plugin(plugins)]
 
-#![deny(unsafe_code)]
-
 #[macro_use] extern crate serde_derive;
 extern crate shared_library;
 extern crate vk_sys as vk;
@@ -94,26 +92,30 @@ const SURFACE_EXTENSIONS: &'static [&'static str] = &[
     "VK_KHR_win32_surface",
 ];
 
-pub struct Options {
-    pub width: u16,
-    pub height: u16,
-    pub debug: bool,
+pub struct SwapChain {
+    _image: vk::Image,
+    _memory: vk::DeviceMemory,
+    _views: Vec<vk::ImageView>,
+}
+
+pub struct Device {
+    device: vk::Device,
+    pointers: vk::DevicePointers,
+    _mem_system: u32,
+    mem_video: u32,
+}
+
+pub struct Queue {
+    _queue: vk::Queue,
 }
 
 #[derive(Debug)]
 pub struct InitError;
 
-pub struct Backend {
-    _queue: vk::Queue,
-    _mem_system: u32,
-    _mem_video: u32,
-}
-
-impl Backend {
-    #[allow(unsafe_code)]
-    pub fn new(options: Options)
-               -> Result<(Backend, WebMetalCapabilities), InitError> {
-        let (layers, extensions) = if options.debug {
+impl Device {
+    pub fn new(debug: bool)
+               -> Result<(Device, Queue, WebMetalCapabilities), InitError> {
+        let (layers, extensions) = if debug {
             (LAYERS_DEBUG, EXTENSIONS_DEBUG)
         } else {
             (LAYERS, EXTENSIONS)
@@ -272,12 +274,75 @@ impl Backend {
             out
         };
 
-        let backend = Backend {
-            _queue: queue,
-            _mem_system: msys_id,
-            _mem_video: mvid_id,
+        Ok((
+            Device {
+                device: device,
+                pointers: dev_pointers,
+                _mem_system: msys_id,
+                mem_video: mvid_id,
+            },
+            Queue {
+                _queue: queue,
+            },
+            WebMetalCapabilities,
+        ))
+    }
+
+    fn alloc(&self, mem_id: u32, reqs: vk::MemoryRequirements) -> vk::DeviceMemory {
+        let info = vk::MemoryAllocateInfo {
+            sType: vk::STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            pNext: ptr::null(),
+            allocationSize: reqs.size,
+            memoryTypeIndex: mem_id,
         };
-        let caps = WebMetalCapabilities;
-        Ok((backend, caps))
+        let mut mem = 0;
+        assert_eq!(vk::SUCCESS, unsafe {
+            self.pointers.AllocateMemory(self.device, &info, ptr::null(), &mut mem)
+        });
+        mem
+    }
+
+    pub fn create_swap_chain(&self, width: u32, height: u32, count: u32) -> SwapChain {
+        let image_info = vk::ImageCreateInfo {
+            sType: vk::STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            imageType: vk::IMAGE_TYPE_2D,
+            format: vk::FORMAT_R8G8B8A8_SRGB,
+            extent: vk::Extent3D {
+                width: width,
+                height: height,
+                depth: 1,
+            },
+            mipLevels: 1,
+            arrayLayers: count,
+            samples: vk::SAMPLE_COUNT_1_BIT,
+            tiling: vk::IMAGE_TILING_OPTIMAL,
+            usage: vk::IMAGE_USAGE_TRANSFER_SRC_BIT | vk::IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+            sharingMode: vk::SHARING_MODE_EXCLUSIVE,
+            queueFamilyIndexCount: 0,
+            pQueueFamilyIndices: ptr::null(),
+            initialLayout: vk::IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        };
+
+        let mut image = 0;
+        assert_eq!(vk::SUCCESS, unsafe {
+            self.pointers.CreateImage(self.device, &image_info, ptr::null(), &mut image)
+        });
+        let reqs = unsafe {
+            let mut out = mem::zeroed();
+            self.pointers.GetImageMemoryRequirements(self.device, image, &mut out);
+            out
+        };
+        let memory = self.alloc(self.mem_video, reqs);
+        assert_eq!(vk::SUCCESS, unsafe {
+            self.pointers.BindImageMemory(self.device, image, memory, 0)
+        });
+
+        SwapChain {
+            _image: image,
+            _memory: memory,
+            _views: Vec::new(),
+        }
     }
 }

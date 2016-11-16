@@ -8,26 +8,28 @@ use euclid::size::Size2D;
 use ipc_channel::ipc::{self, IpcSender};
 use std::sync::mpsc::channel;
 use util::thread::spawn_named;
-use webmetal::{Backend, Options, WebMetalCapabilities, WebMetalCommand};
+use webmetal::{self, WebMetalCapabilities, WebMetalCommand};
 
 pub struct WebMetalPaintThread {
+    _device: webmetal::Device,
+    _queue: webmetal::Queue,
+    _swap_chain: webmetal::SwapChain,
     _size: Size2D<i32>,
-    _backend: Backend,
 }
 
 impl WebMetalPaintThread {
     fn new(size: Size2D<i32>)
         -> Result<(WebMetalPaintThread, WebMetalCapabilities), String> {
-        let options = Options {
-            width: size.width as u16,
-            height: size.height as u16,
-            debug: false,
-        };
-        match Backend::new(options) {
-            Ok((b, caps)) => {
+        match webmetal::Device::new(false) {
+            Ok((dev, queue, caps)) => {
+                let swap_chain = dev.create_swap_chain(size.width as u32,
+                                                       size.height as u32,
+                                                       3);
                 let painter = WebMetalPaintThread {
+                    _device: dev,
+                    _queue: queue,
+                    _swap_chain: swap_chain,
                     _size: size,
-                    _backend: b,
                 };
                 Ok((painter, caps))
             }
@@ -92,11 +94,11 @@ impl WebMetalPaintThread {
             }
         });
 
-        result_port.recv().unwrap().map(|limits| (sender, limits))
+        result_port.recv().unwrap().map(|caps| (sender, caps))
     }
 
     fn send_data(&mut self, _chan: IpcSender<CanvasData>) {
-        //WM TODO
+        //WM TODO: actually read back the surface and send it over
     }
 
     fn recreate(&mut self, _size: Size2D<i32>) -> Result<(), &'static str> {

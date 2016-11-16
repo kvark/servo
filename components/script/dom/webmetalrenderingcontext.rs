@@ -5,10 +5,10 @@
 use canvas_traits::{CanvasCommonMsg, CanvasMsg};
 use dom::bindings::codegen::Bindings::WebMetalRenderingContextBinding as binding;
 use dom::bindings::js::{LayoutJS, Root};
-use dom::bindings::reflector::{Reflector, reflect_dom_object};
+use dom::bindings::reflector::{Reflectable, Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
 use dom::htmlcanvaselement::HTMLCanvasElement;
-use dom::webmetalcommandqueue::WebMetalCommandQueue;
+use dom::webmetalcommandbuffer::WebMetalCommandBuffer;
 use dom::webmetaldevice::WebMetalDevice;
 use euclid::size::Size2D;
 use ipc_channel::ipc::{self, IpcSender};
@@ -19,13 +19,21 @@ pub struct WebMetalRenderingContext {
     #[ignore_heap_size_of = "Defined in ipc-channel"]
     ipc_renderer: IpcSender<CanvasMsg>,
     device: Root<WebMetalDevice>,
-    command_queue: Root<WebMetalCommandQueue>,
 }
 
 impl WebMetalRenderingContext {
     fn new_internal(_global: &GlobalScope, _canvas: &HTMLCanvasElement, _size: Size2D<i32>)
                     -> Result<WebMetalRenderingContext, String> {
-        Err(String::new())
+        let (sender, receiver) = ipc::channel().unwrap();
+        global.constellation_chan()
+              .send(ConstellationMsg::CreateWebMetalPaintThread(size, sender))
+              .unwrap();
+        receiver.recv().unwrap().map(|(ipc_renderer, caps)| WebMetalRenderingContext {
+            reflector: Reflector::new(),
+            ipc_renderer: ipc_renderer,
+            capabilities: caps,
+            device: WebMetalDevice::new(global),
+        })
     }
 
     #[allow(unrooted_must_root)]
@@ -54,8 +62,8 @@ impl binding::WebMetalRenderingContextMethods for WebMetalRenderingContext {
     fn GetDevice(&self) -> Root<WebMetalDevice> {
         self.device.clone()
     }
-    fn GetCommandQueue(&self) -> Root<WebMetalCommandQueue> {
-        self.command_queue.clone()
+    fn MakeCommandBuffer(&self) -> Root<WebMetalCommandBuffer> {
+        WebMetalCommandBuffer::new(&self.global())
     }
 }
 

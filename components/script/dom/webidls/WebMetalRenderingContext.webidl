@@ -6,5 +6,5 @@ typedef unsigned long       MetalSize;
 
 interface WebMetalRenderingContext {
     WebMetalDevice          getDevice();
-    WebMetalCommandQueue    getCommandQueue();
+    WebMetalCommandBuffer   makeCommandBuffer();
 };
