@@ -102,8 +102,8 @@ use style::values::specified::Length;
 use time::Duration;
 use url::Origin as UrlOrigin;
 use uuid::Uuid;
-use webrender_traits::{WebGLBufferId, WebGLError, WebGLFramebufferId, WebGLProgramId};
-use webrender_traits::{WebGLRenderbufferId, WebGLShaderId, WebGLTextureId};
+use webmetal::{self, WebMetalCapabilities};
+use webrender_traits;
 
 /// A trait to allow tracing (only) DOM objects.
 pub trait JSTraceable {
@@ -337,7 +337,7 @@ no_jsmanaged_fields!(StorageType);
 no_jsmanaged_fields!(CanvasGradientStop, LinearGradientStyle, RadialGradientStyle);
 no_jsmanaged_fields!(LineCapStyle, LineJoinStyle, CompositionOrBlending);
 no_jsmanaged_fields!(RepetitionStyle);
-no_jsmanaged_fields!(WebGLError, GLLimits);
+no_jsmanaged_fields!(GLLimits, WebMetalCapabilities);
 no_jsmanaged_fields!(TimeProfilerChan);
 no_jsmanaged_fields!(MemProfilerChan);
 no_jsmanaged_fields!(PseudoElement);
@@ -366,12 +366,10 @@ no_jsmanaged_fields!(RelativePos);
 no_jsmanaged_fields!(OpaqueStyleAndLayoutData);
 no_jsmanaged_fields!(PathBuf);
 no_jsmanaged_fields!(CSSErrorReporter);
-no_jsmanaged_fields!(WebGLBufferId);
-no_jsmanaged_fields!(WebGLFramebufferId);
-no_jsmanaged_fields!(WebGLProgramId);
-no_jsmanaged_fields!(WebGLRenderbufferId);
-no_jsmanaged_fields!(WebGLShaderId);
-no_jsmanaged_fields!(WebGLTextureId);
+no_jsmanaged_fields!(webrender_traits::
+    WebGLBufferId, WebGLError, WebGLFramebufferId,
+    WebGLProgramId, WebGLRenderbufferId, WebGLShaderId, WebGLTextureId);
+no_jsmanaged_fields!(webmetal::CommandBuffer);
 no_jsmanaged_fields!(MediaList);
 
 impl JSTraceable for Box<ScriptChan + Send> {

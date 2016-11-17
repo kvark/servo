@@ -321,6 +321,16 @@ macro_rules! no_jsmanaged_fields(
             }
         )+
     );
+    ($space:ident::$($ty:ident),+) => (
+        $(
+            impl $crate::dom::bindings::trace::JSTraceable for $space::$ty {
+                #[inline]
+                fn trace(&self, _: *mut ::js::jsapi::JSTracer) {
+                    // Do nothing
+                }
+            }
+        )+
+    );
     ($ty:ident<$($gen:ident),+>) => (
         impl<$($gen),+> $crate::dom::bindings::trace::JSTraceable for $ty<$($gen),+> {
             #[inline]

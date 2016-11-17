@@ -20,12 +20,6 @@ use std::path::Path;
 #[derive(Debug, Deserialize, Serialize)]
 pub struct WebMetalCapabilities;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub enum WebMetalCommand {
-    //WM TODO
-}
-
-
 struct PhysicalDeviceInfo {
     device: vk::PhysicalDevice,
     _properties: vk::PhysicalDeviceProperties,
@@ -98,16 +92,103 @@ pub struct SwapChain {
     _views: Vec<vk::ImageView>,
 }
 
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CommandBuffer {
+    inner: vk::CommandBuffer,
+    family_index: u32,
+}
+
+impl Drop for CommandBuffer {
+    fn drop(&mut self) {
+        //TODO
+    }
+}
+
+pub struct Queue {
+    inner: vk::Queue,
+    family_index: u32,
+    command_pool: vk::CommandPool,
+}
+
 pub struct Device {
-    device: vk::Device,
+    inner: vk::Device,
     pointers: vk::DevicePointers,
     _mem_system: u32,
     mem_video: u32,
 }
 
-pub struct Queue {
-    _queue: vk::Queue,
+impl Device {
+    fn make_queue(&self, family_id: u32) -> Queue {
+        let com_info = vk::CommandPoolCreateInfo {
+            sType: vk::STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: vk::COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+            queueFamilyIndex: family_id,
+        };
+        let mut com_pool = 0;
+        assert_eq!(vk::SUCCESS, unsafe {
+            self.pointers.CreateCommandPool(self.inner, &com_info, ptr::null(), &mut com_pool)
+        });
+
+        let queue = unsafe {
+            let mut out = mem::zeroed();
+            self.pointers.GetDeviceQueue(self.inner, family_id, 0, &mut out);
+            out
+        };
+        Queue {
+            inner: queue,
+            family_index: family_id,
+            command_pool: com_pool,
+        }
+    }
+
+    pub fn make_command_buffer(&self, queue: &Queue) -> CommandBuffer {
+        let alloc_info = vk::CommandBufferAllocateInfo {
+            sType: vk::STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            pNext: ptr::null(),
+            commandPool: queue.command_pool,
+            level: vk::COMMAND_BUFFER_LEVEL_PRIMARY,
+            commandBufferCount: 1,
+        };
+        let begin_info = vk::CommandBufferBeginInfo {
+            sType: vk::STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            pInheritanceInfo: ptr::null(),
+        };
+
+        let mut buf = 0;
+        assert_eq!(vk::SUCCESS, unsafe {
+            self.pointers.AllocateCommandBuffers(self.inner, &alloc_info, &mut buf)
+        });
+        assert_eq!(vk::SUCCESS, unsafe {
+            self.pointers.BeginCommandBuffer(buf, &begin_info)
+        });
+
+        CommandBuffer {
+            inner: buf,
+            family_index: queue.family_index,
+        }
+    }
+
+    pub fn execute(&self, queue: &Queue, com: CommandBuffer) {
+        assert_eq!(queue.family_index, com.family_index);
+        assert_eq!(vk::SUCCESS, unsafe {
+            self.pointers.EndCommandBuffer(com.inner)
+        });
+        let submit_info = vk::SubmitInfo {
+            sType: vk::STRUCTURE_TYPE_SUBMIT_INFO,
+            commandBufferCount: 1,
+            pCommandBuffers: &com.inner,
+            .. unsafe { mem::zeroed() }
+        };
+        assert_eq!(vk::SUCCESS, unsafe {
+            self.pointers.QueueSubmit(queue.inner, 1, &submit_info, 0)
+        });
+    }
 }
+
 
 #[derive(Debug)]
 pub struct InitError;
@@ -211,11 +292,11 @@ impl Device {
             devices
         };
 
-        let devices = physical_devices.iter()
+        let phys_infos = physical_devices.iter()
             .map(|dev| PhysicalDeviceInfo::new(*dev, &inst_pointers))
             .collect::<Vec<_>>();
 
-        let (dev, (qf_id, _))  = devices.iter()
+        let (dev, (qf_id, _))  = phys_infos.iter()
             .flat_map(|d| iter::repeat(d).zip(d.queue_families.iter().enumerate()))
             .find(|&(_, (_, qf))| qf.queueFlags & vk::QUEUE_GRAPHICS_BIT != 0)
             .unwrap();
@@ -229,7 +310,7 @@ impl Device {
                                 .position(|mt| mt.propertyFlags & vk::MEMORY_PROPERTY_HOST_COHERENT_BIT != 0)
                                 .unwrap() as u32;
 
-        let device = {
+        let vk_device = {
             let cstrings = dev_extensions.iter()
                                          .map(|&s| CString::new(s).unwrap())
                                          .collect::<Vec<_>>();
@@ -266,26 +347,18 @@ impl Device {
         };
 
         let dev_pointers = vk::DevicePointers::load(|name| unsafe {
-            inst_pointers.GetDeviceProcAddr(device, name.as_ptr()) as *const _
+            inst_pointers.GetDeviceProcAddr(vk_device, name.as_ptr()) as *const _
         });
-        let queue = unsafe {
-            let mut out = mem::zeroed();
-            dev_pointers.GetDeviceQueue(device, qf_id as u32, 0, &mut out);
-            out
-        };
 
-        Ok((
-            Device {
-                device: device,
-                pointers: dev_pointers,
-                _mem_system: msys_id,
-                mem_video: mvid_id,
-            },
-            Queue {
-                _queue: queue,
-            },
-            WebMetalCapabilities,
-        ))
+        let device = Device {
+            inner: vk_device,
+            pointers: dev_pointers,
+            _mem_system: msys_id,
+            mem_video: mvid_id,
+        };
+        let queue = device.make_queue(qf_id as u32);
+
+        Ok((device, queue, WebMetalCapabilities))
     }
 
     fn alloc(&self, mem_id: u32, reqs: vk::MemoryRequirements) -> vk::DeviceMemory {
@@ -297,7 +370,7 @@ impl Device {
         };
         let mut mem = 0;
         assert_eq!(vk::SUCCESS, unsafe {
-            self.pointers.AllocateMemory(self.device, &info, ptr::null(), &mut mem)
+            self.pointers.AllocateMemory(self.inner, &info, ptr::null(), &mut mem)
         });
         mem
     }
@@ -327,16 +400,16 @@ impl Device {
 
         let mut image = 0;
         assert_eq!(vk::SUCCESS, unsafe {
-            self.pointers.CreateImage(self.device, &image_info, ptr::null(), &mut image)
+            self.pointers.CreateImage(self.inner, &image_info, ptr::null(), &mut image)
         });
         let reqs = unsafe {
             let mut out = mem::zeroed();
-            self.pointers.GetImageMemoryRequirements(self.device, image, &mut out);
+            self.pointers.GetImageMemoryRequirements(self.inner, image, &mut out);
             out
         };
         let memory = self.alloc(self.mem_video, reqs);
         assert_eq!(vk::SUCCESS, unsafe {
-            self.pointers.BindImageMemory(self.device, image, memory, 0)
+            self.pointers.BindImageMemory(self.inner, image, memory, 0)
         });
 
         SwapChain {

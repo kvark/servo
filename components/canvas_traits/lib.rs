@@ -120,6 +120,11 @@ pub enum Canvas2dMsg {
     SetShadowColor(RGBA),
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum WebMetalCommand {
+    MakeCommandBuffer(IpcSender<Option<webmetal::CommandBuffer>>),
+}
+
 #[derive(Clone, Deserialize, Serialize, HeapSizeOf)]
 pub struct CanvasGradientStop {
     pub offset: f64,

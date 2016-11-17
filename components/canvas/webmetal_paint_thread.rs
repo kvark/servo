@@ -3,16 +3,16 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use canvas_traits::{CanvasCommonMsg, CanvasData, CanvasMsg};
-use canvas_traits::{FromLayoutMsg, FromScriptMsg};
+use canvas_traits::{FromLayoutMsg, FromScriptMsg, WebMetalCommand};
 use euclid::size::Size2D;
 use ipc_channel::ipc::{self, IpcSender};
 use std::sync::mpsc::channel;
 use util::thread::spawn_named;
-use webmetal::{self, WebMetalCapabilities, WebMetalCommand};
+use webmetal::{self, WebMetalCapabilities};
 
 pub struct WebMetalPaintThread {
-    _device: webmetal::Device,
-    _queue: webmetal::Queue,
+    device: webmetal::Device,
+    queue: webmetal::Queue,
     _swap_chain: webmetal::SwapChain,
     _size: Size2D<i32>,
 }
@@ -26,8 +26,8 @@ impl WebMetalPaintThread {
                                                        size.height as u32,
                                                        3);
                 let painter = WebMetalPaintThread {
-                    _device: dev,
-                    _queue: queue,
+                    device: dev,
+                    queue: queue,
                     _swap_chain: swap_chain,
                     _size: size,
                 };
@@ -41,8 +41,14 @@ impl WebMetalPaintThread {
         //WM TODO
     }
 
-    fn handle_message(&self, message: WebMetalCommand) {
+    fn handle_message(&mut self, message: WebMetalCommand) {
         debug!("WebMetal message: {:?}", message);
+        match message {
+            WebMetalCommand::MakeCommandBuffer(sender) => {
+                let com = self.device.make_command_buffer(&self.queue);
+                sender.send(Some(com)).unwrap();
+            }
+        }
     }
 
     /// Creates a new `WebMetalPaintThread` and returns an `IpcSender` to

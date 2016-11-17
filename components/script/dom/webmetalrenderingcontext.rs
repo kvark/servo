@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use canvas_traits::{CanvasCommonMsg, CanvasMsg};
+use canvas_traits::{CanvasCommonMsg, CanvasMsg, WebMetalCommand};
 use dom::bindings::codegen::Bindings::WebMetalRenderingContextBinding as binding;
 use dom::bindings::js::{LayoutJS, Root};
 use dom::bindings::reflector::{Reflectable, Reflector, reflect_dom_object};
@@ -28,7 +28,8 @@ impl WebMetalRenderingContext {
         global.constellation_chan()
               .send(ConstellationMsg::CreateWebMetalPaintThread(size, sender))
               .unwrap();
-        receiver.recv().unwrap().map(|(ipc_renderer, caps)| WebMetalRenderingContext {
+        let response = receiver.recv().unwrap();
+        response.map(|(ipc_renderer, caps)| WebMetalRenderingContext {
             reflector: Reflector::new(),
             ipc_renderer: ipc_renderer,
             capabilities: caps,
@@ -62,8 +63,12 @@ impl binding::WebMetalRenderingContextMethods for WebMetalRenderingContext {
     fn GetDevice(&self) -> Root<WebMetalDevice> {
         self.device.clone()
     }
+
     fn MakeCommandBuffer(&self) -> Root<WebMetalCommandBuffer> {
-        WebMetalCommandBuffer::new(&self.global())
+        let (sender, receiver) = ipc::channel().unwrap();
+        self.ipc_renderer.send(CanvasMsg::WebMetal(WebMetalCommand::MakeCommandBuffer(sender))).unwrap();
+        let com = receiver.recv().unwrap().unwrap();
+        WebMetalCommandBuffer::new(&self.global(), com)
     }
 }
 
