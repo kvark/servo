@@ -12,19 +12,29 @@ use webmetal;
 pub struct WebMetalCommandBuffer {
     reflector: Reflector,
     #[ignore_heap_size_of = "Defined in webmetal"]
-    com_buf: webmetal::CommandBuffer,
+    inner: webmetal::CommandBuffer,
 }
 
 impl WebMetalCommandBuffer {
-    pub fn new(global: &GlobalScope, com: webmetal::CommandBuffer)
+    pub fn new(global: &GlobalScope, inner: webmetal::CommandBuffer)
                -> Root<WebMetalCommandBuffer> {
         let object = box WebMetalCommandBuffer {
             reflector: Reflector::new(),
-            com_buf: com,
+            inner: inner,
         };
         reflect_dom_object(object, global, binding::Wrap)
+    }
+
+    pub fn get_inner(&self) -> webmetal::CommandBuffer {
+        self.inner.clone()
     }
 }
 
 //impl binding::WebMetalCommandBufferMethods for WebMetalCommandBuffer {
 //}
+
+impl Drop for WebMetalCommandBuffer {
+    fn drop(&mut self) {
+        //TODO
+    }
+}

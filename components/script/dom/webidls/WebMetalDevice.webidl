@@ -10,15 +10,3 @@ interface WebMetalDevice {
 //    WebMetalRenderPipelineState     makeRenderPipelineState();
 //  WebMetalComputePipelineState    makeComputePipelineState();
 };
-
-//interface WebMetalTexture
-//{
-//};
-
-//interface WebMetalSamplerState
-//{
-//};
-
-//interface WebMetalRenderPipelineState
-//{
-//WW};

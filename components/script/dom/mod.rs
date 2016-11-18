@@ -445,6 +445,7 @@ pub mod webmetalbuffer;
 pub mod webmetalcommandbuffer;
 pub mod webmetaldevice;
 pub mod webmetalrenderingcontext;
+pub mod webmetaltargetview;
 pub mod websocket;
 pub mod window;
 pub mod worker;

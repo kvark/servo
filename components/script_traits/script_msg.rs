@@ -10,7 +10,7 @@ use LoadData;
 use MozBrowserEvent;
 use WorkerGlobalScopeInit;
 use WorkerScriptLoadOrigin;
-use canvas_traits::CanvasMsg;
+use canvas_traits::{CanvasMsg, WebMetalInit};
 use devtools_traits::{ScriptToDevtoolsControlMsg, WorkerId};
 use euclid::point::Point2D;
 use euclid::size::Size2D;
@@ -23,6 +23,7 @@ use offscreen_gl_context::{GLContextAttributes, GLLimits};
 use servo_url::ServoUrl;
 use style_traits::cursor::Cursor;
 use style_traits::viewport::ViewportConstraints;
+use webmetal::WebMetalCapabilities;
 
 /// Messages from the layout to the constellation.
 #[derive(Deserialize, Serialize)]
@@ -73,6 +74,11 @@ pub enum ScriptMsg {
     CreateWebGLPaintThread(Size2D<i32>,
                            GLContextAttributes,
                            IpcSender<Result<(IpcSender<CanvasMsg>, GLLimits), String>>),
+    /// Requests that a new WebMetal thread be created. (This is done in the constellation because
+    /// WebMetal uses the GPU and we don't want to give untrusted content access to the GPU.)
+    CreateWebMetalPaintThread(Size2D<i32>,
+                              u8,
+                              IpcSender<Result<WebMetalInit, String>>),
     /// Notifies the constellation that this frame has received focus.
     Focus(PipelineId),
     /// Forward an event that was sent to the parent window.

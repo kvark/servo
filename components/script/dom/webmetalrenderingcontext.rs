@@ -4,14 +4,18 @@
 
 use canvas_traits::{CanvasCommonMsg, CanvasMsg, WebMetalCommand};
 use dom::bindings::codegen::Bindings::WebMetalRenderingContextBinding as binding;
-use dom::bindings::js::{LayoutJS, Root};
+use dom::bindings::js::{JS, LayoutJS, Root};
 use dom::bindings::reflector::{Reflectable, Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
 use dom::htmlcanvaselement::HTMLCanvasElement;
 use dom::webmetalcommandbuffer::WebMetalCommandBuffer;
 use dom::webmetaldevice::WebMetalDevice;
+use dom::webmetaltargetview::WebMetalTargetView;
 use euclid::size::Size2D;
 use ipc_channel::ipc::{self, IpcSender};
+use script_traits::ScriptMsg as ConstellationMsg;
+use std::cell::Cell;
+use webmetal::WebMetalCapabilities;
 
 #[dom_struct]
 pub struct WebMetalRenderingContext {
@@ -25,15 +29,20 @@ impl WebMetalRenderingContext {
     fn new_internal(_global: &GlobalScope, _canvas: &HTMLCanvasElement, _size: Size2D<i32>)
                     -> Result<WebMetalRenderingContext, String> {
         let (sender, receiver) = ipc::channel().unwrap();
+        let num_frames = 3;
         global.constellation_chan()
-              .send(ConstellationMsg::CreateWebMetalPaintThread(size, sender))
+              .send(ConstellationMsg::CreateWebMetalPaintThread(size, num_frames, sender))
               .unwrap();
         let response = receiver.recv().unwrap();
-        response.map(|(ipc_renderer, caps)| WebMetalRenderingContext {
+        response.map(|(ipc_renderer, targets, caps)| WebMetalRenderingContext {
             reflector: Reflector::new(),
             ipc_renderer: ipc_renderer,
             capabilities: caps,
-            device: WebMetalDevice::new(global),
+            device: JS::from_ref(&*WebMetalDevice::new(global)),
+            current_target_index: Cell::new(0),
+            swap_targets: targets.into_iter().map(|view|
+                JS::from_ref(&*WebMetalTargetView::new(global, view))
+                ).collect(),
         })
     }
 
@@ -61,7 +70,7 @@ impl WebMetalRenderingContext {
 
 impl binding::WebMetalRenderingContextMethods for WebMetalRenderingContext {
     fn GetDevice(&self) -> Root<WebMetalDevice> {
-        self.device.clone()
+        Root::from_ref(&self.device)
     }
 
     fn MakeCommandBuffer(&self) -> Root<WebMetalCommandBuffer> {
@@ -69,6 +78,24 @@ impl binding::WebMetalRenderingContextMethods for WebMetalRenderingContext {
         self.ipc_renderer.send(CanvasMsg::WebMetal(WebMetalCommand::MakeCommandBuffer(sender))).unwrap();
         let com = receiver.recv().unwrap().unwrap();
         WebMetalCommandBuffer::new(&self.global(), com)
+    }
+
+    fn Submit(&self, com: &WebMetalCommandBuffer) {
+        self.ipc_renderer.send(CanvasMsg::WebMetal(WebMetalCommand::Submit(com.get_inner()))).unwrap();
+    }
+
+    fn NextFrameTarget(&self) -> Root<WebMetalTargetView> {
+        let mut index = self.current_target_index.get() + 1;
+        if index >= self.swap_targets.len() {
+            index = 0;
+        }
+        self.current_target_index.set(index);
+        Root::from_ref(&self.swap_targets[index])
+    }
+
+    fn EndFrame(&self) {
+        //TODO: wait for a fence
+        //TODO: read back the contents of the active target
     }
 }
 

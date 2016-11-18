@@ -123,7 +123,12 @@ pub enum Canvas2dMsg {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum WebMetalCommand {
     MakeCommandBuffer(IpcSender<Option<webmetal::CommandBuffer>>),
+    Submit(webmetal::CommandBuffer),
 }
+
+pub type WebMetalInit = (IpcSender<CanvasMsg>,
+                         Vec<webmetal::TargetView>,
+                         webmetal::WebMetalCapabilities);
 
 #[derive(Clone, Deserialize, Serialize, HeapSizeOf)]
 pub struct CanvasGradientStop {

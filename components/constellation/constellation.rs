@@ -13,7 +13,8 @@ use backtrace::Backtrace;
 use bluetooth_traits::BluetoothRequest;
 use canvas::canvas_paint_thread::CanvasPaintThread;
 use canvas::webgl_paint_thread::WebGLPaintThread;
-use canvas_traits::CanvasMsg;
+use canvas::webmetal_paint_thread::WebMetalPaintThread;
+use canvas_traits::{CanvasMsg, WebMetalInit};
 use compositing::SendableFrameTree;
 use compositing::compositor_thread::CompositorProxy;
 use compositing::compositor_thread::Msg as ToCompositorMsg;
@@ -1019,6 +1020,10 @@ impl<Message, LTF, STF> Constellation<Message, LTF, STF>
                 debug!("constellation got create-WebGL-paint-thread message");
                 self.handle_create_webgl_paint_thread_msg(&size, attributes, sender)
             }
+            FromScriptMsg::CreateWebMetalPaintThread(size, frame_num, sender) => {
+                debug!("constellation got create-WebMetal-paint-thread message");
+                self.handle_create_webmetal_paint_thread_msg(&size, frame_num, sender)
+            }
             FromScriptMsg::NodeStatus(message) => {
                 debug!("constellation got NodeStatus message");
                 self.compositor_proxy.send(ToCompositorMsg::Status(message));
@@ -1838,6 +1843,18 @@ impl<Message, LTF, STF> Constellation<Message, LTF, STF>
 
         if let Err(e) = response_sender.send(response) {
             warn!("Create WebGL paint thread response failed ({})", e);
+        }
+    }
+
+    fn handle_create_webmetal_paint_thread_msg(
+            &mut self,
+            size: &Size2D<i32>,
+            frame_num: u8,
+            response_sender: IpcSender<Result<WebMetalInit, String>>) {
+        let answer = WebMetalPaintThread::start(*size, frame_num);
+
+        if let Err(e) = response_sender.send(answer) {
+            warn!("Create WebMetal paint thread response failed ({})", e);
         }
     }
 

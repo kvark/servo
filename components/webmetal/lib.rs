@@ -89,20 +89,26 @@ const SURFACE_EXTENSIONS: &'static [&'static str] = &[
 pub struct SwapChain {
     _image: vk::Image,
     _memory: vk::DeviceMemory,
-    _views: Vec<vk::ImageView>,
+    views: Vec<vk::ImageView>,
 }
 
+impl SwapChain {
+    pub fn get_targets(&self) -> Vec<TargetView> {
+        self.views.iter().map(|view| TargetView {
+            inner: *view,
+        }).collect()
+    }
+}
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CommandBuffer {
     inner: vk::CommandBuffer,
     family_index: u32,
 }
 
-impl Drop for CommandBuffer {
-    fn drop(&mut self) {
-        //TODO
-    }
+#[derive(Debug, Deserialize, Serialize)]
+pub struct TargetView {
+    inner: vk::ImageView,
 }
 
 pub struct Queue {
@@ -112,6 +118,8 @@ pub struct Queue {
 }
 
 pub struct Device {
+    _dyn_lib: DynamicLibrary,
+    _library: vk::Static,
     inner: vk::Device,
     pointers: vk::DevicePointers,
     _mem_system: u32,
@@ -172,7 +180,7 @@ impl Device {
         }
     }
 
-    pub fn execute(&self, queue: &Queue, com: CommandBuffer) {
+    pub fn execute(&self, queue: &Queue, com: &CommandBuffer) {
         assert_eq!(queue.family_index, com.family_index);
         assert_eq!(vk::SUCCESS, unsafe {
             self.pointers.EndCommandBuffer(com.inner)
@@ -351,6 +359,8 @@ impl Device {
         });
 
         let device = Device {
+            _dyn_lib: dynamic_lib,
+            _library: lib,
             inner: vk_device,
             pointers: dev_pointers,
             _mem_system: msys_id,
@@ -412,10 +422,40 @@ impl Device {
             self.pointers.BindImageMemory(self.inner, image, memory, 0)
         });
 
+        let views = (0 .. count).map(|i| {
+            let info = vk::ImageViewCreateInfo {
+                sType: vk::STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                image: image,
+                viewType: vk::IMAGE_VIEW_TYPE_2D,
+                format: vk::FORMAT_R8G8B8A8_SRGB,
+                components: vk::ComponentMapping {
+                    r: vk::COMPONENT_SWIZZLE_IDENTITY,
+                    g: vk::COMPONENT_SWIZZLE_IDENTITY,
+                    b: vk::COMPONENT_SWIZZLE_IDENTITY,
+                    a: vk::COMPONENT_SWIZZLE_IDENTITY,
+                },
+                subresourceRange: vk::ImageSubresourceRange {
+                    aspectMask: vk::IMAGE_ASPECT_COLOR_BIT,
+                    baseMipLevel: 0,
+                    levelCount: 1,
+                    baseArrayLayer: i,
+                    layerCount: 1,
+                },
+            };
+
+            let mut view = 0;
+            assert_eq!(vk::SUCCESS, unsafe {
+                self.pointers.CreateImageView(self.inner, &info, ptr::null(), &mut view)
+            });
+            view
+        }).collect();
+
         SwapChain {
             _image: image,
             _memory: memory,
-            _views: Vec::new(),
+            views: views,
         }
     }
 }

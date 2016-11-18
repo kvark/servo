@@ -3,7 +3,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use canvas_traits::{CanvasCommonMsg, CanvasData, CanvasMsg};
-use canvas_traits::{FromLayoutMsg, FromScriptMsg, WebMetalCommand};
+use canvas_traits::{FromLayoutMsg, FromScriptMsg};
+use canvas_traits::{WebMetalCommand, WebMetalInit};
 use euclid::size::Size2D;
 use ipc_channel::ipc::{self, IpcSender};
 use std::sync::mpsc::channel;
@@ -13,22 +14,22 @@ use webmetal::{self, WebMetalCapabilities};
 pub struct WebMetalPaintThread {
     device: webmetal::Device,
     queue: webmetal::Queue,
-    _swap_chain: webmetal::SwapChain,
+    swap_chain: webmetal::SwapChain,
     _size: Size2D<i32>,
 }
 
 impl WebMetalPaintThread {
-    fn new(size: Size2D<i32>)
+    fn new(size: Size2D<i32>, frame_num: u8)
         -> Result<(WebMetalPaintThread, WebMetalCapabilities), String> {
         match webmetal::Device::new(false) {
             Ok((dev, queue, caps)) => {
                 let swap_chain = dev.create_swap_chain(size.width as u32,
                                                        size.height as u32,
-                                                       3);
+                                                       frame_num as u32);
                 let painter = WebMetalPaintThread {
                     device: dev,
                     queue: queue,
-                    _swap_chain: swap_chain,
+                    swap_chain: swap_chain,
                     _size: size,
                 };
                 Ok((painter, caps))
@@ -48,19 +49,22 @@ impl WebMetalPaintThread {
                 let com = self.device.make_command_buffer(&self.queue);
                 sender.send(Some(com)).unwrap();
             }
+            WebMetalCommand::Submit(com) => {
+                self.device.execute(&self.queue, &com);
+            }
         }
     }
 
     /// Creates a new `WebMetalPaintThread` and returns an `IpcSender` to
     /// communicate with it.
-    pub fn start(size: Size2D<i32>)
-                 -> Result<(IpcSender<CanvasMsg>, WebMetalCapabilities), String> {
+    pub fn start(size: Size2D<i32>, frame_num: u8) -> Result<WebMetalInit, String> {
         let (sender, receiver) = ipc::channel::<CanvasMsg>().unwrap();
         let (result_chan, result_port) = channel();
         spawn_named("WebMetalThread".to_owned(), move || {
-            let mut painter = match WebMetalPaintThread::new(size) {
+            let mut painter = match WebMetalPaintThread::new(size, frame_num) {
                 Ok((thread, caps)) => {
-                    result_chan.send(Ok(caps)).unwrap();
+                    let targets = thread.swap_chain.get_targets();
+                    result_chan.send(Ok((caps, targets))).unwrap();
                     thread
                 },
                 Err(e) => {
@@ -100,7 +104,7 @@ impl WebMetalPaintThread {
             }
         });
 
-        result_port.recv().unwrap().map(|caps| (sender, caps))
+        result_port.recv().unwrap().map(|(caps, targets)| (sender, targets, caps))
     }
 
     fn send_data(&mut self, _chan: IpcSender<CanvasData>) {
