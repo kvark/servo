@@ -1851,7 +1851,8 @@ impl<Message, LTF, STF> Constellation<Message, LTF, STF>
             size: &Size2D<i32>,
             frame_num: u8,
             response_sender: IpcSender<Result<WebMetalInit, String>>) {
-        let answer = WebMetalPaintThread::start(*size, frame_num);
+        let webrender_api = self.webrender_api_sender.clone();
+        let answer = WebMetalPaintThread::start(*size, frame_num, webrender_api);
 
         if let Err(e) = response_sender.send(answer) {
             warn!("Create WebMetal paint thread response failed ({})", e);

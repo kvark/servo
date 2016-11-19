@@ -14,8 +14,10 @@ extern crate vk_sys as vk;
 
 use shared_library::dynamic_library::DynamicLibrary;
 use std::{iter, mem, ptr};
+use std::cell::Cell;
 use std::ffi::{CStr, CString};
 use std::path::Path;
+use std::sync::Arc;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct WebMetalCapabilities;
@@ -86,29 +88,113 @@ const SURFACE_EXTENSIONS: &'static [&'static str] = &[
     "VK_KHR_win32_surface",
 ];
 
-pub struct SwapChain {
-    _image: vk::Image,
-    _memory: vk::DeviceMemory,
-    views: Vec<vk::ImageView>,
-}
-
-impl SwapChain {
-    pub fn get_targets(&self) -> Vec<TargetView> {
-        self.views.iter().map(|view| TargetView {
-            inner: *view,
-        }).collect()
-    }
-}
-
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CommandBuffer {
     inner: vk::CommandBuffer,
     family_index: u32,
+    //vk: Arc<vk::DevicePointers>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+impl CommandBuffer {
+    pub fn copy_texture(&self, src: &Texture, src_layer: u32, dst: &Texture, dst_layer: u32) {
+        assert_eq!(src.dim, dst.dim);
+        let regions = [vk::ImageCopy {
+            srcSubresource: vk::ImageSubresourceLayers {
+                aspectMask: vk::IMAGE_ASPECT_COLOR_BIT,
+                mipLevel: 0,
+                baseArrayLayer: src_layer,
+                layerCount: 1,
+            },
+            srcOffset: vk::Offset3D {
+                x: 0, y: 0, z: 0,
+            },
+            dstSubresource: vk::ImageSubresourceLayers {
+                aspectMask: vk::IMAGE_ASPECT_COLOR_BIT,
+                mipLevel: 0,
+                baseArrayLayer: dst_layer,
+                layerCount: 1,
+            },
+            dstOffset: vk::Offset3D {
+                x: 0, y: 0, z: 0,
+            },
+            extent: vk::Extent3D {
+                width: src.dim.w,
+                height: src.dim.h,
+                depth: src.dim.d,
+            },
+        }];
+        /*unsafe {
+            self.vk.CmdCopyImage(self.inner,
+                                 src.inner, src.layout.get(),
+                                 dst.inner, dst.layout.get(),
+                                 regions.len() as u32,
+                                 regions.as_ptr());
+        }*/
+        let _ = regions;
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Dimensions {
+    pub w: u32,
+    pub h: u32,
+    pub d: u32,
+}
+
+impl From<vk::Extent3D> for Dimensions {
+    fn from(ext: vk::Extent3D) -> Dimensions {
+        Dimensions {
+            w: ext.width,
+            h: ext.height,
+            d: ext.depth,
+        }
+    }
+}
+
+pub struct Texture {
+    inner: vk::Image,
+    memory: vk::DeviceMemory,
+    layout: Cell<vk::ImageLayout>,
+    dim: Dimensions,
+}
+
+impl Texture {
+    fn get_layer_size(&self) -> u32 {
+        let bpp = 4; //TODO
+        bpp * self.dim.w * self.dim.h * self.dim.d
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TargetView {
     inner: vk::ImageView,
+}
+
+pub struct SwapChain {
+    gpu_texture: Texture,
+    cpu_texture: Texture,
+    cpu_layer_count: u32,
+    cpu_current_layer: u32,
+    views: Vec<TargetView>,
+}
+
+impl SwapChain {
+    pub fn get_targets(&self) -> Vec<TargetView> {
+        self.views.clone()
+    }
+
+    pub fn get_dimensions(&self) -> Dimensions {
+        self.gpu_texture.dim.clone()
+    }
+
+    pub fn fetch_frame(&mut self, com: &CommandBuffer, frame_index: u32) {
+        self.cpu_current_layer += 1;
+        if self.cpu_current_layer >= self.cpu_layer_count {
+            self.cpu_current_layer = 0;
+        }
+        com.copy_texture(&self.gpu_texture, frame_index,
+                         &self.cpu_texture, self.cpu_current_layer);
+    }
 }
 
 pub struct Queue {
@@ -117,12 +203,27 @@ pub struct Queue {
     command_pool: vk::CommandPool,
 }
 
+pub struct DeviceMapper<'a> {
+    pub pointer: *const u8,
+    pub size: u32,
+    memory: vk::DeviceMemory,
+    device: &'a Device,
+}
+
+impl<'a> Drop for DeviceMapper<'a> {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.vk.UnmapMemory(self.device.inner, self.memory);
+        }
+    }
+}
+
 pub struct Device {
     _dyn_lib: DynamicLibrary,
     _library: vk::Static,
     inner: vk::Device,
-    pointers: vk::DevicePointers,
-    _mem_system: u32,
+    vk: Arc<vk::DevicePointers>,
+    mem_system: u32,
     mem_video: u32,
 }
 
@@ -136,12 +237,12 @@ impl Device {
         };
         let mut com_pool = 0;
         assert_eq!(vk::SUCCESS, unsafe {
-            self.pointers.CreateCommandPool(self.inner, &com_info, ptr::null(), &mut com_pool)
+            self.vk.CreateCommandPool(self.inner, &com_info, ptr::null(), &mut com_pool)
         });
 
         let queue = unsafe {
             let mut out = mem::zeroed();
-            self.pointers.GetDeviceQueue(self.inner, family_id, 0, &mut out);
+            self.vk.GetDeviceQueue(self.inner, family_id, 0, &mut out);
             out
         };
         Queue {
@@ -168,22 +269,23 @@ impl Device {
 
         let mut buf = 0;
         assert_eq!(vk::SUCCESS, unsafe {
-            self.pointers.AllocateCommandBuffers(self.inner, &alloc_info, &mut buf)
+            self.vk.AllocateCommandBuffers(self.inner, &alloc_info, &mut buf)
         });
         assert_eq!(vk::SUCCESS, unsafe {
-            self.pointers.BeginCommandBuffer(buf, &begin_info)
+            self.vk.BeginCommandBuffer(buf, &begin_info)
         });
 
         CommandBuffer {
             inner: buf,
             family_index: queue.family_index,
+            //vk: self.vk.clone(),
         }
     }
 
     pub fn execute(&self, queue: &Queue, com: &CommandBuffer) {
         assert_eq!(queue.family_index, com.family_index);
         assert_eq!(vk::SUCCESS, unsafe {
-            self.pointers.EndCommandBuffer(com.inner)
+            self.vk.EndCommandBuffer(com.inner)
         });
         let submit_info = vk::SubmitInfo {
             sType: vk::STRUCTURE_TYPE_SUBMIT_INFO,
@@ -192,7 +294,7 @@ impl Device {
             .. unsafe { mem::zeroed() }
         };
         assert_eq!(vk::SUCCESS, unsafe {
-            self.pointers.QueueSubmit(queue.inner, 1, &submit_info, 0)
+            self.vk.QueueSubmit(queue.inner, 1, &submit_info, 0)
         });
     }
 }
@@ -311,11 +413,11 @@ impl Device {
         //info!("Chosen physical device {:?} with queue family {}", dev.device, qf_id);
 
         let mvid_id = dev.memory.memoryTypes.iter().take(dev.memory.memoryTypeCount as usize)
-                                .position(|mt| (mt.propertyFlags & vk::MEMORY_PROPERTY_DEVICE_LOCAL_BIT != 0)
-                                            && (mt.propertyFlags & vk::MEMORY_PROPERTY_HOST_VISIBLE_BIT != 0))
+                                .position(|mt| mt.propertyFlags & vk::MEMORY_PROPERTY_DEVICE_LOCAL_BIT != 0)
                                 .unwrap() as u32;
         let msys_id = dev.memory.memoryTypes.iter().take(dev.memory.memoryTypeCount as usize)
-                                .position(|mt| mt.propertyFlags & vk::MEMORY_PROPERTY_HOST_COHERENT_BIT != 0)
+                                .position(|mt| (mt.propertyFlags & vk::MEMORY_PROPERTY_HOST_COHERENT_BIT != 0)
+                                            && (mt.propertyFlags & vk::MEMORY_PROPERTY_HOST_VISIBLE_BIT != 0))
                                 .unwrap() as u32;
 
         let vk_device = {
@@ -362,8 +464,8 @@ impl Device {
             _dyn_lib: dynamic_lib,
             _library: lib,
             inner: vk_device,
-            pointers: dev_pointers,
-            _mem_system: msys_id,
+            vk: Arc::new(dev_pointers),
+            mem_system: msys_id,
             mem_video: mvid_id,
         };
         let queue = device.make_queue(qf_id as u32);
@@ -380,54 +482,104 @@ impl Device {
         };
         let mut mem = 0;
         assert_eq!(vk::SUCCESS, unsafe {
-            self.pointers.AllocateMemory(self.inner, &info, ptr::null(), &mut mem)
+            self.vk.AllocateMemory(self.inner, &info, ptr::null(), &mut mem)
         });
         mem
     }
 
     pub fn create_swap_chain(&self, width: u32, height: u32, count: u32) -> SwapChain {
-        let image_info = vk::ImageCreateInfo {
-            sType: vk::STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-            pNext: ptr::null(),
-            flags: 0,
-            imageType: vk::IMAGE_TYPE_2D,
-            format: vk::FORMAT_R8G8B8A8_SRGB,
-            extent: vk::Extent3D {
-                width: width,
-                height: height,
-                depth: 1,
-            },
-            mipLevels: 1,
-            arrayLayers: count,
-            samples: vk::SAMPLE_COUNT_1_BIT,
-            tiling: vk::IMAGE_TILING_OPTIMAL,
-            usage: vk::IMAGE_USAGE_TRANSFER_SRC_BIT | vk::IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-            sharingMode: vk::SHARING_MODE_EXCLUSIVE,
-            queueFamilyIndexCount: 0,
-            pQueueFamilyIndices: ptr::null(),
-            initialLayout: vk::IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        };
+        let gpu_texture = {
+            let info = vk::ImageCreateInfo {
+                sType: vk::STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                imageType: vk::IMAGE_TYPE_2D,
+                format: vk::FORMAT_R8G8B8A8_SRGB,
+                extent: vk::Extent3D {
+                    width: width,
+                    height: height,
+                    depth: 1,
+                },
+                mipLevels: 1,
+                arrayLayers: count,
+                samples: vk::SAMPLE_COUNT_1_BIT,
+                tiling: vk::IMAGE_TILING_OPTIMAL,
+                usage: vk::IMAGE_USAGE_TRANSFER_SRC_BIT | vk::IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                sharingMode: vk::SHARING_MODE_EXCLUSIVE,
+                queueFamilyIndexCount: 0,
+                pQueueFamilyIndices: ptr::null(),
+                initialLayout: vk::IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            };
 
-        let mut image = 0;
-        assert_eq!(vk::SUCCESS, unsafe {
-            self.pointers.CreateImage(self.inner, &image_info, ptr::null(), &mut image)
-        });
-        let reqs = unsafe {
-            let mut out = mem::zeroed();
-            self.pointers.GetImageMemoryRequirements(self.inner, image, &mut out);
-            out
+            let mut image = 0;
+            assert_eq!(vk::SUCCESS, unsafe {
+                self.vk.CreateImage(self.inner, &info, ptr::null(), &mut image)
+            });
+            let reqs = unsafe {
+                let mut out = mem::zeroed();
+                self.vk.GetImageMemoryRequirements(self.inner, image, &mut out);
+                out
+            };
+            let memory = self.alloc(self.mem_video, reqs);
+            assert_eq!(vk::SUCCESS, unsafe {
+                self.vk.BindImageMemory(self.inner, image, memory, 0)
+            });
+            Texture {
+                inner: image,
+                memory: memory,
+                layout: Cell::new(info.initialLayout),
+                dim: info.extent.into(),
+            }
         };
-        let memory = self.alloc(self.mem_video, reqs);
-        assert_eq!(vk::SUCCESS, unsafe {
-            self.pointers.BindImageMemory(self.inner, image, memory, 0)
-        });
+        let cpu_texture = {
+            let info = vk::ImageCreateInfo {
+                sType: vk::STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                imageType: vk::IMAGE_TYPE_2D,
+                format: vk::FORMAT_R8G8B8A8_UNORM,
+                extent: vk::Extent3D {
+                    width: width,
+                    height: height,
+                    depth: 1,
+                },
+                mipLevels: 1,
+                arrayLayers: count,
+                samples: vk::SAMPLE_COUNT_1_BIT,
+                tiling: vk::IMAGE_TILING_LINEAR,
+                usage: vk::IMAGE_USAGE_TRANSFER_DST_BIT,
+                sharingMode: vk::SHARING_MODE_EXCLUSIVE,
+                queueFamilyIndexCount: 0,
+                pQueueFamilyIndices: ptr::null(),
+                initialLayout: vk::IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            };
 
+            let mut image = 0;
+            assert_eq!(vk::SUCCESS, unsafe {
+                self.vk.CreateImage(self.inner, &info, ptr::null(), &mut image)
+            });
+            let reqs = unsafe {
+                let mut out = mem::zeroed();
+                self.vk.GetImageMemoryRequirements(self.inner, image, &mut out);
+                out
+            };
+            let memory = self.alloc(self.mem_system, reqs);
+            assert_eq!(vk::SUCCESS, unsafe {
+                self.vk.BindImageMemory(self.inner, image, memory, 0)
+            });
+            Texture {
+                inner: image,
+                memory: memory,
+                layout: Cell::new(info.initialLayout),
+                dim: info.extent.into(),
+            }
+        };
         let views = (0 .. count).map(|i| {
             let info = vk::ImageViewCreateInfo {
                 sType: vk::STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                 pNext: ptr::null(),
                 flags: 0,
-                image: image,
+                image: gpu_texture.inner,
                 viewType: vk::IMAGE_VIEW_TYPE_2D,
                 format: vk::FORMAT_R8G8B8A8_SRGB,
                 components: vk::ComponentMapping {
@@ -447,15 +599,36 @@ impl Device {
 
             let mut view = 0;
             assert_eq!(vk::SUCCESS, unsafe {
-                self.pointers.CreateImageView(self.inner, &info, ptr::null(), &mut view)
+                self.vk.CreateImageView(self.inner, &info, ptr::null(), &mut view)
             });
-            view
+            TargetView {
+                inner: view,
+            }
         }).collect();
 
         SwapChain {
-            _image: image,
-            _memory: memory,
+            gpu_texture: gpu_texture,
+            cpu_texture: cpu_texture,
+            cpu_layer_count: count,
+            cpu_current_layer: 0,
             views: views,
+        }
+    }
+
+    pub fn read_frame(&mut self, swap_chain: &SwapChain) -> DeviceMapper {
+        //TODO: check for VkPhysicalDeviceLimits::minMemoryMapAlignment
+        let layer_size = swap_chain.cpu_texture.get_layer_size();
+        let mut ptr = ptr::null_mut();
+        assert_eq!(vk::SUCCESS, unsafe {
+            self.vk.MapMemory(self.inner, swap_chain.cpu_texture.memory,
+                (layer_size * swap_chain.cpu_current_layer) as u64,
+                layer_size as u64, 0, &mut ptr)
+        });
+        DeviceMapper {
+            pointer: ptr as *const _,
+            size: layer_size,
+            memory: swap_chain.cpu_texture.memory,
+            device: self,
         }
     }
 }

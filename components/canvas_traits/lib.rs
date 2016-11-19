@@ -123,6 +123,7 @@ pub enum Canvas2dMsg {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum WebMetalCommand {
     MakeCommandBuffer(IpcSender<Option<webmetal::CommandBuffer>>),
+    Present(webmetal::CommandBuffer, u32),
     Submit(webmetal::CommandBuffer),
 }
 

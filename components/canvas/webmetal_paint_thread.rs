@@ -2,35 +2,44 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use canvas_traits::{CanvasCommonMsg, CanvasData, CanvasMsg};
+use canvas_traits::{CanvasCommonMsg, CanvasData, CanvasImageData, CanvasMsg, byte_swap};
 use canvas_traits::{FromLayoutMsg, FromScriptMsg};
 use canvas_traits::{WebMetalCommand, WebMetalInit};
 use euclid::size::Size2D;
 use ipc_channel::ipc::{self, IpcSender};
+use std::slice;
 use std::sync::mpsc::channel;
 use util::thread::spawn_named;
 use webmetal::{self, WebMetalCapabilities};
+use webrender_traits;
 
 pub struct WebMetalPaintThread {
     device: webmetal::Device,
     queue: webmetal::Queue,
     swap_chain: webmetal::SwapChain,
     _size: Size2D<i32>,
+    wr_api: webrender_traits::RenderApi,
+    final_image: webrender_traits::ImageKey,
 }
 
 impl WebMetalPaintThread {
-    fn new(size: Size2D<i32>, frame_num: u8)
-        -> Result<(WebMetalPaintThread, WebMetalCapabilities), String> {
+    fn new(size: Size2D<i32>, frame_num: u8,
+           wr_api_sender: webrender_traits::RenderApiSender)
+           -> Result<(WebMetalPaintThread, WebMetalCapabilities), String> {
         match webmetal::Device::new(false) {
             Ok((dev, queue, caps)) => {
                 let swap_chain = dev.create_swap_chain(size.width as u32,
                                                        size.height as u32,
                                                        frame_num as u32);
+                let wr_api = wr_api_sender.create_api();
+                let image_key = wr_api.alloc_image();
                 let painter = WebMetalPaintThread {
                     device: dev,
                     queue: queue,
                     swap_chain: swap_chain,
                     _size: size,
+                    wr_api: wr_api,
+                    final_image: image_key,
                 };
                 Ok((painter, caps))
             }
@@ -49,6 +58,9 @@ impl WebMetalPaintThread {
                 let com = self.device.make_command_buffer(&self.queue);
                 sender.send(Some(com)).unwrap();
             }
+            WebMetalCommand::Present(com, frame_index) => {
+                self.swap_chain.fetch_frame(&com, frame_index);
+            }
             WebMetalCommand::Submit(com) => {
                 self.device.execute(&self.queue, &com);
             }
@@ -57,11 +69,13 @@ impl WebMetalPaintThread {
 
     /// Creates a new `WebMetalPaintThread` and returns an `IpcSender` to
     /// communicate with it.
-    pub fn start(size: Size2D<i32>, frame_num: u8) -> Result<WebMetalInit, String> {
+    pub fn start(size: Size2D<i32>, frame_num: u8,
+                 wr_api_sender: webrender_traits::RenderApiSender)
+                 -> Result<WebMetalInit, String> {
         let (sender, receiver) = ipc::channel::<CanvasMsg>().unwrap();
         let (result_chan, result_port) = channel();
         spawn_named("WebMetalThread".to_owned(), move || {
-            let mut painter = match WebMetalPaintThread::new(size, frame_num) {
+            let mut painter = match WebMetalPaintThread::new(size, frame_num, wr_api_sender) {
                 Ok((thread, caps)) => {
                     let targets = thread.swap_chain.get_targets();
                     result_chan.send(Ok((caps, targets))).unwrap();
@@ -107,8 +121,37 @@ impl WebMetalPaintThread {
         result_port.recv().unwrap().map(|(caps, targets)| (sender, targets, caps))
     }
 
-    fn send_data(&mut self, _chan: IpcSender<CanvasData>) {
-        //WM TODO: actually read back the surface and send it over
+    #[allow(unsafe_code)]
+    fn send_data(&mut self, chan: IpcSender<CanvasData>) {
+        let dim = self.swap_chain.get_dimensions();
+        let frame = self.device.read_frame(&self.swap_chain);
+
+        let orig_pixels = unsafe {
+            slice::from_raw_parts(frame.pointer, frame.size as usize)
+        };
+
+        // flip image vertically (texture is upside down)
+        let mut pixels = orig_pixels.to_owned();
+        let stride = dim.w as usize * 4;
+        for y in 0 .. dim.h as usize {
+            let dst_start = y * stride;
+            let src_start = (dim.h as usize - y - 1) * stride;
+            let src_slice = &orig_pixels[src_start .. src_start + stride];
+            (&mut pixels[dst_start .. dst_start + stride]).clone_from_slice(&src_slice[..stride]);
+        }
+
+        // rgba -> bgra
+        byte_swap(&mut pixels);
+
+        self.wr_api.update_image(self.final_image, dim.w, dim.h,
+                                 webrender_traits::ImageFormat::RGBA8,
+                                 pixels);
+
+        let image_data = CanvasImageData {
+            image_key: self.final_image,
+        };
+
+        chan.send(CanvasData::Image(image_data)).unwrap();
     }
 
     fn recreate(&mut self, _size: Size2D<i32>) -> Result<(), &'static str> {
