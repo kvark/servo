@@ -1487,7 +1487,6 @@ impl FragmentDisplayListBuilding for Fragment {
                 if width > 0 && height > 0 {
                     let computed_width = canvas_fragment_info.canvas_inline_size().to_px();
                     let computed_height = canvas_fragment_info.canvas_block_size().to_px();
-
                     let canvas_data = match canvas_fragment_info.ipc_renderer {
                         Some(ref ipc_renderer) => {
                             let ipc_renderer = ipc_renderer.lock().unwrap();

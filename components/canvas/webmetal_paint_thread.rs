@@ -59,7 +59,7 @@ impl WebMetalPaintThread {
                 sender.send(Some(com)).unwrap();
             }
             WebMetalCommand::Present(com, frame_index) => {
-                self.swap_chain.fetch_frame(&com, frame_index);
+                self.swap_chain.fetch_frame(self.device.get_vk(), &com, frame_index);
             }
             WebMetalCommand::Submit(com) => {
                 self.device.execute(&self.queue, &com);

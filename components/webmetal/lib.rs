@@ -17,7 +17,6 @@ use std::{iter, mem, ptr};
 use std::cell::Cell;
 use std::ffi::{CStr, CString};
 use std::path::Path;
-use std::sync::Arc;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct WebMetalCapabilities;
@@ -92,11 +91,10 @@ const SURFACE_EXTENSIONS: &'static [&'static str] = &[
 pub struct CommandBuffer {
     inner: vk::CommandBuffer,
     family_index: u32,
-    //vk: Arc<vk::DevicePointers>,
 }
 
 impl CommandBuffer {
-    pub fn copy_texture(&self, src: &Texture, src_layer: u32, dst: &Texture, dst_layer: u32) {
+    pub fn copy_texture(&self, vk: &vk::DevicePointers, src: &Texture, src_layer: u32, dst: &Texture, dst_layer: u32) {
         assert_eq!(src.dim, dst.dim);
         let regions = [vk::ImageCopy {
             srcSubresource: vk::ImageSubresourceLayers {
@@ -123,14 +121,13 @@ impl CommandBuffer {
                 depth: src.dim.d,
             },
         }];
-        /*unsafe {
-            self.vk.CmdCopyImage(self.inner,
-                                 src.inner, src.layout.get(),
-                                 dst.inner, dst.layout.get(),
-                                 regions.len() as u32,
-                                 regions.as_ptr());
-        }*/
-        let _ = regions;
+        unsafe {
+            vk.CmdCopyImage(self.inner,
+                            src.inner, src.layout.get(),
+                            dst.inner, dst.layout.get(),
+                            regions.len() as u32,
+                            regions.as_ptr());
+        }
     }
 }
 
@@ -187,12 +184,12 @@ impl SwapChain {
         self.gpu_texture.dim.clone()
     }
 
-    pub fn fetch_frame(&mut self, com: &CommandBuffer, frame_index: u32) {
+    pub fn fetch_frame(&mut self, vk: &vk::DevicePointers, com: &CommandBuffer, frame_index: u32) {
         self.cpu_current_layer += 1;
         if self.cpu_current_layer >= self.cpu_layer_count {
             self.cpu_current_layer = 0;
         }
-        com.copy_texture(&self.gpu_texture, frame_index,
+        com.copy_texture(vk, &self.gpu_texture, frame_index,
                          &self.cpu_texture, self.cpu_current_layer);
     }
 }
@@ -222,12 +219,16 @@ pub struct Device {
     _dyn_lib: DynamicLibrary,
     _library: vk::Static,
     inner: vk::Device,
-    vk: Arc<vk::DevicePointers>,
+    vk: vk::DevicePointers,
     mem_system: u32,
     mem_video: u32,
 }
 
 impl Device {
+    pub fn get_vk(&self) -> &vk::DevicePointers {
+        &self.vk
+    }
+
     fn make_queue(&self, family_id: u32) -> Queue {
         let com_info = vk::CommandPoolCreateInfo {
             sType: vk::STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -278,7 +279,6 @@ impl Device {
         CommandBuffer {
             inner: buf,
             family_index: queue.family_index,
-            //vk: self.vk.clone(),
         }
     }
 
@@ -464,7 +464,7 @@ impl Device {
             _dyn_lib: dynamic_lib,
             _library: lib,
             inner: vk_device,
-            vk: Arc::new(dev_pointers),
+            vk: dev_pointers,
             mem_system: msys_id,
             mem_video: mvid_id,
         };

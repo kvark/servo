@@ -5,9 +5,11 @@
 use canvas_traits::{CanvasCommonMsg, CanvasMsg, WebMetalCommand};
 use dom::bindings::codegen::Bindings::WebMetalRenderingContextBinding as binding;
 use dom::bindings::js::{JS, LayoutJS, Root};
+use dom::bindings::inheritance::Castable;
 use dom::bindings::reflector::{Reflectable, Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
 use dom::htmlcanvaselement::HTMLCanvasElement;
+use dom::node::{Node, NodeDamage};
 use dom::webmetalcommandbuffer::WebMetalCommandBuffer;
 use dom::webmetaldevice::WebMetalDevice;
 use dom::webmetaltargetview::WebMetalTargetView;
@@ -22,11 +24,16 @@ pub struct WebMetalRenderingContext {
     reflector: Reflector,
     #[ignore_heap_size_of = "Defined in ipc-channel"]
     ipc_renderer: IpcSender<CanvasMsg>,
-    device: Root<WebMetalDevice>,
+    #[ignore_heap_size_of = "Defined in webmetal"]
+    capabilities: WebMetalCapabilities,
+    canvas: JS<HTMLCanvasElement>,
+    device: JS<WebMetalDevice>,
+    current_target_index: Cell<usize>,
+    swap_targets: Vec<JS<WebMetalTargetView>>,
 }
 
 impl WebMetalRenderingContext {
-    fn new_internal(_global: &GlobalScope, _canvas: &HTMLCanvasElement, _size: Size2D<i32>)
+    fn new_internal(global: &GlobalScope, canvas: &HTMLCanvasElement, size: Size2D<i32>)
                     -> Result<WebMetalRenderingContext, String> {
         let (sender, receiver) = ipc::channel().unwrap();
         let num_frames = 3;
@@ -38,6 +45,7 @@ impl WebMetalRenderingContext {
             reflector: Reflector::new(),
             ipc_renderer: ipc_renderer,
             capabilities: caps,
+            canvas: JS::from_ref(canvas),
             device: JS::from_ref(&*WebMetalDevice::new(global)),
             current_target_index: Cell::new(0),
             swap_targets: targets.into_iter().map(|view|
@@ -95,7 +103,7 @@ impl binding::WebMetalRenderingContextMethods for WebMetalRenderingContext {
 
     fn EndFrame(&self) {
         //TODO: wait for a fence
-        //TODO: read back the contents of the active target
+        self.canvas.upcast::<Node>().dirty(NodeDamage::OtherNodeDamage);
     }
 }
 
