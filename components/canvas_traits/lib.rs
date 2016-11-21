@@ -31,7 +31,7 @@ use euclid::matrix2d::Matrix2D;
 use euclid::point::Point2D;
 use euclid::rect::Rect;
 use euclid::size::Size2D;
-use ipc_channel::ipc::IpcSender;
+use ipc_channel::ipc::{IpcReceiver, IpcSender};
 use std::default::Default;
 use std::str::FromStr;
 use webrender_traits::{WebGLCommand, WebGLContextId};
@@ -42,7 +42,7 @@ pub enum FillRule {
     Evenodd,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 pub enum CanvasMsg {
     Canvas2d(Canvas2dMsg),
     Common(CanvasCommonMsg),
@@ -121,9 +121,15 @@ pub enum Canvas2dMsg {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum WebMetalEncoderCommand {
+    //TODO
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 pub enum WebMetalCommand {
     MakeCommandBuffer(IpcSender<Option<webmetal::CommandBuffer>>),
-    Present(webmetal::CommandBuffer, u32),
+    MakeRenderEncoder(IpcReceiver<WebMetalEncoderCommand>, webmetal::TargetSet),
+    Present(u32),
     Submit(webmetal::CommandBuffer),
 }
 

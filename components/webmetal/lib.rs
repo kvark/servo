@@ -94,6 +94,18 @@ pub struct CommandBuffer {
 }
 
 impl CommandBuffer {
+    pub fn begin(&self, vk: &vk::DevicePointers) {
+        let info = vk::CommandBufferBeginInfo {
+            sType: vk::STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            pInheritanceInfo: ptr::null(),
+        };
+        assert_eq!(vk::SUCCESS, unsafe {
+            vk.BeginCommandBuffer(self.inner, &info)
+        });
+    }
+
     pub fn copy_texture(&self, vk: &vk::DevicePointers, src: &Texture, src_layer: u32, dst: &Texture, dst_layer: u32) {
         assert_eq!(src.dim, dst.dim);
         let regions = [vk::ImageCopy {
@@ -165,6 +177,13 @@ impl Texture {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TargetView {
     inner: vk::ImageView,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct TargetSet {
+    pub colors: Vec<TargetView>,
+    pub depth: Option<TargetView>,
+    pub stencil: Option<TargetView>,
 }
 
 pub struct SwapChain {
@@ -254,28 +273,17 @@ impl Device {
     }
 
     pub fn make_command_buffer(&self, queue: &Queue) -> CommandBuffer {
-        let alloc_info = vk::CommandBufferAllocateInfo {
+        let info = vk::CommandBufferAllocateInfo {
             sType: vk::STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
             pNext: ptr::null(),
             commandPool: queue.command_pool,
             level: vk::COMMAND_BUFFER_LEVEL_PRIMARY,
             commandBufferCount: 1,
         };
-        let begin_info = vk::CommandBufferBeginInfo {
-            sType: vk::STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-            pNext: ptr::null(),
-            flags: 0,
-            pInheritanceInfo: ptr::null(),
-        };
-
         let mut buf = 0;
         assert_eq!(vk::SUCCESS, unsafe {
-            self.vk.AllocateCommandBuffers(self.inner, &alloc_info, &mut buf)
+            self.vk.AllocateCommandBuffers(self.inner, &info, &mut buf)
         });
-        assert_eq!(vk::SUCCESS, unsafe {
-            self.vk.BeginCommandBuffer(buf, &begin_info)
-        });
-
         CommandBuffer {
             inner: buf,
             family_index: queue.family_index,
@@ -487,7 +495,7 @@ impl Device {
         mem
     }
 
-    pub fn create_swap_chain(&self, width: u32, height: u32, count: u32) -> SwapChain {
+    pub fn make_swap_chain(&self, width: u32, height: u32, count: u32) -> SwapChain {
         let gpu_texture = {
             let info = vk::ImageCreateInfo {
                 sType: vk::STRUCTURE_TYPE_IMAGE_CREATE_INFO,

@@ -17,6 +17,7 @@ pub struct WebMetalPaintThread {
     device: webmetal::Device,
     queue: webmetal::Queue,
     swap_chain: webmetal::SwapChain,
+    service_com: webmetal::CommandBuffer,
     _size: Size2D<i32>,
     wr_api: webrender_traits::RenderApi,
     final_image: webrender_traits::ImageKey,
@@ -28,15 +29,17 @@ impl WebMetalPaintThread {
            -> Result<(WebMetalPaintThread, WebMetalCapabilities), String> {
         match webmetal::Device::new(false) {
             Ok((dev, queue, caps)) => {
-                let swap_chain = dev.create_swap_chain(size.width as u32,
-                                                       size.height as u32,
-                                                       frame_num as u32);
+                let swap_chain = dev.make_swap_chain(size.width as u32,
+                                                     size.height as u32,
+                                                     frame_num as u32);
+                let com = dev.make_command_buffer(&queue);
                 let wr_api = wr_api_sender.create_api();
                 let image_key = wr_api.alloc_image();
                 let painter = WebMetalPaintThread {
                     device: dev,
                     queue: queue,
                     swap_chain: swap_chain,
+                    service_com: com,
                     _size: size,
                     wr_api: wr_api,
                     final_image: image_key,
@@ -56,10 +59,22 @@ impl WebMetalPaintThread {
         match message {
             WebMetalCommand::MakeCommandBuffer(sender) => {
                 let com = self.device.make_command_buffer(&self.queue);
+                com.begin(&self.device.get_vk());
                 sender.send(Some(com)).unwrap();
             }
-            WebMetalCommand::Present(com, frame_index) => {
-                self.swap_chain.fetch_frame(self.device.get_vk(), &com, frame_index);
+            WebMetalCommand::MakeRenderEncoder(receiver, _targets) => {
+                spawn_named("RenderEncoder".to_owned(), move || {
+                    while let Ok(message) = receiver.recv() {
+                        match message {
+                            //TODO
+                        }
+                    }
+                });
+            }
+            WebMetalCommand::Present(frame_index) => {
+                self.service_com.begin(self.device.get_vk());
+                self.swap_chain.fetch_frame(self.device.get_vk(), &self.service_com, frame_index);
+                self.device.execute(&self.queue, &self.service_com);
             }
             WebMetalCommand::Submit(com) => {
                 self.device.execute(&self.queue, &com);
@@ -87,8 +102,9 @@ impl WebMetalPaintThread {
                 }
             };
             painter.init();
-            loop {
-                match receiver.recv().unwrap() {
+
+            while let Ok(canvas_msg) = receiver.recv() {
+                match canvas_msg {
                     CanvasMsg::WebMetal(message) => {
                         painter.handle_message(message);
                     }

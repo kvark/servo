@@ -83,13 +83,16 @@ impl binding::WebMetalRenderingContextMethods for WebMetalRenderingContext {
 
     fn MakeCommandBuffer(&self) -> Root<WebMetalCommandBuffer> {
         let (sender, receiver) = ipc::channel().unwrap();
-        self.ipc_renderer.send(CanvasMsg::WebMetal(WebMetalCommand::MakeCommandBuffer(sender))).unwrap();
-        let com = receiver.recv().unwrap().unwrap();
-        WebMetalCommandBuffer::new(&self.global(), com)
+        let msg = WebMetalCommand::MakeCommandBuffer(sender);
+        self.ipc_renderer.send(CanvasMsg::WebMetal(msg)).unwrap();
+        let inner = receiver.recv().unwrap().unwrap();
+        WebMetalCommandBuffer::new(&self.global(), self.ipc_renderer.clone(), inner)
     }
 
+    //TODO: change into WebMetalCommandBuffer::Commit()
     fn Submit(&self, com: &WebMetalCommandBuffer) {
-        self.ipc_renderer.send(CanvasMsg::WebMetal(WebMetalCommand::Submit(com.get_inner()))).unwrap();
+        let msg = WebMetalCommand::Submit(com.get_inner());
+        self.ipc_renderer.send(CanvasMsg::WebMetal(msg)).unwrap();
     }
 
     fn NextFrameTarget(&self) -> Root<WebMetalTargetView> {
@@ -102,6 +105,8 @@ impl binding::WebMetalRenderingContextMethods for WebMetalRenderingContext {
     }
 
     fn EndFrame(&self) {
+        let msg = WebMetalCommand::Present(self.current_target_index.get() as u32);
+        self.ipc_renderer.send(CanvasMsg::WebMetal(msg)).unwrap();
         //TODO: wait for a fence
         self.canvas.upcast::<Node>().dirty(NodeDamage::OtherNodeDamage);
     }
