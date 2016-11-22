@@ -4,7 +4,7 @@
 
 use canvas_traits::{CanvasCommonMsg, CanvasData, CanvasImageData, CanvasMsg, byte_swap};
 use canvas_traits::{FromLayoutMsg, FromScriptMsg};
-use canvas_traits::{WebMetalCommand, WebMetalInit};
+use canvas_traits::{WebMetalCommand, WebMetalEncoderCommand, WebMetalInit};
 use euclid::size::Size2D;
 use ipc_channel::ipc::{self, IpcSender};
 use std::slice;
@@ -59,21 +59,34 @@ impl WebMetalPaintThread {
         match message {
             WebMetalCommand::MakeCommandBuffer(sender) => {
                 let com = self.device.make_command_buffer(&self.queue);
-                com.begin(&self.device.get_vk());
+                com.begin(&self.device.share);
                 sender.send(Some(com)).unwrap();
             }
-            WebMetalCommand::MakeRenderEncoder(receiver, _targets) => {
+            WebMetalCommand::MakeRenderEncoder(receiver, com, targets) => {
+                let share = self.device.share.clone();
                 spawn_named("RenderEncoder".to_owned(), move || {
+                    let com = com;
+                    let mut res = webmetal::ResourceState::new();
                     while let Ok(message) = receiver.recv() {
                         match message {
-                            //TODO
+                            WebMetalEncoderCommand::ClearColor(color) => {
+                                for view in targets.colors.iter() {
+                                    com.clear_color(&share, &mut res, view, color);
+                                }
+                            }
+                            WebMetalEncoderCommand::EndEncoding => {
+                                com.reset_state(&share, res);
+                                return;
+                            }
                         }
                     }
                 });
             }
             WebMetalCommand::Present(frame_index) => {
-                self.service_com.begin(self.device.get_vk());
-                self.swap_chain.fetch_frame(self.device.get_vk(), &self.service_com, frame_index);
+                //TODO: fence
+                let mut res = webmetal::ResourceState::new();
+                self.service_com.begin(&self.device.share);
+                self.swap_chain.fetch_frame(&self.device.share, &mut res, &self.service_com, frame_index);
                 self.device.execute(&self.queue, &self.service_com);
             }
             WebMetalCommand::Submit(com) => {

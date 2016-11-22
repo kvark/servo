@@ -9,12 +9,14 @@ use dom::bindings::num::Finite;
 use dom::bindings::reflector::{Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
 use ipc_channel::ipc::IpcSender;
+use std::cell::Cell;
 
 #[dom_struct]
 pub struct WebMetalRenderEncoder {
     reflector: Reflector,
     #[ignore_heap_size_of = "Defined in ipc-channel"]
     ipc_sender: IpcSender<WebMetalEncoderCommand>,
+    is_open: Cell<bool>,
 }
 
 impl WebMetalRenderEncoder {
@@ -24,16 +26,21 @@ impl WebMetalRenderEncoder {
         let object = box WebMetalRenderEncoder {
             reflector: Reflector::new(),
             ipc_sender: ipc_sender,
+            is_open: Cell::new(true),
         };
         reflect_dom_object(object, global, binding::Wrap)
     }
 }
 
 impl binding::WebMetalRenderEncoderMethods for WebMetalRenderEncoder {
-    fn ClearColor(&self, _r: Finite<f32>, _g: Finite<f32>, _b: Finite<f32>, _a: Finite<f32>) {
-        //TODO
+    fn ClearColor(&self, r: Finite<f32>, g: Finite<f32>, b: Finite<f32>, a: Finite<f32>) {
+        assert!(self.is_open.get());
+        let color = [*r, *g, *b, *a];
+        self.ipc_sender.send(WebMetalEncoderCommand::ClearColor(color)).unwrap();
     }
     fn EndEncoding(&self) {
-        //TODO
+        assert!(self.is_open.get());
+        self.is_open.set(false);
+        self.ipc_sender.send(WebMetalEncoderCommand::EndEncoding).unwrap();
     }
 }

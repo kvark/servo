@@ -120,15 +120,16 @@ pub enum Canvas2dMsg {
     SetShadowColor(RGBA),
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub enum WebMetalEncoderCommand {
-    //TODO
+    ClearColor([f32; 4]),
+    EndEncoding,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum WebMetalCommand {
     MakeCommandBuffer(IpcSender<Option<webmetal::CommandBuffer>>),
-    MakeRenderEncoder(IpcReceiver<WebMetalEncoderCommand>, webmetal::TargetSet),
+    MakeRenderEncoder(IpcReceiver<WebMetalEncoderCommand>, webmetal::CommandBuffer, webmetal::TargetSet),
     Present(u32),
     Submit(webmetal::CommandBuffer),
 }

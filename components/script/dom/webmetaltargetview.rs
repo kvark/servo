@@ -24,4 +24,8 @@ impl WebMetalTargetView {
         };
         reflect_dom_object(object, global, binding::Wrap)
     }
+
+    pub fn get_inner(&self) -> webmetal::TargetView {
+        self.inner.clone()
+    }
 }

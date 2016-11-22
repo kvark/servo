@@ -14,9 +14,10 @@ extern crate vk_sys as vk;
 
 use shared_library::dynamic_library::DynamicLibrary;
 use std::{iter, mem, ptr};
-use std::cell::Cell;
+use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::path::Path;
+use std::sync::Arc;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct WebMetalCapabilities;
@@ -87,6 +88,22 @@ const SURFACE_EXTENSIONS: &'static [&'static str] = &[
     "VK_KHR_win32_surface",
 ];
 
+pub struct Share {
+    vk: vk::DevicePointers,
+}
+
+pub struct ResourceState {
+    image_layouts: HashMap<(Arc<Texture>, u32), vk::ImageLayout>,
+}
+
+impl ResourceState {
+    pub fn new() -> ResourceState {
+        ResourceState {
+            image_layouts: HashMap::new(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CommandBuffer {
     inner: vk::CommandBuffer,
@@ -94,7 +111,7 @@ pub struct CommandBuffer {
 }
 
 impl CommandBuffer {
-    pub fn begin(&self, vk: &vk::DevicePointers) {
+    pub fn begin(&self, share: &Share) {
         let info = vk::CommandBufferBeginInfo {
             sType: vk::STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
             pNext: ptr::null(),
@@ -102,12 +119,96 @@ impl CommandBuffer {
             pInheritanceInfo: ptr::null(),
         };
         assert_eq!(vk::SUCCESS, unsafe {
-            vk.BeginCommandBuffer(self.inner, &info)
+            share.vk.BeginCommandBuffer(self.inner, &info)
         });
     }
 
-    pub fn copy_texture(&self, vk: &vk::DevicePointers, src: &Texture, src_layer: u32, dst: &Texture, dst_layer: u32) {
+    fn set_image_layout(&self, share: &Share, res: &mut ResourceState,
+                        texture: &Arc<Texture>, layer: u32, layout: vk::ImageLayout) {
+        let key = (texture.clone(), layer);
+        let old_layout = *res.image_layouts.get(&key)
+                                           .unwrap_or(&texture.default_layout);
+        if layout != old_layout {
+            self.image_barrier(share, &texture, layer, old_layout, layout);
+            res.image_layouts.insert(key, layout);
+        }
+    }
+
+    pub fn reset_state(&self, share: &Share, res: ResourceState) {
+        for ((texture, layer), layout) in res.image_layouts.into_iter() {
+            if layout != texture.default_layout {
+                self.image_barrier(share, &texture, layer, layout, texture.default_layout)
+            }
+        }
+    }
+
+    fn image_barrier(&self, share: &Share, texture: &Texture, layer: u32,
+                     old_layout: vk::ImageLayout, new_layout: vk::ImageLayout) {
+        let mut access = 0; //TODO
+        if texture.usage & vk::IMAGE_USAGE_TRANSFER_SRC_BIT != 0 {
+            access |= vk::ACCESS_TRANSFER_WRITE_BIT;
+        }
+        if texture.usage & vk::IMAGE_USAGE_TRANSFER_DST_BIT != 0 {
+            access |= vk::ACCESS_TRANSFER_READ_BIT;
+        }
+        if texture.usage & vk::IMAGE_USAGE_SAMPLED_BIT != 0 {
+            access |= vk::ACCESS_SHADER_READ_BIT;
+        }
+        let barrier = vk::ImageMemoryBarrier {
+            sType: vk::STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            pNext: ptr::null(),
+            srcAccessMask: access,
+            dstAccessMask: access,
+            oldLayout: old_layout,
+            newLayout: new_layout,
+            srcQueueFamilyIndex: self.family_index,
+            dstQueueFamilyIndex: self.family_index,
+            image: texture.inner,
+            subresourceRange: vk::ImageSubresourceRange {
+                aspectMask: vk::IMAGE_ASPECT_COLOR_BIT,
+                baseMipLevel: 0,
+                levelCount: 1,
+                baseArrayLayer: layer,
+                layerCount: 1,
+            },
+        };
+        unsafe {
+            share.vk.CmdPipelineBarrier(self.inner,
+                vk::PIPELINE_STAGE_TOP_OF_PIPE_BIT, vk::PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0,
+                0, ptr::null(), 0, ptr::null(), 1, &barrier);
+        }
+    }
+
+    pub fn clear_color(&self, share: &Share, res: &mut ResourceState,
+                       view: &TargetView, color: [f32; 4]) {
+        let layout = vk::IMAGE_LAYOUT_GENERAL;
+        self.set_image_layout(share, res, &view.texture, view.layer, layout);
+
+        let value = vk::ClearColorValue::float32(color);
+        let range = vk::ImageSubresourceRange {
+            aspectMask: vk::IMAGE_ASPECT_COLOR_BIT,
+            baseMipLevel: 0,
+            levelCount: 1,
+            baseArrayLayer: view.layer,
+            layerCount: 1,
+        };
+        unsafe {
+            share.vk.CmdClearColorImage(self.inner,
+                                        view.texture.inner,
+                                        layout,
+                                        &value, 1, &range);
+        }
+    }
+
+    pub fn copy_texture(&self, share: &Share, res: &mut ResourceState,
+                        src: &Arc<Texture>, src_layer: u32,
+                        dst: &Arc<Texture>, dst_layer: u32) {
         assert_eq!(src.dim, dst.dim);
+        let src_layout = vk::IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        let dst_layout = vk::IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        self.set_image_layout(share, res, src, src_layer, src_layout);
+        self.set_image_layout(share, res, dst, dst_layer, dst_layout);
+
         let regions = [vk::ImageCopy {
             srcSubresource: vk::ImageSubresourceLayers {
                 aspectMask: vk::IMAGE_ASPECT_COLOR_BIT,
@@ -134,16 +235,16 @@ impl CommandBuffer {
             },
         }];
         unsafe {
-            vk.CmdCopyImage(self.inner,
-                            src.inner, src.layout.get(),
-                            dst.inner, dst.layout.get(),
-                            regions.len() as u32,
-                            regions.as_ptr());
+            share.vk.CmdCopyImage(self.inner,
+                                  src.inner, src_layout,
+                                  dst.inner, dst_layout,
+                                  regions.len() as u32,
+                                  regions.as_ptr());
         }
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Dimensions {
     pub w: u32,
     pub h: u32,
@@ -160,11 +261,13 @@ impl From<vk::Extent3D> for Dimensions {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Texture {
     inner: vk::Image,
     memory: vk::DeviceMemory,
-    layout: Cell<vk::ImageLayout>,
+    default_layout: vk::ImageLayout,
     dim: Dimensions,
+    usage: vk::ImageUsageFlagBits,
 }
 
 impl Texture {
@@ -177,6 +280,8 @@ impl Texture {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TargetView {
     inner: vk::ImageView,
+    layer: u32,
+    texture: Arc<Texture>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -187,8 +292,8 @@ pub struct TargetSet {
 }
 
 pub struct SwapChain {
-    gpu_texture: Texture,
-    cpu_texture: Texture,
+    gpu_texture: Arc<Texture>,
+    cpu_texture: Arc<Texture>,
     cpu_layer_count: u32,
     cpu_current_layer: u32,
     views: Vec<TargetView>,
@@ -203,12 +308,14 @@ impl SwapChain {
         self.gpu_texture.dim.clone()
     }
 
-    pub fn fetch_frame(&mut self, vk: &vk::DevicePointers, com: &CommandBuffer, frame_index: u32) {
+    pub fn fetch_frame(&mut self, share: &Share, res: &mut ResourceState,
+                       com: &CommandBuffer, frame_index: u32) {
+        println!("fetching frame {}", frame_index); //TEMP
         self.cpu_current_layer += 1;
         if self.cpu_current_layer >= self.cpu_layer_count {
             self.cpu_current_layer = 0;
         }
-        com.copy_texture(vk, &self.gpu_texture, frame_index,
+        com.copy_texture(share, res, &self.gpu_texture, frame_index,
                          &self.cpu_texture, self.cpu_current_layer);
     }
 }
@@ -229,7 +336,7 @@ pub struct DeviceMapper<'a> {
 impl<'a> Drop for DeviceMapper<'a> {
     fn drop(&mut self) {
         unsafe {
-            self.device.vk.UnmapMemory(self.device.inner, self.memory);
+            self.device.share.vk.UnmapMemory(self.device.inner, self.memory);
         }
     }
 }
@@ -238,16 +345,12 @@ pub struct Device {
     _dyn_lib: DynamicLibrary,
     _library: vk::Static,
     inner: vk::Device,
-    vk: vk::DevicePointers,
+    pub share: Arc<Share>,
     mem_system: u32,
     mem_video: u32,
 }
 
 impl Device {
-    pub fn get_vk(&self) -> &vk::DevicePointers {
-        &self.vk
-    }
-
     fn make_queue(&self, family_id: u32) -> Queue {
         let com_info = vk::CommandPoolCreateInfo {
             sType: vk::STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -256,13 +359,14 @@ impl Device {
             queueFamilyIndex: family_id,
         };
         let mut com_pool = 0;
+        let vk = &self.share.vk;
         assert_eq!(vk::SUCCESS, unsafe {
-            self.vk.CreateCommandPool(self.inner, &com_info, ptr::null(), &mut com_pool)
+            vk.CreateCommandPool(self.inner, &com_info, ptr::null(), &mut com_pool)
         });
 
         let queue = unsafe {
             let mut out = mem::zeroed();
-            self.vk.GetDeviceQueue(self.inner, family_id, 0, &mut out);
+            vk.GetDeviceQueue(self.inner, family_id, 0, &mut out);
             out
         };
         Queue {
@@ -282,7 +386,7 @@ impl Device {
         };
         let mut buf = 0;
         assert_eq!(vk::SUCCESS, unsafe {
-            self.vk.AllocateCommandBuffers(self.inner, &info, &mut buf)
+            self.share.vk.AllocateCommandBuffers(self.inner, &info, &mut buf)
         });
         CommandBuffer {
             inner: buf,
@@ -292,8 +396,9 @@ impl Device {
 
     pub fn execute(&self, queue: &Queue, com: &CommandBuffer) {
         assert_eq!(queue.family_index, com.family_index);
+        let vk = &self.share.vk;
         assert_eq!(vk::SUCCESS, unsafe {
-            self.vk.EndCommandBuffer(com.inner)
+            vk.EndCommandBuffer(com.inner)
         });
         let submit_info = vk::SubmitInfo {
             sType: vk::STRUCTURE_TYPE_SUBMIT_INFO,
@@ -302,7 +407,7 @@ impl Device {
             .. unsafe { mem::zeroed() }
         };
         assert_eq!(vk::SUCCESS, unsafe {
-            self.vk.QueueSubmit(queue.inner, 1, &submit_info, 0)
+            vk.QueueSubmit(queue.inner, 1, &submit_info, 0)
         });
     }
 }
@@ -472,7 +577,9 @@ impl Device {
             _dyn_lib: dynamic_lib,
             _library: lib,
             inner: vk_device,
-            vk: dev_pointers,
+            share: Arc::new(Share {
+                vk: dev_pointers
+            }),
             mem_system: msys_id,
             mem_video: mvid_id,
         };
@@ -490,12 +597,13 @@ impl Device {
         };
         let mut mem = 0;
         assert_eq!(vk::SUCCESS, unsafe {
-            self.vk.AllocateMemory(self.inner, &info, ptr::null(), &mut mem)
+            self.share.vk.AllocateMemory(self.inner, &info, ptr::null(), &mut mem)
         });
         mem
     }
 
     pub fn make_swap_chain(&self, width: u32, height: u32, count: u32) -> SwapChain {
+        let vk = &self.share.vk;
         let gpu_texture = {
             let info = vk::ImageCreateInfo {
                 sType: vk::STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -521,23 +629,24 @@ impl Device {
 
             let mut image = 0;
             assert_eq!(vk::SUCCESS, unsafe {
-                self.vk.CreateImage(self.inner, &info, ptr::null(), &mut image)
+                vk.CreateImage(self.inner, &info, ptr::null(), &mut image)
             });
             let reqs = unsafe {
                 let mut out = mem::zeroed();
-                self.vk.GetImageMemoryRequirements(self.inner, image, &mut out);
+                vk.GetImageMemoryRequirements(self.inner, image, &mut out);
                 out
             };
             let memory = self.alloc(self.mem_video, reqs);
             assert_eq!(vk::SUCCESS, unsafe {
-                self.vk.BindImageMemory(self.inner, image, memory, 0)
+                vk.BindImageMemory(self.inner, image, memory, 0)
             });
-            Texture {
+            Arc::new(Texture {
                 inner: image,
                 memory: memory,
-                layout: Cell::new(info.initialLayout),
+                default_layout: info.initialLayout,
                 dim: info.extent.into(),
-            }
+                usage: info.usage,
+            })
         };
         let cpu_texture = {
             let info = vk::ImageCreateInfo {
@@ -564,23 +673,24 @@ impl Device {
 
             let mut image = 0;
             assert_eq!(vk::SUCCESS, unsafe {
-                self.vk.CreateImage(self.inner, &info, ptr::null(), &mut image)
+                vk.CreateImage(self.inner, &info, ptr::null(), &mut image)
             });
             let reqs = unsafe {
                 let mut out = mem::zeroed();
-                self.vk.GetImageMemoryRequirements(self.inner, image, &mut out);
+                vk.GetImageMemoryRequirements(self.inner, image, &mut out);
                 out
             };
             let memory = self.alloc(self.mem_system, reqs);
             assert_eq!(vk::SUCCESS, unsafe {
-                self.vk.BindImageMemory(self.inner, image, memory, 0)
+                vk.BindImageMemory(self.inner, image, memory, 0)
             });
-            Texture {
+            Arc::new(Texture {
                 inner: image,
                 memory: memory,
-                layout: Cell::new(info.initialLayout),
+                default_layout: info.initialLayout,
                 dim: info.extent.into(),
-            }
+                usage: info.usage,
+            })
         };
         let views = (0 .. count).map(|i| {
             let info = vk::ImageViewCreateInfo {
@@ -607,10 +717,12 @@ impl Device {
 
             let mut view = 0;
             assert_eq!(vk::SUCCESS, unsafe {
-                self.vk.CreateImageView(self.inner, &info, ptr::null(), &mut view)
+                vk.CreateImageView(self.inner, &info, ptr::null(), &mut view)
             });
             TargetView {
                 inner: view,
+                layer: i,
+                texture: gpu_texture.clone(),
             }
         }).collect();
 
@@ -628,9 +740,10 @@ impl Device {
         let layer_size = swap_chain.cpu_texture.get_layer_size();
         let mut ptr = ptr::null_mut();
         assert_eq!(vk::SUCCESS, unsafe {
-            self.vk.MapMemory(self.inner, swap_chain.cpu_texture.memory,
-                (layer_size * swap_chain.cpu_current_layer) as u64,
-                layer_size as u64, 0, &mut ptr)
+            self.share.vk.MapMemory(self.inner,
+                                    swap_chain.cpu_texture.memory,
+                                    (layer_size * swap_chain.cpu_current_layer) as u64,
+                                    layer_size as u64, 0, &mut ptr)
         });
         DeviceMapper {
             pointer: ptr as *const _,
