@@ -310,7 +310,6 @@ impl SwapChain {
 
     pub fn fetch_frame(&mut self, share: &Share, res: &mut ResourceState,
                        com: &CommandBuffer, frame_index: u32) {
-        println!("fetching frame {}", frame_index); //TEMP
         self.cpu_current_layer += 1;
         if self.cpu_current_layer >= self.cpu_layer_count {
             self.cpu_current_layer = 0;
@@ -324,6 +323,10 @@ pub struct Queue {
     inner: vk::Queue,
     family_index: u32,
     command_pool: vk::CommandPool,
+}
+
+pub struct Fence {
+    inner: vk::Fence,
 }
 
 pub struct DeviceMapper<'a> {
@@ -349,69 +352,6 @@ pub struct Device {
     mem_system: u32,
     mem_video: u32,
 }
-
-impl Device {
-    fn make_queue(&self, family_id: u32) -> Queue {
-        let com_info = vk::CommandPoolCreateInfo {
-            sType: vk::STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-            pNext: ptr::null(),
-            flags: vk::COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-            queueFamilyIndex: family_id,
-        };
-        let mut com_pool = 0;
-        let vk = &self.share.vk;
-        assert_eq!(vk::SUCCESS, unsafe {
-            vk.CreateCommandPool(self.inner, &com_info, ptr::null(), &mut com_pool)
-        });
-
-        let queue = unsafe {
-            let mut out = mem::zeroed();
-            vk.GetDeviceQueue(self.inner, family_id, 0, &mut out);
-            out
-        };
-        Queue {
-            inner: queue,
-            family_index: family_id,
-            command_pool: com_pool,
-        }
-    }
-
-    pub fn make_command_buffer(&self, queue: &Queue) -> CommandBuffer {
-        let info = vk::CommandBufferAllocateInfo {
-            sType: vk::STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-            pNext: ptr::null(),
-            commandPool: queue.command_pool,
-            level: vk::COMMAND_BUFFER_LEVEL_PRIMARY,
-            commandBufferCount: 1,
-        };
-        let mut buf = 0;
-        assert_eq!(vk::SUCCESS, unsafe {
-            self.share.vk.AllocateCommandBuffers(self.inner, &info, &mut buf)
-        });
-        CommandBuffer {
-            inner: buf,
-            family_index: queue.family_index,
-        }
-    }
-
-    pub fn execute(&self, queue: &Queue, com: &CommandBuffer) {
-        assert_eq!(queue.family_index, com.family_index);
-        let vk = &self.share.vk;
-        assert_eq!(vk::SUCCESS, unsafe {
-            vk.EndCommandBuffer(com.inner)
-        });
-        let submit_info = vk::SubmitInfo {
-            sType: vk::STRUCTURE_TYPE_SUBMIT_INFO,
-            commandBufferCount: 1,
-            pCommandBuffers: &com.inner,
-            .. unsafe { mem::zeroed() }
-        };
-        assert_eq!(vk::SUCCESS, unsafe {
-            vk.QueueSubmit(queue.inner, 1, &submit_info, 0)
-        });
-    }
-}
-
 
 #[derive(Debug)]
 pub struct InitError;
@@ -602,7 +542,113 @@ impl Device {
         mem
     }
 
-    pub fn make_swap_chain(&self, width: u32, height: u32, count: u32) -> SwapChain {
+    fn make_queue(&self, family_id: u32) -> Queue {
+        let com_info = vk::CommandPoolCreateInfo {
+            sType: vk::STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: vk::COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+            queueFamilyIndex: family_id,
+        };
+        let mut com_pool = 0;
+        let vk = &self.share.vk;
+        assert_eq!(vk::SUCCESS, unsafe {
+            vk.CreateCommandPool(self.inner, &com_info, ptr::null(), &mut com_pool)
+        });
+
+        let queue = unsafe {
+            let mut out = mem::zeroed();
+            vk.GetDeviceQueue(self.inner, family_id, 0, &mut out);
+            out
+        };
+        Queue {
+            inner: queue,
+            family_index: family_id,
+            command_pool: com_pool,
+        }
+    }
+
+    pub fn make_command_buffer(&self, queue: &Queue) -> CommandBuffer {
+        let info = vk::CommandBufferAllocateInfo {
+            sType: vk::STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            pNext: ptr::null(),
+            commandPool: queue.command_pool,
+            level: vk::COMMAND_BUFFER_LEVEL_PRIMARY,
+            commandBufferCount: 1,
+        };
+        let mut buf = 0;
+        assert_eq!(vk::SUCCESS, unsafe {
+            self.share.vk.AllocateCommandBuffers(self.inner, &info, &mut buf)
+        });
+        CommandBuffer {
+            inner: buf,
+            family_index: queue.family_index,
+        }
+    }
+
+    pub fn make_fence(&self, signalled: bool) -> Fence {
+        let info = vk::FenceCreateInfo {
+            sType: vk::STRUCTURE_TYPE_FENCE_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: if signalled {vk::FENCE_CREATE_SIGNALED_BIT} else {0}
+        };
+        let mut fence = 0;
+        assert_eq!(vk::SUCCESS, unsafe {
+            self.share.vk.CreateFence(self.inner, &info, ptr::null(), &mut fence)
+        });
+        Fence {
+            inner: fence,
+        }
+    }
+
+    pub fn check_fence(&self, fence: &Fence) -> bool {
+        let res = unsafe {
+            self.share.vk.GetFenceStatus(self.inner, fence.inner)
+        };
+        if res == vk::NOT_READY {
+            false
+        } else {
+            assert_eq!(res, vk::SUCCESS);
+            true
+        }
+    }
+
+    pub fn wait_fence(&self, fence: &Fence, timeout: u64) -> bool {
+        let res = unsafe {
+            self.share.vk.WaitForFences(self.inner, 1, &fence.inner, vk::FALSE, timeout)
+        };
+        if res == vk::TIMEOUT {
+            false
+        } else {
+            assert_eq!(res, vk::SUCCESS);
+            true
+        }
+    }
+
+    pub fn execute(&self, queue: &Queue, com: &CommandBuffer,
+                   fence: Option<&Fence>) {
+        assert_eq!(queue.family_index, com.family_index);
+        let vk = &self.share.vk;
+        assert_eq!(vk::SUCCESS, unsafe {
+            vk.EndCommandBuffer(com.inner)
+        });
+        let submit_info = vk::SubmitInfo {
+            sType: vk::STRUCTURE_TYPE_SUBMIT_INFO,
+            commandBufferCount: 1,
+            pCommandBuffers: &com.inner,
+            .. unsafe { mem::zeroed() }
+        };
+        let fid = match fence {
+            Some(fence) => fence.inner,
+            None => 0,
+        };
+        assert_eq!(vk::SUCCESS, unsafe {
+            vk.QueueSubmit(queue.inner, 1, &submit_info, fid)
+        });
+    }
+
+    pub fn make_swap_chain(&self, width: u32, height: u32,
+                           gpu_frame_count: u32, cpu_frame_count: u32)
+                           -> SwapChain {
         let vk = &self.share.vk;
         let gpu_texture = {
             let info = vk::ImageCreateInfo {
@@ -617,7 +663,7 @@ impl Device {
                     depth: 1,
                 },
                 mipLevels: 1,
-                arrayLayers: count,
+                arrayLayers: gpu_frame_count,
                 samples: vk::SAMPLE_COUNT_1_BIT,
                 tiling: vk::IMAGE_TILING_OPTIMAL,
                 usage: vk::IMAGE_USAGE_TRANSFER_SRC_BIT | vk::IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
@@ -661,7 +707,7 @@ impl Device {
                     depth: 1,
                 },
                 mipLevels: 1,
-                arrayLayers: count,
+                arrayLayers: cpu_frame_count,
                 samples: vk::SAMPLE_COUNT_1_BIT,
                 tiling: vk::IMAGE_TILING_LINEAR,
                 usage: vk::IMAGE_USAGE_TRANSFER_DST_BIT,
@@ -692,7 +738,7 @@ impl Device {
                 usage: info.usage,
             })
         };
-        let views = (0 .. count).map(|i| {
+        let views = (0 .. gpu_frame_count).map(|i| {
             let info = vk::ImageViewCreateInfo {
                 sType: vk::STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                 pNext: ptr::null(),
@@ -729,7 +775,7 @@ impl Device {
         SwapChain {
             gpu_texture: gpu_texture,
             cpu_texture: cpu_texture,
-            cpu_layer_count: count,
+            cpu_layer_count: cpu_frame_count,
             cpu_current_layer: 0,
             views: views,
         }

@@ -7,17 +7,76 @@ use canvas_traits::{FromLayoutMsg, FromScriptMsg};
 use canvas_traits::{WebMetalCommand, WebMetalEncoderCommand, WebMetalInit};
 use euclid::size::Size2D;
 use ipc_channel::ipc::{self, IpcSender};
+use std::collections::VecDeque;
 use std::slice;
 use std::sync::mpsc::channel;
 use util::thread::spawn_named;
 use webmetal::{self, WebMetalCapabilities};
 use webrender_traits;
 
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+struct UniqueFenceKey(u64);
+
+struct CommandBufferTracker {
+    queue: webmetal::Queue,
+    pending: VecDeque<(webmetal::CommandBuffer, webmetal::Fence, UniqueFenceKey)>,
+    fences: Vec<webmetal::Fence>,
+    unique_key: UniqueFenceKey,
+}
+
+impl CommandBufferTracker {
+    fn new(queue: webmetal::Queue) -> CommandBufferTracker {
+        CommandBufferTracker {
+            queue: queue,
+            pending: VecDeque::new(),
+            fences: Vec::new(),
+            unique_key: UniqueFenceKey(0),
+        }
+    }
+
+    fn find(&self, unique_key: UniqueFenceKey) -> Option<&webmetal::Fence> {
+        self.pending.iter().find(|&&(_, _, key)| key == unique_key)
+                           .map(|&(_, ref fence, _)| fence)
+    }
+
+    fn consume(&mut self,
+               com: webmetal::CommandBuffer,
+               device: &webmetal::Device) -> UniqueFenceKey {
+        let fence = match self.fences.pop() {
+            Some(fence) => fence,
+            None => device.make_fence(false),
+        };
+        device.execute(&self.queue, &com, Some(&fence));
+        self.unique_key.0 += 1;
+        self.pending.push_back((com, fence, self.unique_key));
+        self.unique_key
+    }
+
+    fn produce(&mut self, device: &webmetal::Device)
+               -> webmetal::CommandBuffer {
+        let is_ready = match self.pending.front() {
+            Some(&(_, ref fence, _)) => device.check_fence(fence),
+            _ => false,
+        };
+        let com = if is_ready {
+            let (com, fence, _) = self.pending.pop_front().unwrap();
+            self.fences.push(fence);
+            com
+        } else {
+            info!("WebMetal produced a command buffer");
+            device.make_command_buffer(&self.queue)
+        };
+        com.begin(&device.share);
+        com
+    }
+}
+
 pub struct WebMetalPaintThread {
     device: webmetal::Device,
-    queue: webmetal::Queue,
     swap_chain: webmetal::SwapChain,
-    service_com: webmetal::CommandBuffer,
+    swap_fence_key: UniqueFenceKey,
+    cbuf_tracker: CommandBufferTracker,
     _size: Size2D<i32>,
     wr_api: webrender_traits::RenderApi,
     final_image: webrender_traits::ImageKey,
@@ -27,19 +86,21 @@ impl WebMetalPaintThread {
     fn new(size: Size2D<i32>, frame_num: u8,
            wr_api_sender: webrender_traits::RenderApiSender)
            -> Result<(WebMetalPaintThread, WebMetalCapabilities), String> {
-        match webmetal::Device::new(false) {
+        let debug = true;
+        match webmetal::Device::new(debug) {
             Ok((dev, queue, caps)) => {
+                let gpu_frame_count = 1; // no need for more when doing a readback
                 let swap_chain = dev.make_swap_chain(size.width as u32,
                                                      size.height as u32,
+                                                     gpu_frame_count,
                                                      frame_num as u32);
-                let com = dev.make_command_buffer(&queue);
                 let wr_api = wr_api_sender.create_api();
                 let image_key = wr_api.alloc_image();
                 let painter = WebMetalPaintThread {
                     device: dev,
-                    queue: queue,
                     swap_chain: swap_chain,
-                    service_com: com,
+                    swap_fence_key: UniqueFenceKey(0),
+                    cbuf_tracker: CommandBufferTracker::new(queue),
                     _size: size,
                     wr_api: wr_api,
                     final_image: image_key,
@@ -58,8 +119,7 @@ impl WebMetalPaintThread {
         debug!("WebMetal message: {:?}", message);
         match message {
             WebMetalCommand::MakeCommandBuffer(sender) => {
-                let com = self.device.make_command_buffer(&self.queue);
-                com.begin(&self.device.share);
+                let com = self.cbuf_tracker.produce(&self.device);
                 sender.send(Some(com)).unwrap();
             }
             WebMetalCommand::MakeRenderEncoder(receiver, com, targets) => {
@@ -83,14 +143,14 @@ impl WebMetalPaintThread {
                 });
             }
             WebMetalCommand::Present(frame_index) => {
-                //TODO: fence
                 let mut res = webmetal::ResourceState::new();
-                self.service_com.begin(&self.device.share);
-                self.swap_chain.fetch_frame(&self.device.share, &mut res, &self.service_com, frame_index);
-                self.device.execute(&self.queue, &self.service_com);
+                let com = self.cbuf_tracker.produce(&self.device);
+                self.swap_chain.fetch_frame(&self.device.share, &mut res, &com, frame_index);
+                com.reset_state(&self.device.share, res);
+                self.swap_fence_key = self.cbuf_tracker.consume(com, &self.device);
             }
             WebMetalCommand::Submit(com) => {
-                self.device.execute(&self.queue, &com);
+                self.cbuf_tracker.consume(com, &self.device);
             }
         }
     }
@@ -152,6 +212,14 @@ impl WebMetalPaintThread {
 
     #[allow(unsafe_code)]
     fn send_data(&mut self, chan: IpcSender<CanvasData>) {
+        // wait for the associated command buffer to finish execution
+        if let Some(fence) = self.cbuf_tracker.find(self.swap_fence_key) {
+            info!("WebMetal waiting for a fence...");
+            let success = self.device.wait_fence(fence, 100000000);
+            assert!(success);
+        }
+
+        // read the frame into a vector
         let dim = self.swap_chain.get_dimensions();
         let frame = self.device.read_frame(&self.swap_chain);
 

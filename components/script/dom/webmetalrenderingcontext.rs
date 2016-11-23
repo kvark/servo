@@ -91,7 +91,7 @@ impl binding::WebMetalRenderingContextMethods for WebMetalRenderingContext {
 
     //TODO: change into WebMetalCommandBuffer::Commit()
     fn Submit(&self, com: &WebMetalCommandBuffer) {
-        let msg = WebMetalCommand::Submit(com.get_inner());
+        let msg = WebMetalCommand::Submit(com.seal());
         self.ipc_renderer.send(CanvasMsg::WebMetal(msg)).unwrap();
     }
 

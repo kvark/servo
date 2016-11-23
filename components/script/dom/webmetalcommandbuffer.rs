@@ -9,6 +9,7 @@ use dom::bindings::reflector::{Reflectable, Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
 use dom::webmetalrenderencoder::WebMetalRenderEncoder;
 use ipc_channel::ipc::{self, IpcSender};
+use std::cell::Cell;
 use webmetal;
 
 #[dom_struct]
@@ -18,6 +19,7 @@ pub struct WebMetalCommandBuffer {
     ipc_renderer: IpcSender<CanvasMsg>,
     #[ignore_heap_size_of = "Defined in webmetal"]
     inner: webmetal::CommandBuffer,
+    sealed: Cell<bool>,
 }
 
 impl WebMetalCommandBuffer {
@@ -29,11 +31,13 @@ impl WebMetalCommandBuffer {
             reflector: Reflector::new(),
             ipc_renderer: ipc_renderer.clone(),
             inner: inner,
+            sealed: Cell::new(false),
         };
         reflect_dom_object(object, global, binding::Wrap)
     }
 
-    pub fn get_inner(&self) -> webmetal::CommandBuffer {
+    pub fn seal(&self) -> webmetal::CommandBuffer {
+        self.sealed.set(true);
         self.inner.clone()
     }
 }
@@ -41,6 +45,7 @@ impl WebMetalCommandBuffer {
 impl binding::WebMetalCommandBufferMethods for WebMetalCommandBuffer {
     fn MakeRenderEncoder(&self, targets: &binding::RenderTargets)
                          -> Root<WebMetalRenderEncoder> {
+        assert!(!self.sealed.get());
         let (sender, receiver) = ipc::channel().unwrap();
         let colors = [&targets.color0, &targets.color1, &targets.color2, &targets.color3];
         let targetset = webmetal::TargetSet {
