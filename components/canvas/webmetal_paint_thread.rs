@@ -86,7 +86,7 @@ impl WebMetalPaintThread {
     fn new(size: Size2D<i32>, frame_num: u8,
            wr_api_sender: webrender_traits::RenderApiSender)
            -> Result<(WebMetalPaintThread, WebMetalCapabilities), String> {
-        let debug = true;
+        let debug = false; //use command line instead for now
         match webmetal::Device::new(debug) {
             Ok((dev, queue, caps)) => {
                 let gpu_frame_count = 1; // no need for more when doing a readback

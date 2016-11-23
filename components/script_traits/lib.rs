@@ -34,7 +34,6 @@ extern crate serde_derive;
 extern crate servo_url;
 extern crate style_traits;
 extern crate time;
-extern crate webmetal;
 
 mod script_msg;
 pub mod webdriver_msg;

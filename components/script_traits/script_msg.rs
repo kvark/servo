@@ -23,7 +23,6 @@ use offscreen_gl_context::{GLContextAttributes, GLLimits};
 use servo_url::ServoUrl;
 use style_traits::cursor::Cursor;
 use style_traits::viewport::ViewportConstraints;
-use webmetal::WebMetalCapabilities;
 
 /// Messages from the layout to the constellation.
 #[derive(Deserialize, Serialize)]

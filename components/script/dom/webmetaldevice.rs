@@ -24,7 +24,8 @@ impl WebMetalDevice {
 }
 
 impl binding::WebMetalDeviceMethods for WebMetalDevice {
-    fn MakeBuffer(&self, _cx: *mut JSContext, _size: u32, _data: *mut JSObject) -> Root<WebMetalBuffer> {
+    #[allow(unsafe_code)]
+    unsafe fn MakeBuffer(&self, _cx: *mut JSContext, _size: u32, _data: *mut JSObject) -> Root<WebMetalBuffer> {
         WebMetalBuffer::new(&self.global())
     }
 }

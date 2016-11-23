@@ -2,6 +2,8 @@
 /.cargo
 /.servobuild
 target
+/glfw
+/components/*/Cargo.lock
 /ports/android/bin
 /ports/android/libs
 /ports/android/local.properties
@@ -25,7 +27,7 @@ target
 servo-test
 Servo.app
 .config.mk.last
-/glfw
+vk_layer_settings.txt
 
 # Editors
 
