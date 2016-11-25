@@ -43,18 +43,23 @@ impl WebMetalCommandBuffer {
 }
 
 impl binding::WebMetalCommandBufferMethods for WebMetalCommandBuffer {
-    fn MakeRenderEncoder(&self, targets: &binding::RenderTargets)
+    fn MakeRenderEncoder(&self, targets: &binding::RenderTargetSet)
                          -> Root<WebMetalRenderEncoder> {
         assert!(!self.sealed.get());
         let (sender, receiver) = ipc::channel().unwrap();
+        //Note: this code is rough around the edge cases
         let colors = [&targets.color0, &targets.color1, &targets.color2, &targets.color3];
         let targetset = webmetal::TargetSet {
             colors: colors.into_iter()
-                          .filter_map(|c| c.as_ref())
-                          .map(|v| v.get_inner())
-                          .collect(),
-            depth: targets.depth.as_ref().map(|v| v.get_inner()),
-            stencil: targets.stencil.as_ref().map(|v| v.get_inner()),
+                          .filter_map(|color| color.view.as_ref().map(|view| {
+                              (view.get_inner(),
+                               color.clear.as_ref().map(|v| [*v[0], *v[1], *v[2], *v[3]]))
+                          })).collect(),
+            depth_stencil: targets.depthStencil.view.as_ref().map(|view| {
+                (view.get_inner(),
+                 targets.depthStencil.clear.as_ref().and_then(|v| v.get(0).map(|&d| *d)),
+                 targets.depthStencil.clear.as_ref().and_then(|v| v.get(1).map(|&s| *s as u8)))
+            }),
         };
         let msg = WebMetalCommand::MakeRenderEncoder(receiver, self.inner.clone(), targetset);
         self.ipc_renderer.send(CanvasMsg::WebMetal(msg)).unwrap();

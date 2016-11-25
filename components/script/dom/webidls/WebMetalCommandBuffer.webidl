@@ -2,15 +2,19 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-dictionary RenderTargets {
-    WebMetalTargetView? color0 = null;
-    WebMetalTargetView? color1 = null;
-    WebMetalTargetView? color2 = null;
-    WebMetalTargetView? color3 = null;
-    WebMetalTargetView? depth = null;
-    WebMetalTargetView? stencil = null;
+dictionary RenderTarget {
+    WebMetalTargetView view;
+    sequence<float> clear;
+};
+
+dictionary RenderTargetSet {
+    RenderTarget color0;
+    RenderTarget color1;
+    RenderTarget color2;
+    RenderTarget color3;
+    RenderTarget depthStencil;
 };
 
 interface WebMetalCommandBuffer {
-    WebMetalRenderEncoder   makeRenderEncoder(optional RenderTargets targets);
+    WebMetalRenderEncoder   makeRenderEncoder(optional RenderTargetSet targets);
 };

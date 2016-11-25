@@ -104,6 +104,16 @@ impl ResourceState {
     }
 }
 
+pub struct RenderPass {
+    inner: vk::RenderPass,
+    clears: Vec<vk::ClearValue>,
+}
+
+pub struct FrameBuffer {
+    inner: vk::Framebuffer,
+    extent: vk::Extent2D,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CommandBuffer {
     inner: vk::CommandBuffer,
@@ -123,6 +133,36 @@ impl CommandBuffer {
         });
     }
 
+    pub fn begin_pass(&self, share: &Share, pass: &RenderPass, fb: &FrameBuffer) {
+        let info = vk::RenderPassBeginInfo {
+            sType: vk::STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            pNext: ptr::null(),
+            renderPass: pass.inner,
+            framebuffer: fb.inner,
+            renderArea: vk::Rect2D {
+                offset: vk::Offset2D {
+                    x: 0,
+                    y: 0,
+                },
+                extent: vk::Extent2D {
+                    width: fb.extent.width,
+                    height: fb.extent.height,
+                },
+            },
+            clearValueCount: pass.clears.len() as u32,
+            pClearValues: pass.clears.as_ptr(),
+        };
+        unsafe {
+            share.vk.CmdBeginRenderPass(self.inner, &info, vk::SUBPASS_CONTENTS_INLINE);
+        }
+    }
+
+    pub fn end_pass(&self, share: &Share) {
+        unsafe {
+            share.vk.CmdEndRenderPass(self.inner);
+        }
+    }
+
     fn set_image_layout(&self, share: &Share, res: &mut ResourceState,
                         texture: &Arc<Texture>, layer: u32, layout: vk::ImageLayout) {
         let key = (texture.clone(), layer);
@@ -134,8 +174,8 @@ impl CommandBuffer {
         }
     }
 
-    pub fn reset_state(&self, share: &Share, res: ResourceState) {
-        for ((texture, layer), layout) in res.image_layouts.into_iter() {
+    pub fn reset_state(&self, share: &Share, res: &mut ResourceState) {
+        for ((texture, layer), layout) in res.image_layouts.drain() {
             if layout != texture.default_layout {
                 self.image_barrier(share, &texture, layer, layout, texture.default_layout)
             }
@@ -268,6 +308,8 @@ pub struct Texture {
     default_layout: vk::ImageLayout,
     dim: Dimensions,
     usage: vk::ImageUsageFlagBits,
+    format: vk::Format,
+    samples: vk::SampleCountFlagBits,
 }
 
 impl Texture {
@@ -286,9 +328,8 @@ pub struct TargetView {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TargetSet {
-    pub colors: Vec<TargetView>,
-    pub depth: Option<TargetView>,
-    pub stencil: Option<TargetView>,
+    pub colors: Vec<(TargetView, Option<[f32; 4]>)>,
+    pub depth_stencil: Option<(TargetView, Option<f32>, Option<u8>)>,
 }
 
 pub struct SwapChain {
@@ -646,6 +687,163 @@ impl Device {
         });
     }
 
+    pub fn make_render_pass(&self, targets: &TargetSet) -> RenderPass {
+        let color_references = [
+            vk::AttachmentReference {
+                attachment: 0,
+                layout: vk::IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            },
+            vk::AttachmentReference {
+                attachment: 1,
+                layout: vk::IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            },
+            vk::AttachmentReference {
+                attachment: 2,
+                layout: vk::IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            },
+            vk::AttachmentReference {
+                attachment: 3,
+                layout: vk::IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            },
+        ];
+        let depth_stencil_ref = vk::AttachmentReference {
+            attachment: targets.colors.len() as u32,
+            layout: vk::IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        };
+
+        let sub_pass = vk::SubpassDescription {
+            flags: 0,
+            pipelineBindPoint: vk::PIPELINE_BIND_POINT_GRAPHICS,
+            inputAttachmentCount: 0,
+            pInputAttachments: ptr::null(),
+            colorAttachmentCount: targets.colors.len() as u32,
+            pColorAttachments: color_references.as_ptr(),
+            pResolveAttachments: ptr::null(),
+            pDepthStencilAttachment: if targets.depth_stencil.is_some() {
+                &depth_stencil_ref
+            } else {
+                ptr::null()
+            },
+            preserveAttachmentCount: 0,
+            pPreserveAttachments: ptr::null(),
+        };
+
+        let mut clears = Vec::new();
+        let mut attachments = Vec::new();
+        for color in targets.colors.iter() {
+            let (op, clear) = match color.1 {
+                Some(v) => (vk::ATTACHMENT_LOAD_OP_CLEAR, v),
+                None => (vk::ATTACHMENT_LOAD_OP_LOAD, [0.0; 4]),
+            };
+            clears.push(vk::ClearValue::color(vk::ClearColorValue::float32(clear)));
+
+            attachments.push(vk::AttachmentDescription {
+                flags: 0,
+                format: color.0.texture.format,
+                samples: color.0.texture.samples,
+                loadOp: op,
+                storeOp: vk::ATTACHMENT_STORE_OP_STORE,
+                stencilLoadOp: vk::ATTACHMENT_LOAD_OP_LOAD,
+                stencilStoreOp: vk::ATTACHMENT_STORE_OP_STORE,
+                initialLayout: color.0.texture.default_layout,
+                finalLayout: color.0.texture.default_layout,
+            })
+        }
+        if let Some(ref ds) = targets.depth_stencil {
+            let (depth_op, depth_clear) = match ds.1 {
+                Some(v) => (vk::ATTACHMENT_LOAD_OP_CLEAR, v),
+                None => (vk::ATTACHMENT_LOAD_OP_LOAD, 0.0)
+            };
+            let (stencil_op, stencil_clear) = match ds.2 {
+                Some(v) => (vk::ATTACHMENT_LOAD_OP_CLEAR, v),
+                None => (vk::ATTACHMENT_LOAD_OP_LOAD, 0)
+            };
+            clears.push(vk::ClearValue::depth_stencil(vk::ClearDepthStencilValue {
+                depth: depth_clear,
+                stencil: stencil_clear as u32,
+            }));
+
+            attachments.push(vk::AttachmentDescription {
+                flags: 0, //vk::ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT,
+                format: ds.0.texture.format,
+                samples: ds.0.texture.samples,
+                loadOp: depth_op,
+                storeOp: vk::ATTACHMENT_STORE_OP_STORE,
+                stencilLoadOp: stencil_op,
+                stencilStoreOp: vk::ATTACHMENT_STORE_OP_STORE,
+                initialLayout: ds.0.texture.default_layout,
+                finalLayout: ds.0.texture.default_layout,
+            })
+        }
+
+        let info = vk::RenderPassCreateInfo {
+            sType: vk::STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            attachmentCount: attachments.len() as u32,
+            pAttachments: attachments.as_ptr(),
+            subpassCount: 1,
+            pSubpasses: &sub_pass,
+            dependencyCount: 0,
+            pDependencies: ptr::null(),
+        };
+
+        let mut pass = 0;
+        assert_eq!(vk::SUCCESS, unsafe {
+            self.share.vk.CreateRenderPass(self.inner, &info, ptr::null(), &mut pass)
+        });
+        RenderPass {
+            inner: pass,
+            clears: clears,
+        }
+    }
+
+    pub fn make_frame_buffer(&self, targets: &TargetSet, pass: &RenderPass)
+                             -> FrameBuffer {
+        let mut attachments = Vec::new();
+        let mut dim = Dimensions { w: 0, h: 0, d: 0 };
+        for color in targets.colors.iter() {
+            attachments.push(color.0.inner);
+            if dim.w == 0 {
+                dim = color.0.texture.dim.clone();
+            } else {
+                assert_eq!(dim, color.0.texture.dim);
+            };
+        }
+        if let Some(ref ds) = targets.depth_stencil {
+            attachments.push(ds.0.inner);
+            if dim.w == 0 {
+                dim = ds.0.texture.dim.clone();
+            } else {
+                assert_eq!(dim, ds.0.texture.dim);
+            };
+        }
+
+        let info = vk::FramebufferCreateInfo {
+            sType: vk::STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            renderPass: pass.inner,
+            attachmentCount: attachments.len() as u32,
+            pAttachments: attachments.as_ptr(),
+            width: dim.w,
+            height: dim.h,
+            layers: 1,
+        };
+
+        let mut fbuf = 0;
+        assert_eq!(vk::SUCCESS, unsafe {
+            self.share.vk.CreateFramebuffer(self.inner, &info, ptr::null(), &mut fbuf)
+        });
+        FrameBuffer {
+            inner: fbuf,
+            extent: vk::Extent2D {
+                width: dim.w,
+                height: dim.h,
+            },
+        }
+    }
+
     pub fn make_swap_chain(&self, width: u32, height: u32,
                            gpu_frame_count: u32, cpu_frame_count: u32)
                            -> SwapChain {
@@ -692,6 +890,8 @@ impl Device {
                 default_layout: info.initialLayout,
                 dim: info.extent.into(),
                 usage: info.usage,
+                format: info.format,
+                samples: info.samples,
             })
         };
         let cpu_texture = {
@@ -736,6 +936,8 @@ impl Device {
                 default_layout: info.initialLayout,
                 dim: info.extent.into(),
                 usage: info.usage,
+                format: info.format,
+                samples: info.samples,
             })
         };
         let views = (0 .. gpu_frame_count).map(|i| {

@@ -5,7 +5,6 @@
 use canvas_traits::WebMetalEncoderCommand;
 use dom::bindings::codegen::Bindings::WebMetalRenderEncoderBinding as binding;
 use dom::bindings::js::Root;
-use dom::bindings::num::Finite;
 use dom::bindings::reflector::{Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
 use ipc_channel::ipc::IpcSender;
@@ -33,11 +32,6 @@ impl WebMetalRenderEncoder {
 }
 
 impl binding::WebMetalRenderEncoderMethods for WebMetalRenderEncoder {
-    fn ClearColor(&self, r: Finite<f32>, g: Finite<f32>, b: Finite<f32>, a: Finite<f32>) {
-        assert!(self.is_open.get());
-        let color = [*r, *g, *b, *a];
-        self.ipc_sender.send(WebMetalEncoderCommand::ClearColor(color)).unwrap();
-    }
     fn EndEncoding(&self) {
         assert!(self.is_open.get());
         self.is_open.set(false);

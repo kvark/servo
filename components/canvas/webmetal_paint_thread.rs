@@ -9,11 +9,19 @@ use euclid::size::Size2D;
 use ipc_channel::ipc::{self, IpcSender};
 use std::collections::VecDeque;
 use std::slice;
+use std::sync::Arc;
 use std::sync::mpsc::channel;
 use util::thread::spawn_named;
 use webmetal::{self, WebMetalCapabilities};
 use webrender_traits;
 
+fn _time<U, F: FnOnce() -> U>(what: &str, fun: F) -> U {
+    use std::time;
+    let st = time::SystemTime::now();
+    let u = fun();
+    println!("Time for {}: {:?}", what, st.elapsed().unwrap());
+    u
+}
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 struct UniqueFenceKey(u64);
@@ -64,11 +72,43 @@ impl CommandBufferTracker {
             self.fences.push(fence);
             com
         } else {
-            info!("WebMetal produced a command buffer");
             device.make_command_buffer(&self.queue)
         };
         com.begin(&device.share);
         com
+    }
+}
+
+struct RenderEncoderThread {
+    share: Arc<webmetal::Share>,
+    com: webmetal::CommandBuffer,
+    res: webmetal::ResourceState,
+    _pass: webmetal::RenderPass,
+    _framebuf: webmetal::FrameBuffer,
+}
+
+impl RenderEncoderThread {
+    fn new(share: &Arc<webmetal::Share>, com: webmetal::CommandBuffer,
+           pass: webmetal::RenderPass, framebuf: webmetal::FrameBuffer)
+           -> RenderEncoderThread {
+        com.begin_pass(share, &pass, &framebuf);
+        RenderEncoderThread {
+            share: share.clone(),
+            com: com,
+            res: webmetal::ResourceState::new(),
+            _pass: pass,
+            _framebuf: framebuf,
+        }
+    }
+
+    fn handle_message(&mut self, message: WebMetalEncoderCommand) -> bool {
+        match message {
+            WebMetalEncoderCommand::EndEncoding => {
+                self.com.end_pass(&self.share);
+                self.com.reset_state(&self.share, &mut self.res);
+                false
+            }
+        }
     }
 }
 
@@ -123,21 +163,13 @@ impl WebMetalPaintThread {
                 sender.send(Some(com)).unwrap();
             }
             WebMetalCommand::MakeRenderEncoder(receiver, com, targets) => {
-                let share = self.device.share.clone();
+                let pass = self.device.make_render_pass(&targets);
+                let framebuf = self.device.make_frame_buffer(&targets, &pass);
+                let mut thread = RenderEncoderThread::new(&self.device.share, com, pass, framebuf);
                 spawn_named("RenderEncoder".to_owned(), move || {
-                    let com = com;
-                    let mut res = webmetal::ResourceState::new();
                     while let Ok(message) = receiver.recv() {
-                        match message {
-                            WebMetalEncoderCommand::ClearColor(color) => {
-                                for view in targets.colors.iter() {
-                                    com.clear_color(&share, &mut res, view, color);
-                                }
-                            }
-                            WebMetalEncoderCommand::EndEncoding => {
-                                com.reset_state(&share, res);
-                                return;
-                            }
+                        if !thread.handle_message(message) {
+                            return;
                         }
                     }
                 });
@@ -146,7 +178,7 @@ impl WebMetalPaintThread {
                 let mut res = webmetal::ResourceState::new();
                 let com = self.cbuf_tracker.produce(&self.device);
                 self.swap_chain.fetch_frame(&self.device.share, &mut res, &com, frame_index);
-                com.reset_state(&self.device.share, res);
+                com.reset_state(&self.device.share, &mut res);
                 self.swap_fence_key = self.cbuf_tracker.consume(com, &self.device);
             }
             WebMetalCommand::Submit(com) => {
@@ -214,7 +246,6 @@ impl WebMetalPaintThread {
     fn send_data(&mut self, chan: IpcSender<CanvasData>) {
         // wait for the associated command buffer to finish execution
         if let Some(fence) = self.cbuf_tracker.find(self.swap_fence_key) {
-            info!("WebMetal waiting for a fence...");
             let success = self.device.wait_fence(fence, 100000000);
             assert!(success);
         }

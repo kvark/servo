@@ -122,7 +122,6 @@ pub enum Canvas2dMsg {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum WebMetalEncoderCommand {
-    ClearColor([f32; 4]),
     EndEncoding,
 }
 
