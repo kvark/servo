@@ -55,7 +55,7 @@ impl CommandBufferTracker {
             Some(fence) => fence,
             None => device.make_fence(false),
         };
-        device.execute(&self.queue, &com, Some(&fence));
+        self.queue.submit(&device.share, &com, Some(&fence));
         self.unique_key.0 += 1;
         self.pending.push_back((com, fence, self.unique_key));
         self.unique_key
