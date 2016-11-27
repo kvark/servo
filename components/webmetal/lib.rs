@@ -43,14 +43,25 @@ impl ResourceState {
 pub struct RenderPass {
     inner: vk::RenderPass,
     clears: Vec<vk::ClearValue>,
+    num_colors: usize,
 }
 
 impl RenderPass {
-    pub fn new(inner: vk::RenderPass, clears: Vec<vk::ClearValue>) -> RenderPass {
+    pub fn new(inner: vk::RenderPass, clears: Vec<vk::ClearValue>,
+               ncol: usize) -> RenderPass {
         RenderPass {
             inner: inner,
             clears: clears,
+            num_colors: ncol,
         }
+    }
+
+    pub fn get_inner(&self) -> vk::RenderPass {
+        self.inner
+    }
+
+    pub fn get_num_colors(&self) -> usize {
+        self.num_colors
     }
 }
 
@@ -117,6 +128,40 @@ pub struct TargetView {
 pub struct TargetSet {
     pub colors: Vec<(TargetView, Option<[f32; 4]>)>,
     pub depth_stencil: Option<(TargetView, Option<f32>, Option<u8>)>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PipelineDesc;
+
+pub struct PipelineLayout {
+    inner: vk::PipelineLayout,
+}
+
+impl PipelineLayout {
+    pub fn new(inner: vk::PipelineLayout) -> PipelineLayout {
+        PipelineLayout {
+            inner: inner,
+        }
+    }
+
+    pub fn get_inner(&self) -> vk::PipelineLayout {
+        self.inner
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Pipeline {
+    inner: vk::Pipeline,
+    layout: vk::PipelineLayout,
+}
+
+impl Pipeline {
+    pub fn new(inner: vk::Pipeline, layout: vk::PipelineLayout) -> Pipeline {
+        Pipeline {
+            inner: inner,
+            layout: layout,
+        }
+    }
 }
 
 pub struct SwapChain {

@@ -54,8 +54,28 @@ impl CommandBuffer {
             clearValueCount: pass.clears.len() as u32,
             pClearValues: pass.clears.as_ptr(),
         };
+        let viewport = vk::Viewport {
+            x: 0.0,
+            y: 0.0,
+            height: fb.extent.height as f32,
+            width: fb.extent.width as f32,
+            minDepth: 0.0,
+            maxDepth: 1.0,
+        };
+        let scissor_rect = vk::Rect2D {
+            offset: vk::Offset2D {
+                x: 0,
+                y: 0,
+            },
+            extent: vk::Extent2D {
+                width: fb.extent.width,
+                height: fb.extent.height,
+            },
+        };
         unsafe {
             share.vk.CmdBeginRenderPass(self.inner, &info, vk::SUBPASS_CONTENTS_INLINE);
+            share.vk.CmdSetViewport(self.inner, 0, 1, &viewport);
+            share.vk.CmdSetScissor(self.inner, 0, 1, &scissor_rect);
         }
     }
 

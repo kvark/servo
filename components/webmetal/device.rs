@@ -5,7 +5,8 @@ use std::path::Path;
 use std::sync::Arc;
 use vk;
 use {CommandBuffer, Dimensions, Fence, FrameBuffer, Queue,
-     RenderPass, Share, SwapChain,
+     RenderPass, Pipeline, PipelineDesc, PipelineLayout,
+     Share, SwapChain,
      TargetSet, TargetView, Texture, WebMetalCapabilities};
 
 const LAYERS: &'static [&'static str] = &[
@@ -466,7 +467,7 @@ impl Device {
         assert_eq!(vk::SUCCESS, unsafe {
             self.share.vk.CreateRenderPass(self.inner, &info, ptr::null(), &mut pass)
         });
-        RenderPass::new(pass, clears)
+        RenderPass::new(pass, clears, targets.colors.len())
     }
 
     pub fn make_frame_buffer(&self, targets: &TargetSet, pass: &RenderPass)
@@ -507,6 +508,159 @@ impl Device {
             self.share.vk.CreateFramebuffer(self.inner, &info, ptr::null(), &mut fbuf)
         });
         FrameBuffer::new(fbuf, dim)
+    }
+
+    pub fn make_shader(&self, name: &str, stage: vk::ShaderStageFlagBits)
+                       -> vk::PipelineShaderStageCreateInfo {
+        unimplemented!()
+    }
+
+    pub fn make_pipeline(&self, desc: &PipelineDesc, layout: &PipelineLayout, pass: &RenderPass) -> Pipeline {
+        let shaders = [ //TODO
+            self.make_shader("vert.spv", vk::SHADER_STAGE_VERTEX_BIT),
+            self.make_shader("frag.spv", vk::SHADER_STAGE_FRAGMENT_BIT),
+        ];
+        let vertex_bindings = []; //TODO
+        let vertex_attributes = [];
+        let blends = [
+            vk::PipelineColorBlendAttachmentState {
+                colorWriteMask: 0xFF,
+                .. unsafe { mem::zeroed() }
+            },
+            vk::PipelineColorBlendAttachmentState {
+                colorWriteMask: 0xFF,
+                .. unsafe { mem::zeroed() }
+            },
+            vk::PipelineColorBlendAttachmentState {
+                colorWriteMask: 0xFF,
+                .. unsafe { mem::zeroed() }
+            },
+            vk::PipelineColorBlendAttachmentState {
+                colorWriteMask: 0xFF,
+                .. unsafe { mem::zeroed() }
+            },
+        ];
+
+        let info = vk::GraphicsPipelineCreateInfo {
+            sType: vk::STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            stageCount: shaders.len() as u32,
+            pStages: shaders.as_ptr(),
+            pVertexInputState: &vk::PipelineVertexInputStateCreateInfo {
+                sType: vk::STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                vertexBindingDescriptionCount: vertex_bindings.len() as u32,
+                pVertexBindingDescriptions: vertex_bindings.as_ptr(),
+                vertexAttributeDescriptionCount: vertex_attributes.len() as u32,
+                pVertexAttributeDescriptions: vertex_attributes.as_ptr(),
+            },
+            pInputAssemblyState: &vk::PipelineInputAssemblyStateCreateInfo {
+                sType: vk::STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                topology: vk::PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                primitiveRestartEnable: vk::FALSE,
+            },
+            pTessellationState: ptr::null(),
+            pViewportState: &vk::PipelineViewportStateCreateInfo {
+                sType: vk::STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                viewportCount: 1,
+                pViewports: &vk::Viewport {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 1.0,
+                    height: 1.0,
+                    minDepth: 0.0,
+                    maxDepth: 1.0,
+                },
+                scissorCount: 1,
+                pScissors: &vk::Rect2D {
+                    offset: vk::Offset2D {
+                        x: 0, y: 0,
+                    },
+                    extent: vk::Extent2D {
+                        width: 1, height: 1,
+                    },
+                },
+            },
+            pRasterizationState: &vk::PipelineRasterizationStateCreateInfo {
+                sType: vk::STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                depthClampEnable: vk::FALSE,
+                rasterizerDiscardEnable: vk::FALSE,
+                polygonMode: vk::POLYGON_MODE_FILL,
+                cullMode: vk::CULL_MODE_NONE,
+                frontFace: vk::FRONT_FACE_COUNTER_CLOCKWISE,
+                depthBiasEnable: vk::FALSE,
+                depthBiasConstantFactor: 0.0,
+                depthBiasClamp: 1.0,
+                depthBiasSlopeFactor: 0.0,
+                lineWidth: 1.0,
+            },
+            pMultisampleState: &vk::PipelineMultisampleStateCreateInfo {
+                sType: vk::STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                rasterizationSamples: vk::SAMPLE_COUNT_1_BIT,
+                sampleShadingEnable: vk::FALSE,
+                minSampleShading: 0.0,
+                pSampleMask: ptr::null(),
+                alphaToCoverageEnable: vk::FALSE,
+                alphaToOneEnable: vk::FALSE,
+            },
+            pDepthStencilState: &vk::PipelineDepthStencilStateCreateInfo {
+                sType: vk::STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                depthTestEnable: vk::FALSE,
+                depthWriteEnable: vk::FALSE,
+                depthCompareOp: vk::COMPARE_OP_NEVER,
+                depthBoundsTestEnable: vk::FALSE,
+                stencilTestEnable: vk::FALSE,
+                front: unsafe { mem::zeroed() },
+                back: unsafe { mem::zeroed() },
+                minDepthBounds: 0.0,
+                maxDepthBounds: 1.0,
+            },
+            pColorBlendState: &vk::PipelineColorBlendStateCreateInfo {
+                sType: vk::STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                logicOpEnable: vk::FALSE,
+                logicOp: vk::LOGIC_OP_CLEAR,
+                attachmentCount: pass.get_num_colors() as u32,
+                pAttachments: blends.as_ptr(),
+                blendConstants: [0.0; 4],
+            },
+            pDynamicState: &vk::PipelineDynamicStateCreateInfo {
+                sType: vk::STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                dynamicStateCount: 1,
+                pDynamicStates: [
+                    vk::DYNAMIC_STATE_VIEWPORT,
+                    vk::DYNAMIC_STATE_SCISSOR,
+                    vk::DYNAMIC_STATE_BLEND_CONSTANTS,
+                    vk::DYNAMIC_STATE_STENCIL_REFERENCE,
+                    ].as_ptr(),
+            },
+            layout: layout.get_inner(),
+            renderPass: pass.get_inner(),
+            subpass: 0,
+            basePipelineHandle: 0,
+            basePipelineIndex: 0,
+        };
+
+        let mut out = 0;
+        assert_eq!(vk::SUCCESS, unsafe {
+            self.share.vk.CreateGraphicsPipelines(self.inner, 0, 1, &info, ptr::null(), &mut out)
+        });
+        Pipeline::new(out, info.layout)
     }
 
     pub fn make_swap_chain(&self, width: u32, height: u32,
