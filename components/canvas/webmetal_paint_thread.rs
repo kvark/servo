@@ -8,9 +8,10 @@ use canvas_traits::{WebMetalCommand, WebMetalEncoderCommand, WebMetalInit};
 use euclid::size::Size2D;
 use ipc_channel::ipc::{self, IpcSender};
 use std::collections::VecDeque;
+use std::collections::hash_map::{Entry, HashMap};
 use std::slice;
 use std::sync::Arc;
-use std::sync::mpsc::channel;
+use std::sync::mpsc::{channel, Receiver, Sender};
 use util::thread::spawn_named;
 use webmetal::{self, WebMetalCapabilities};
 use webrender_traits;
@@ -26,6 +27,9 @@ fn _time<U, F: FnOnce() -> U>(what: &str, fun: F) -> U {
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 struct UniqueFenceKey(u64);
 
+/// This tracker keeps an eye on all the queued command buffers,
+/// associates them with the internally-managed fences, and
+/// ensures that the recycled command buffers are no longer used.
 struct CommandBufferTracker {
     queue: webmetal::Queue,
     pending: VecDeque<(webmetal::CommandBuffer, webmetal::Fence, UniqueFenceKey)>,
@@ -79,6 +83,41 @@ impl CommandBufferTracker {
     }
 }
 
+/// This tracker keeps an eye on the encoder threads for the active
+/// command buffers, allowing to wait for them to be done before
+/// proceeding with the command buffers on the paint thread.
+struct RenderEncoderTracker {
+    active_encoders: HashMap<webmetal::CommandBuffer, Receiver<()>>,
+}
+
+impl RenderEncoderTracker {
+    fn new() -> RenderEncoderTracker {
+        RenderEncoderTracker {
+            active_encoders: HashMap::new(),
+        }
+    }
+
+    fn add(&mut self, com: &webmetal::CommandBuffer) -> Sender<()> {
+        let (sender, receiver) = channel();
+        match self.active_encoders.entry(com.clone()) {
+            Entry::Vacant(entry) => {
+                entry.insert(receiver);
+            },
+            Entry::Occupied(mut entry) => {
+                let _ = entry.get().recv().unwrap(); //wait
+                *entry.get_mut() = receiver;
+            },
+        }
+        sender
+    }
+
+    fn sub(&mut self, com: &webmetal::CommandBuffer) {
+        if let Entry::Occupied(entry) = self.active_encoders.entry(com.clone()) {
+            let _ = entry.remove().recv().unwrap();
+        }
+    }
+}
+
 struct RenderEncoderThread {
     share: Arc<webmetal::Share>,
     com: webmetal::CommandBuffer,
@@ -125,6 +164,7 @@ pub struct WebMetalPaintThread {
     swap_chain: webmetal::SwapChain,
     swap_fence_key: UniqueFenceKey,
     cbuf_tracker: CommandBufferTracker,
+    encoder_tracker: RenderEncoderTracker,
     _size: Size2D<i32>,
     wr_api: webrender_traits::RenderApi,
     final_image: webrender_traits::ImageKey,
@@ -149,6 +189,7 @@ impl WebMetalPaintThread {
                     swap_chain: swap_chain,
                     swap_fence_key: UniqueFenceKey(0),
                     cbuf_tracker: CommandBufferTracker::new(queue),
+                    encoder_tracker: RenderEncoderTracker::new(),
                     _size: size,
                     wr_api: wr_api,
                     final_image: image_key,
@@ -174,11 +215,13 @@ impl WebMetalPaintThread {
                 //WM TODO: cache passes on the script side
                 let (pass, clears) = self.device.make_render_pass(&targets);
                 sender.send(Some(pass.clone())).unwrap();
+                let done_sender = self.encoder_tracker.add(&com);
                 let framebuf = self.device.make_frame_buffer(&targets, &pass);
                 let mut thread = RenderEncoderThread::new(&self.device.share, com, pass, clears, framebuf);
                 spawn_named("RenderEncoder".to_owned(), move || {
                     while let Ok(message) = sub_receiver.recv() {
                         if !thread.handle_message(message) {
+                            done_sender.send(()).unwrap();
                             return;
                         }
                     }
@@ -201,6 +244,7 @@ impl WebMetalPaintThread {
                 self.swap_fence_key = self.cbuf_tracker.consume(com, &self.device);
             }
             WebMetalCommand::Submit(com) => {
+                self.encoder_tracker.sub(&com);
                 self.cbuf_tracker.consume(com, &self.device);
             }
         }

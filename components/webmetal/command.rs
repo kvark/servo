@@ -4,7 +4,7 @@ use vk;
 use {Fence, FrameBuffer, Pipeline,
      RenderPass, ResourceState, Share, TargetView, Texture};
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq, Deserialize, Serialize)]
 pub struct CommandBuffer {
     inner: vk::CommandBuffer,
     family_index: u32,
