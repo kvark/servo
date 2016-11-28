@@ -3,5 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 interface WebMetalRenderEncoder {
+    void setRenderPipelineState(WebMetalRenderPipelineState pipeline);
+    void drawPrimitives(unsigned long start, unsigned long count, unsigned long instances);
     void endEncoding();
 };

@@ -46,7 +46,6 @@ impl binding::WebMetalCommandBufferMethods for WebMetalCommandBuffer {
     fn MakeRenderEncoder(&self, targets: &binding::RenderTargetSet)
                          -> Root<WebMetalRenderEncoder> {
         assert!(!self.sealed.get());
-        let (sender, receiver) = ipc::channel().unwrap();
         //Note: this code is rough around the edge cases
         let colors = [&targets.color0, &targets.color1, &targets.color2, &targets.color3];
         let targetset = webmetal::TargetSet {
@@ -61,9 +60,12 @@ impl binding::WebMetalCommandBufferMethods for WebMetalCommandBuffer {
                  targets.depthStencil.clear.as_ref().and_then(|v| v.get(1).map(|&s| *s as u8)))
             }),
         };
-        let msg = WebMetalCommand::MakeRenderEncoder(receiver, self.inner.clone(), targetset);
+        let (sender, receiver) = ipc::channel().unwrap();
+        let (sub_sender, sub_receiver) = ipc::channel().unwrap();
+        let msg = WebMetalCommand::MakeRenderEncoder(sender, sub_receiver, self.inner.clone(), targetset);
         self.ipc_renderer.send(CanvasMsg::WebMetal(msg)).unwrap();
-        WebMetalRenderEncoder::new(&self.global(), sender)
+        let render_pass = receiver.recv().unwrap().unwrap();
+        WebMetalRenderEncoder::new(&self.global(), render_pass, sub_sender)
     }
 }
 

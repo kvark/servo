@@ -7,7 +7,7 @@ use std::path::Path;
 use std::sync::Arc;
 use vk;
 use {CommandBuffer, Dimensions, Fence, FrameBuffer, Queue,
-     RenderPass, Pipeline, PipelineDesc, PipelineLayout,
+     RenderPass, RenderPassClearValues, Pipeline, PipelineDesc, PipelineLayout,
      Shader, ShaderType, Share, SwapChain,
      TargetSet, TargetView, Texture, WebMetalCapabilities};
 
@@ -365,7 +365,7 @@ impl Device {
     }
 
     pub fn make_render_pass(&self, targets: &TargetSet)
-                            -> (RenderPass, Vec<vk::ClearValue>) {
+                            -> (RenderPass, RenderPassClearValues) {
         let color_references = [
             vk::AttachmentReference {
                 attachment: 0,
@@ -576,6 +576,7 @@ impl Device {
 
     pub fn make_pipeline(&self, desc: &PipelineDesc, layout: &PipelineLayout,
                          pass: &RenderPass) -> Pipeline {
+        let entry_point = b"main\0";
         let shaders = [
             vk::PipelineShaderStageCreateInfo {
                 sType: vk::STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -583,7 +584,7 @@ impl Device {
                 flags: 0,
                 stage: vk::SHADER_STAGE_VERTEX_BIT,
                 module: desc.fun_vertex.get_inner(),
-                pName: ptr::null(),
+                pName: entry_point.as_ptr() as *const _,
                 pSpecializationInfo: ptr::null(),
             },
             vk::PipelineShaderStageCreateInfo {
@@ -592,27 +593,33 @@ impl Device {
                 flags: 0,
                 stage: vk::SHADER_STAGE_FRAGMENT_BIT,
                 module: desc.fun_fragment.get_inner(),
-                pName: ptr::null(),
+                pName: entry_point.as_ptr() as *const _,
                 pSpecializationInfo: ptr::null(),
             },
         ];
         let vertex_bindings = []; //TODO
         let vertex_attributes = [];
+        let dynamic_states = [
+            vk::DYNAMIC_STATE_VIEWPORT,
+            vk::DYNAMIC_STATE_SCISSOR,
+            vk::DYNAMIC_STATE_BLEND_CONSTANTS,
+            vk::DYNAMIC_STATE_STENCIL_REFERENCE,
+        ];
         let blends = [
             vk::PipelineColorBlendAttachmentState {
-                colorWriteMask: 0xFF,
+                colorWriteMask: 0xF,
                 .. unsafe { mem::zeroed() }
             },
             vk::PipelineColorBlendAttachmentState {
-                colorWriteMask: 0xFF,
+                colorWriteMask: 0xF,
                 .. unsafe { mem::zeroed() }
             },
             vk::PipelineColorBlendAttachmentState {
-                colorWriteMask: 0xFF,
+                colorWriteMask: 0xF,
                 .. unsafe { mem::zeroed() }
             },
             vk::PipelineColorBlendAttachmentState {
-                colorWriteMask: 0xFF,
+                colorWriteMask: 0xF,
                 .. unsafe { mem::zeroed() }
             },
         ];
@@ -653,15 +660,8 @@ impl Device {
                     minDepth: 0.0,
                     maxDepth: 1.0,
                 },
-                scissorCount: 1,
-                pScissors: &vk::Rect2D {
-                    offset: vk::Offset2D {
-                        x: 0, y: 0,
-                    },
-                    extent: vk::Extent2D {
-                        width: 1, height: 1,
-                    },
-                },
+                scissorCount: 0,
+                pScissors: ptr::null(),
             },
             pRasterizationState: &vk::PipelineRasterizationStateCreateInfo {
                 sType: vk::STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
@@ -717,13 +717,8 @@ impl Device {
                 sType: vk::STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
                 pNext: ptr::null(),
                 flags: 0,
-                dynamicStateCount: 1,
-                pDynamicStates: [
-                    vk::DYNAMIC_STATE_VIEWPORT,
-                    vk::DYNAMIC_STATE_SCISSOR,
-                    vk::DYNAMIC_STATE_BLEND_CONSTANTS,
-                    vk::DYNAMIC_STATE_STENCIL_REFERENCE,
-                    ].as_ptr(),
+                dynamicStateCount: dynamic_states.len() as u32,
+                pDynamicStates: dynamic_states.as_ptr(),
             },
             layout: layout.get_inner(),
             renderPass: pass.get_inner(),

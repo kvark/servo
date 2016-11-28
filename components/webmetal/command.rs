@@ -1,7 +1,8 @@
 use std::{mem, ptr};
 use std::sync::Arc;
 use vk;
-use {Fence, FrameBuffer, RenderPass, ResourceState, Share, TargetView, Texture};
+use {Fence, FrameBuffer, Pipeline,
+     RenderPass, ResourceState, Share, TargetView, Texture};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CommandBuffer {
@@ -83,6 +84,18 @@ impl CommandBuffer {
     pub fn end_pass(&self, share: &Share) {
         unsafe {
             share.vk.CmdEndRenderPass(self.inner);
+        }
+    }
+
+    pub fn bind_pipeline(&self, share: &Share, pipeline: &Pipeline) {
+        unsafe {
+            share.vk.CmdBindPipeline(self.inner, vk::PIPELINE_BIND_POINT_GRAPHICS, pipeline.get_inner());
+        }
+    }
+
+    pub fn draw(&self, share: &Share, start: u32, count: u32, instances: u32) {
+        unsafe {
+            share.vk.CmdDraw(self.inner, count, instances, start, 0);
         }
     }
 

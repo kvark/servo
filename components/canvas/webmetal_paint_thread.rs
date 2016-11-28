@@ -104,12 +104,19 @@ impl RenderEncoderThread {
 
     fn handle_message(&mut self, message: WebMetalEncoderCommand) -> bool {
         match message {
+            WebMetalEncoderCommand::SetPipeline(pipeline) => {
+                self.com.bind_pipeline(&self.share, &pipeline);
+            }
+            WebMetalEncoderCommand::Draw(start, count, instances) => {
+                self.com.draw(&self.share, start, count, instances);
+            },
             WebMetalEncoderCommand::EndEncoding => {
                 self.com.end_pass(&self.share);
                 self.com.reset_state(&self.share, &mut self.res);
-                false
+                return false;
             }
         }
+        true
     }
 }
 
@@ -163,12 +170,14 @@ impl WebMetalPaintThread {
                 let com = self.cbuf_tracker.produce(&self.device);
                 sender.send(Some(com)).unwrap();
             }
-            WebMetalCommand::MakeRenderEncoder(receiver, com, targets) => {
+            WebMetalCommand::MakeRenderEncoder(sender, sub_receiver, com, targets) => {
+                //WM TODO: cache passes on the script side
                 let (pass, clears) = self.device.make_render_pass(&targets);
+                sender.send(Some(pass.clone())).unwrap();
                 let framebuf = self.device.make_frame_buffer(&targets, &pass);
                 let mut thread = RenderEncoderThread::new(&self.device.share, com, pass, clears, framebuf);
                 spawn_named("RenderEncoder".to_owned(), move || {
-                    while let Ok(message) = receiver.recv() {
+                    while let Ok(message) = sub_receiver.recv() {
                         if !thread.handle_message(message) {
                             return;
                         }

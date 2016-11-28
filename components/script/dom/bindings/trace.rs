@@ -370,7 +370,7 @@ no_jsmanaged_fields!(webrender_traits::
     WebGLBufferId, WebGLError, WebGLFramebufferId,
     WebGLProgramId, WebGLRenderbufferId, WebGLShaderId, WebGLTextureId);
 no_jsmanaged_fields!(webmetal::
-    CommandBuffer, Pipeline, PipelineDesc, TargetView);
+    CommandBuffer, Pipeline, PipelineDesc, RenderPass, TargetView);
 no_jsmanaged_fields!(MediaList);
 
 impl JSTraceable for Box<ScriptChan + Send> {

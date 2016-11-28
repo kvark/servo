@@ -171,6 +171,10 @@ impl Pipeline {
             layout: layout,
         }
     }
+
+    pub fn get_inner(&self) -> vk::Pipeline {
+        self.inner
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

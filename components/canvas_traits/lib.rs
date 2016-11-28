@@ -122,15 +122,20 @@ pub enum Canvas2dMsg {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum WebMetalEncoderCommand {
+    SetPipeline(webmetal::Pipeline),
+    Draw(u32, u32, u32),
     EndEncoding,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum WebMetalCommand {
     MakeCommandBuffer(IpcSender<Option<webmetal::CommandBuffer>>),
-    MakeRenderEncoder(IpcReceiver<WebMetalEncoderCommand>, webmetal::CommandBuffer, webmetal::TargetSet),
+    MakeRenderEncoder(IpcSender<Option<webmetal::RenderPass>>,
+                      IpcReceiver<WebMetalEncoderCommand>,
+                      webmetal::CommandBuffer, webmetal::TargetSet),
     MakeShader(IpcSender<Option<webmetal::Shader>>, String, webmetal::ShaderType),
-    MakeRenderPipelineState(IpcSender<Option<webmetal::Pipeline>>, webmetal::PipelineDesc, webmetal::RenderPass),
+    MakeRenderPipelineState(IpcSender<Option<webmetal::Pipeline>>,
+                            webmetal::PipelineDesc, webmetal::RenderPass),
     Present(u32),
     Submit(webmetal::CommandBuffer),
 }
