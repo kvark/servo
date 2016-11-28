@@ -231,7 +231,7 @@ impl WebMetalPaintThread {
                 let shader = self.device.make_shader(&code, stype);
                 sender.send(Some(shader)).unwrap();
             }
-            WebMetalCommand::MakeRenderPipelineState(sender, desc, pass) => {
+            WebMetalCommand::MakeRenderPipeline(sender, desc, pass) => {
                 let pso_layout = self.device.make_pipeline_layout();
                 let pso = self.device.make_pipeline(&desc, &pso_layout, &pass);
                 sender.send(Some(pso)).unwrap();

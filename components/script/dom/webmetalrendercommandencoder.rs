@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use canvas_traits::WebMetalEncoderCommand;
-use dom::bindings::codegen::Bindings::WebMetalRenderEncoderBinding as binding;
+use dom::bindings::codegen::Bindings::WebMetalRenderCommandEncoderBinding as binding;
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
@@ -13,7 +13,7 @@ use std::cell::Cell;
 use webmetal;
 
 #[dom_struct]
-pub struct WebMetalRenderEncoder {
+pub struct WebMetalRenderCommandEncoder {
     reflector: Reflector,
     #[ignore_heap_size_of = "Defined in webmetal"]
     pass: webmetal::RenderPass,
@@ -22,12 +22,12 @@ pub struct WebMetalRenderEncoder {
     is_open: Cell<bool>,
 }
 
-impl WebMetalRenderEncoder {
+impl WebMetalRenderCommandEncoder {
     pub fn new(global: &GlobalScope,
                pass: webmetal::RenderPass,
                ipc_sender: IpcSender<WebMetalEncoderCommand>)
-               -> Root<WebMetalRenderEncoder> {
-        let object = box WebMetalRenderEncoder {
+               -> Root<WebMetalRenderCommandEncoder> {
+        let object = box WebMetalRenderCommandEncoder {
             reflector: Reflector::new(),
             pass: pass,
             ipc_sender: ipc_sender,
@@ -37,7 +37,7 @@ impl WebMetalRenderEncoder {
     }
 }
 
-impl binding::WebMetalRenderEncoderMethods for WebMetalRenderEncoder {
+impl binding::WebMetalRenderCommandEncoderMethods for WebMetalRenderCommandEncoder {
     fn SetRenderPipelineState(&self, pipeline: &WebMetalRenderPipelineState) {
         assert!(self.is_open.get());
         let handle = pipeline.get(&self.pass);

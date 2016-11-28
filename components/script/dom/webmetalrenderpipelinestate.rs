@@ -42,7 +42,7 @@ impl WebMetalRenderPipelineState {
             Entry::Occupied(entry) => entry.get().clone(),
             Entry::Vacant(entry) => {
                 let (sender, receiver) = ipc::channel().unwrap();
-                let msg = WebMetalCommand::MakeRenderPipelineState(sender, self.desc.clone(), pass.clone());
+                let msg = WebMetalCommand::MakeRenderPipeline(sender, self.desc.clone(), pass.clone());
                 self.ipc_renderer.send(CanvasMsg::WebMetal(msg)).unwrap();
                 let inner = receiver.recv().unwrap().unwrap();
                 entry.insert(inner).clone()

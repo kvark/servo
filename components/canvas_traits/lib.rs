@@ -134,8 +134,8 @@ pub enum WebMetalCommand {
                       IpcReceiver<WebMetalEncoderCommand>,
                       webmetal::CommandBuffer, webmetal::TargetSet),
     MakeShader(IpcSender<Option<webmetal::Shader>>, String, webmetal::ShaderType),
-    MakeRenderPipelineState(IpcSender<Option<webmetal::Pipeline>>,
-                            webmetal::PipelineDesc, webmetal::RenderPass),
+    MakeRenderPipeline(IpcSender<Option<webmetal::Pipeline>>,
+                       webmetal::PipelineDesc, webmetal::RenderPass),
     Present(u32),
     Submit(webmetal::CommandBuffer),
 }

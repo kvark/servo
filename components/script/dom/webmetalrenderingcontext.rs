@@ -89,12 +89,6 @@ impl binding::WebMetalRenderingContextMethods for WebMetalRenderingContext {
         WebMetalCommandBuffer::new(&self.global(), self.ipc_renderer.clone(), inner)
     }
 
-    //TODO: change into WebMetalCommandBuffer::Commit()
-    fn Submit(&self, com: &WebMetalCommandBuffer) {
-        let msg = WebMetalCommand::Submit(com.seal());
-        self.ipc_renderer.send(CanvasMsg::WebMetal(msg)).unwrap();
-    }
-
     fn NextFrameTarget(&self) -> Root<WebMetalTargetView> {
         let mut index = self.current_target_index.get() + 1;
         if index >= self.swap_targets.len() {

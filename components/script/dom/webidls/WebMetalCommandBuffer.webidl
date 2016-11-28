@@ -16,5 +16,6 @@ dictionary RenderTargetSet {
 };
 
 interface WebMetalCommandBuffer {
-    WebMetalRenderEncoder   makeRenderEncoder(optional RenderTargetSet targets);
+    WebMetalRenderCommandEncoder makeRenderCommandEncoder(optional RenderTargetSet targets);
+    void                         commit();
 };

@@ -7,7 +7,7 @@ use dom::bindings::codegen::Bindings::WebMetalCommandBufferBinding as binding;
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{Reflectable, Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
-use dom::webmetalrenderencoder::WebMetalRenderEncoder;
+use dom::webmetalrendercommandencoder::WebMetalRenderCommandEncoder;
 use ipc_channel::ipc::{self, IpcSender};
 use std::cell::Cell;
 use webmetal;
@@ -35,16 +35,11 @@ impl WebMetalCommandBuffer {
         };
         reflect_dom_object(object, global, binding::Wrap)
     }
-
-    pub fn seal(&self) -> webmetal::CommandBuffer {
-        self.sealed.set(true);
-        self.inner.clone()
-    }
 }
 
 impl binding::WebMetalCommandBufferMethods for WebMetalCommandBuffer {
-    fn MakeRenderEncoder(&self, targets: &binding::RenderTargetSet)
-                         -> Root<WebMetalRenderEncoder> {
+    fn MakeRenderCommandEncoder(&self, targets: &binding::RenderTargetSet)
+                                -> Root<WebMetalRenderCommandEncoder> {
         assert!(!self.sealed.get());
         //Note: this code is rough around the edge cases
         let colors = [&targets.color0, &targets.color1, &targets.color2, &targets.color3];
@@ -65,7 +60,13 @@ impl binding::WebMetalCommandBufferMethods for WebMetalCommandBuffer {
         let msg = WebMetalCommand::MakeRenderEncoder(sender, sub_receiver, self.inner.clone(), targetset);
         self.ipc_renderer.send(CanvasMsg::WebMetal(msg)).unwrap();
         let render_pass = receiver.recv().unwrap().unwrap();
-        WebMetalRenderEncoder::new(&self.global(), render_pass, sub_sender)
+        WebMetalRenderCommandEncoder::new(&self.global(), render_pass, sub_sender)
+    }
+
+    fn Commit(&self) {
+        self.sealed.set(true);
+        let msg = WebMetalCommand::Submit(self.inner.clone());
+        self.ipc_renderer.send(CanvasMsg::WebMetal(msg)).unwrap();
     }
 }
 
