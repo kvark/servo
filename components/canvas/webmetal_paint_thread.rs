@@ -89,9 +89,10 @@ struct RenderEncoderThread {
 
 impl RenderEncoderThread {
     fn new(share: &Arc<webmetal::Share>, com: webmetal::CommandBuffer,
-           pass: webmetal::RenderPass, framebuf: webmetal::FrameBuffer)
+           pass: webmetal::RenderPass, clears: webmetal::RenderPassClearValues,
+           framebuf: webmetal::FrameBuffer)
            -> RenderEncoderThread {
-        com.begin_pass(share, &pass, &framebuf);
+        com.begin_pass(share, &pass, &clears, &framebuf);
         RenderEncoderThread {
             share: share.clone(),
             com: com,
@@ -163,9 +164,9 @@ impl WebMetalPaintThread {
                 sender.send(Some(com)).unwrap();
             }
             WebMetalCommand::MakeRenderEncoder(receiver, com, targets) => {
-                let pass = self.device.make_render_pass(&targets);
+                let (pass, clears) = self.device.make_render_pass(&targets);
                 let framebuf = self.device.make_frame_buffer(&targets, &pass);
-                let mut thread = RenderEncoderThread::new(&self.device.share, com, pass, framebuf);
+                let mut thread = RenderEncoderThread::new(&self.device.share, com, pass, clears, framebuf);
                 spawn_named("RenderEncoder".to_owned(), move || {
                     while let Ok(message) = receiver.recv() {
                         if !thread.handle_message(message) {
@@ -173,6 +174,15 @@ impl WebMetalPaintThread {
                         }
                     }
                 });
+            }
+            WebMetalCommand::MakeShader(sender, code, stype) => {
+                let shader = self.device.make_shader(&code, stype);
+                sender.send(Some(shader)).unwrap();
+            }
+            WebMetalCommand::MakeRenderPipelineState(sender, desc, pass) => {
+                let pso_layout = self.device.make_pipeline_layout();
+                let pso = self.device.make_pipeline(&desc, &pso_layout, &pass);
+                sender.send(Some(pso)).unwrap();
             }
             WebMetalCommand::Present(frame_index) => {
                 let mut res = webmetal::ResourceState::new();

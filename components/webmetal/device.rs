@@ -1,12 +1,14 @@
+use glsl_to_spirv;
 use shared_library::dynamic_library::DynamicLibrary;
 use std::{iter, mem, ptr};
+use std::io::Read;
 use std::ffi::{CStr, CString};
 use std::path::Path;
 use std::sync::Arc;
 use vk;
 use {CommandBuffer, Dimensions, Fence, FrameBuffer, Queue,
      RenderPass, Pipeline, PipelineDesc, PipelineLayout,
-     Share, SwapChain,
+     Shader, ShaderType, Share, SwapChain,
      TargetSet, TargetView, Texture, WebMetalCapabilities};
 
 const LAYERS: &'static [&'static str] = &[
@@ -362,7 +364,8 @@ impl Device {
         }
     }
 
-    pub fn make_render_pass(&self, targets: &TargetSet) -> RenderPass {
+    pub fn make_render_pass(&self, targets: &TargetSet)
+                            -> (RenderPass, Vec<vk::ClearValue>) {
         let color_references = [
             vk::AttachmentReference {
                 attachment: 0,
@@ -467,7 +470,8 @@ impl Device {
         assert_eq!(vk::SUCCESS, unsafe {
             self.share.vk.CreateRenderPass(self.inner, &info, ptr::null(), &mut pass)
         });
-        RenderPass::new(pass, clears, targets.colors.len())
+        (RenderPass::new(pass, targets.colors.len()),
+         clears)
     }
 
     pub fn make_frame_buffer(&self, targets: &TargetSet, pass: &RenderPass)
@@ -510,15 +514,87 @@ impl Device {
         FrameBuffer::new(fbuf, dim)
     }
 
-    pub fn make_shader(&self, name: &str, stage: vk::ShaderStageFlagBits)
-                       -> vk::PipelineShaderStageCreateInfo {
-        unimplemented!()
+    pub fn make_shader(&self, code: &str, stype: ShaderType) -> Shader {
+        let g2s_type = match stype {
+            ShaderType::Vertex => glsl_to_spirv::ShaderType::Vertex,
+            ShaderType::Fragment => glsl_to_spirv::ShaderType::Fragment,
+        };
+        let mut spirv = glsl_to_spirv::compile(code, g2s_type).unwrap();
+        let mut data = Vec::new();
+        spirv.read_to_end(&mut data).unwrap();
+
+        let info = vk::ShaderModuleCreateInfo {
+            sType: vk::STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            codeSize: data.len(),
+            pCode: data.as_ptr() as *const u32,
+        };
+
+        let mut shader = 0;
+        assert_eq!(vk::SUCCESS, unsafe {
+            self.share.vk.CreateShaderModule(self.inner, &info, ptr::null(), &mut shader)
+        });
+        Shader::new(shader)
     }
 
-    pub fn make_pipeline(&self, desc: &PipelineDesc, layout: &PipelineLayout, pass: &RenderPass) -> Pipeline {
-        let shaders = [ //TODO
-            self.make_shader("vert.spv", vk::SHADER_STAGE_VERTEX_BIT),
-            self.make_shader("frag.spv", vk::SHADER_STAGE_FRAGMENT_BIT),
+    fn make_descriptor_set_layout(&self) -> vk::DescriptorSetLayout {
+        let info = vk::DescriptorSetLayoutCreateInfo {
+            sType: vk::STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            bindingCount: 0,
+            pBindings: ptr::null(),
+        };
+
+        let mut set_layout = 0;
+        assert_eq!(vk::SUCCESS, unsafe {
+            self.share.vk.CreateDescriptorSetLayout(self.inner, &info, ptr::null(), &mut set_layout)
+        });
+        set_layout
+    }
+
+    pub fn make_pipeline_layout(&self) -> PipelineLayout {
+        let set_layout = self.make_descriptor_set_layout();
+
+        let info = vk::PipelineLayoutCreateInfo {
+            sType: vk::STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            setLayoutCount: 1,
+            pSetLayouts: &set_layout,
+            pushConstantRangeCount: 0,
+            pPushConstantRanges: ptr::null(),
+        };
+
+        let mut layout = 0;
+        assert_eq!(vk::SUCCESS, unsafe {
+            self.share.vk.CreatePipelineLayout(self.inner, &info, ptr::null(), &mut layout)
+        });
+        PipelineLayout::new(layout, vec![set_layout])
+    }
+
+    pub fn make_pipeline(&self, desc: &PipelineDesc, layout: &PipelineLayout,
+                         pass: &RenderPass) -> Pipeline {
+        let shaders = [
+            vk::PipelineShaderStageCreateInfo {
+                sType: vk::STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                stage: vk::SHADER_STAGE_VERTEX_BIT,
+                module: desc.fun_vertex.get_inner(),
+                pName: ptr::null(),
+                pSpecializationInfo: ptr::null(),
+            },
+            vk::PipelineShaderStageCreateInfo {
+                sType: vk::STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                stage: vk::SHADER_STAGE_FRAGMENT_BIT,
+                module: desc.fun_fragment.get_inner(),
+                pName: ptr::null(),
+                pSpecializationInfo: ptr::null(),
+            },
         ];
         let vertex_bindings = []; //TODO
         let vertex_attributes = [];

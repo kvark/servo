@@ -8,6 +8,7 @@
 #![feature(proc_macro)]
 #![plugin(plugins)]
 
+extern crate glsl_to_spirv;
 #[macro_use] extern crate serde_derive;
 extern crate shared_library;
 extern crate vk_sys as vk;
@@ -40,18 +41,19 @@ impl ResourceState {
     }
 }
 
+pub type RenderPassClearValues = Vec<vk::ClearValue>;
+pub type RenderPassKey = vk::RenderPass;
+
+#[derive(Clone, Debug, Hash, Deserialize, Serialize)]
 pub struct RenderPass {
     inner: vk::RenderPass,
-    clears: Vec<vk::ClearValue>,
     num_colors: usize,
 }
 
 impl RenderPass {
-    pub fn new(inner: vk::RenderPass, clears: Vec<vk::ClearValue>,
-               ncol: usize) -> RenderPass {
+    pub fn new(inner: vk::RenderPass, ncol: usize) -> RenderPass {
         RenderPass {
             inner: inner,
-            clears: clears,
             num_colors: ncol,
         }
     }
@@ -131,16 +133,23 @@ pub struct TargetSet {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct PipelineDesc;
+pub struct PipelineDesc {
+    pub fun_vertex: Shader,
+    pub fun_fragment: Shader,
+}
 
 pub struct PipelineLayout {
     inner: vk::PipelineLayout,
+    _set_layouts: Vec<vk::DescriptorSetLayout>,
 }
 
 impl PipelineLayout {
-    pub fn new(inner: vk::PipelineLayout) -> PipelineLayout {
+    pub fn new(inner: vk::PipelineLayout,
+               set_layouts: Vec<vk::DescriptorSetLayout>)
+               -> PipelineLayout {
         PipelineLayout {
             inner: inner,
+            _set_layouts: set_layouts,
         }
     }
 
@@ -161,6 +170,29 @@ impl Pipeline {
             inner: inner,
             layout: layout,
         }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum ShaderType {
+    Vertex,
+    Fragment,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Shader {
+    inner: vk::ShaderModule,
+}
+
+impl Shader {
+    pub fn new(inner: vk::ShaderModule) -> Shader {
+        Shader {
+            inner: inner,
+        }
+    }
+
+    pub fn get_inner(&self) -> vk::ShaderModule {
+        self.inner
     }
 }
 

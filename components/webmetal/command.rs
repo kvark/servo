@@ -35,7 +35,8 @@ impl CommandBuffer {
         });
     }
 
-    pub fn begin_pass(&self, share: &Share, pass: &RenderPass, fb: &FrameBuffer) {
+    pub fn begin_pass(&self, share: &Share, pass: &RenderPass,
+                      clears: &[vk::ClearValue], fb: &FrameBuffer) {
         let info = vk::RenderPassBeginInfo {
             sType: vk::STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
             pNext: ptr::null(),
@@ -51,8 +52,8 @@ impl CommandBuffer {
                     height: fb.extent.height,
                 },
             },
-            clearValueCount: pass.clears.len() as u32,
-            pClearValues: pass.clears.as_ptr(),
+            clearValueCount: clears.len() as u32,
+            pClearValues: clears.as_ptr(),
         };
         let viewport = vk::Viewport {
             x: 0.0,

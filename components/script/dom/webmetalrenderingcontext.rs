@@ -43,10 +43,10 @@ impl WebMetalRenderingContext {
         let response = receiver.recv().unwrap();
         response.map(|(ipc_renderer, targets, caps)| WebMetalRenderingContext {
             reflector: Reflector::new(),
-            ipc_renderer: ipc_renderer,
+            ipc_renderer: ipc_renderer.clone(),
             capabilities: caps,
             canvas: JS::from_ref(canvas),
-            device: JS::from_ref(&*WebMetalDevice::new(global)),
+            device: JS::from_ref(&*WebMetalDevice::new(global, ipc_renderer)),
             current_target_index: Cell::new(0),
             swap_targets: targets.into_iter().map(|view|
                 JS::from_ref(&*WebMetalTargetView::new(global, view))
