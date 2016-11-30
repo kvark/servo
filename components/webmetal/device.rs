@@ -6,8 +6,8 @@ use std::ffi::{CStr, CString};
 use std::path::Path;
 use std::sync::Arc;
 use vk;
-use {CommandBuffer, Dimensions, Fence, FrameBuffer, Queue,
-     RenderPass, RenderPassClearValues, Pipeline, PipelineDesc, PipelineLayout,
+use {CommandBuffer, Dimensions, Fence, FrameBuffer, FrameClearData,
+     Queue, RenderPass, Pipeline, PipelineDesc, PipelineLayout,
      Shader, ShaderType, Share, SwapChain,
      TargetSet, TargetView, Texture, WebMetalCapabilities};
 
@@ -365,7 +365,7 @@ impl Device {
     }
 
     pub fn make_render_pass(&self, targets: &TargetSet)
-                            -> (RenderPass, RenderPassClearValues) {
+                            -> (RenderPass, FrameClearData) {
         let color_references = [
             vk::AttachmentReference {
                 attachment: 0,
@@ -406,14 +406,20 @@ impl Device {
             pPreserveAttachments: ptr::null(),
         };
 
-        let mut clears = Vec::new();
+        let mut clear_data = FrameClearData {
+            colors: [[0.0; 4]; 4],
+            depth: 0.0,
+            stencil: 0,
+        };
         let mut attachments = Vec::new();
-        for color in targets.colors.iter() {
-            let (op, clear) = match color.1 {
-                Some(v) => (vk::ATTACHMENT_LOAD_OP_CLEAR, v),
-                None => (vk::ATTACHMENT_LOAD_OP_LOAD, [0.0; 4]),
+        for (color, init) in targets.colors.iter().zip(clear_data.colors.iter_mut()) {
+            let op = match color.1 {
+                Some(v) => {
+                    *init = v;
+                    vk::ATTACHMENT_LOAD_OP_CLEAR
+                },
+                None => vk::ATTACHMENT_LOAD_OP_LOAD,
             };
-            clears.push(vk::ClearValue::color(vk::ClearColorValue::float32(clear)));
 
             attachments.push(vk::AttachmentDescription {
                 flags: 0,
@@ -428,18 +434,20 @@ impl Device {
             })
         }
         if let Some(ref ds) = targets.depth_stencil {
-            let (depth_op, depth_clear) = match ds.1 {
-                Some(v) => (vk::ATTACHMENT_LOAD_OP_CLEAR, v),
-                None => (vk::ATTACHMENT_LOAD_OP_LOAD, 0.0)
+            let depth_op = match ds.1 {
+                Some(v) => {
+                    clear_data.depth = v;
+                    vk::ATTACHMENT_LOAD_OP_CLEAR
+                },
+                None => vk::ATTACHMENT_LOAD_OP_LOAD,
             };
-            let (stencil_op, stencil_clear) = match ds.2 {
-                Some(v) => (vk::ATTACHMENT_LOAD_OP_CLEAR, v),
-                None => (vk::ATTACHMENT_LOAD_OP_LOAD, 0)
+            let stencil_op = match ds.2 {
+                Some(v) => {
+                    clear_data.stencil = v;
+                    vk::ATTACHMENT_LOAD_OP_CLEAR
+                },
+                None => vk::ATTACHMENT_LOAD_OP_LOAD,
             };
-            clears.push(vk::ClearValue::depth_stencil(vk::ClearDepthStencilValue {
-                depth: depth_clear,
-                stencil: stencil_clear as u32,
-            }));
 
             attachments.push(vk::AttachmentDescription {
                 flags: 0, //vk::ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT,
@@ -470,8 +478,8 @@ impl Device {
         assert_eq!(vk::SUCCESS, unsafe {
             self.share.vk.CreateRenderPass(self.inner, &info, ptr::null(), &mut pass)
         });
-        (RenderPass::new(pass, targets.colors.len()),
-         clears)
+        (RenderPass::new(pass, targets.colors.len(), attachments.len()),
+         clear_data)
     }
 
     pub fn make_frame_buffer(&self, targets: &TargetSet, pass: &RenderPass)

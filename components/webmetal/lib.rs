@@ -19,6 +19,7 @@ mod device;
 pub use self::command::{CommandBuffer, Queue};
 pub use self::device::{Device, DeviceMapper};
 
+use std::cmp;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -41,20 +42,28 @@ impl ResourceState {
     }
 }
 
-pub type RenderPassClearValues = Vec<vk::ClearValue>;
 pub type RenderPassKey = vk::RenderPass;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct FrameClearData {
+    pub colors: [[f32; 4]; 4],
+    pub depth: f32,
+    pub stencil: u8,
+}
 
 #[derive(Clone, Debug, Hash, Deserialize, Serialize)]
 pub struct RenderPass {
     inner: vk::RenderPass,
     num_colors: usize,
+    num_total: usize,
 }
 
 impl RenderPass {
-    pub fn new(inner: vk::RenderPass, ncol: usize) -> RenderPass {
+    pub fn new(inner: vk::RenderPass, ncol: usize, ntot: usize) -> RenderPass {
         RenderPass {
             inner: inner,
             num_colors: ncol,
+            num_total: ntot,
         }
     }
 
@@ -65,26 +74,13 @@ impl RenderPass {
     pub fn get_num_colors(&self) -> usize {
         self.num_colors
     }
-}
 
-pub struct FrameBuffer {
-    inner: vk::Framebuffer,
-    extent: vk::Extent2D,
-}
-
-impl FrameBuffer {
-    pub fn new(inner: vk::Framebuffer, dim: Dimensions) -> FrameBuffer {
-        FrameBuffer {
-            inner: inner,
-            extent: vk::Extent2D {
-                width: dim.w,
-                height: dim.h,
-            },
-        }
+    pub fn get_num_attachments(&self) -> usize {
+        self.num_total
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
 pub struct Dimensions {
     pub w: u32,
     pub h: u32,
@@ -101,7 +97,31 @@ impl From<vk::Extent3D> for Dimensions {
     }
 }
 
+impl Into<vk::Extent2D> for Dimensions {
+    fn into(self) -> vk::Extent2D {
+        vk::Extent2D {
+            width: self.w,
+            height: self.h,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub struct FrameBuffer {
+    inner: vk::Framebuffer,
+    dim: Dimensions,
+}
+
+impl FrameBuffer {
+    pub fn new(inner: vk::Framebuffer, dim: Dimensions) -> FrameBuffer {
+        FrameBuffer {
+            inner: inner,
+            dim: dim,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
 pub struct Texture {
     inner: vk::Image,
     memory: vk::DeviceMemory,
@@ -119,17 +139,25 @@ impl Texture {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Deserialize, Serialize)]
 pub struct TargetView {
     inner: vk::ImageView,
     layer: u32,
     texture: Arc<Texture>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Deserialize, Serialize)]
 pub struct TargetSet {
     pub colors: Vec<(TargetView, Option<[f32; 4]>)>,
     pub depth_stencil: Option<(TargetView, Option<f32>, Option<u8>)>,
+}
+
+impl cmp::Eq for TargetSet {}
+
+impl cmp::Ord for TargetSet {
+    fn cmp(&self, other: &TargetSet) -> cmp::Ordering {
+        self.partial_cmp(other).unwrap()
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -1,7 +1,7 @@
 use std::{mem, ptr};
 use std::sync::Arc;
 use vk;
-use {Fence, FrameBuffer, Pipeline,
+use {Fence, FrameBuffer, FrameClearData, Pipeline,
      RenderPass, ResourceState, Share, TargetView, Texture};
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Deserialize, Serialize)]
@@ -37,7 +37,17 @@ impl CommandBuffer {
     }
 
     pub fn begin_pass(&self, share: &Share, pass: &RenderPass,
-                      clears: &[vk::ClearValue], fb: &FrameBuffer) {
+                      fb: &FrameBuffer, clear_data: FrameClearData) {
+        let mut clears: [vk::ClearValue; 8] = unsafe { mem::zeroed() };
+        assert!(clears.len() >= pass.get_num_attachments());
+        for i in 0 .. pass.get_num_colors() {
+            clears[i] = vk::ClearValue::color(vk::ClearColorValue::float32(clear_data.colors[i]));
+        }
+        clears[pass.get_num_colors()] = vk::ClearValue::depth_stencil(vk::ClearDepthStencilValue {
+            depth: clear_data.depth,
+            stencil: clear_data.stencil as u32,
+        });
+
         let info = vk::RenderPassBeginInfo {
             sType: vk::STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
             pNext: ptr::null(),
@@ -48,19 +58,16 @@ impl CommandBuffer {
                     x: 0,
                     y: 0,
                 },
-                extent: vk::Extent2D {
-                    width: fb.extent.width,
-                    height: fb.extent.height,
-                },
+                extent: fb.dim.clone().into(),
             },
-            clearValueCount: clears.len() as u32,
+            clearValueCount: pass.get_num_attachments() as u32,
             pClearValues: clears.as_ptr(),
         };
         let viewport = vk::Viewport {
             x: 0.0,
             y: 0.0,
-            height: fb.extent.height as f32,
-            width: fb.extent.width as f32,
+            height: fb.dim.h as f32,
+            width: fb.dim.w as f32,
             minDepth: 0.0,
             maxDepth: 1.0,
         };
@@ -69,10 +76,7 @@ impl CommandBuffer {
                 x: 0,
                 y: 0,
             },
-            extent: vk::Extent2D {
-                width: fb.extent.width,
-                height: fb.extent.height,
-            },
+            extent: fb.dim.clone().into(),
         };
         unsafe {
             share.vk.CmdBeginRenderPass(self.inner, &info, vk::SUBPASS_CONTENTS_INLINE);

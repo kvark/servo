@@ -103,6 +103,7 @@ use time::Duration;
 use url::Origin as UrlOrigin;
 use uuid::Uuid;
 use webmetal::{self, WebMetalCapabilities};
+use webmetal_resource_proxy::WebMetalResourceProxy;
 use webrender_traits;
 
 /// A trait to allow tracing (only) DOM objects.
@@ -371,6 +372,7 @@ no_jsmanaged_fields!(webrender_traits::
     WebGLProgramId, WebGLRenderbufferId, WebGLShaderId, WebGLTextureId);
 no_jsmanaged_fields!(webmetal::
     CommandBuffer, Pipeline, PipelineDesc, RenderPass, TargetView);
+no_jsmanaged_fields!(WebMetalResourceProxy);
 no_jsmanaged_fields!(MediaList);
 
 impl JSTraceable for Box<ScriptChan + Send> {

@@ -119,6 +119,7 @@ pub mod textinput;
 mod timers;
 mod unpremultiplytable;
 mod webdriver_handlers;
+mod webmetal_resource_proxy;
 
 use dom::bindings::codegen::RegisterBindings;
 use dom::bindings::proxyhandler;

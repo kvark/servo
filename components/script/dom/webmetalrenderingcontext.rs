@@ -3,6 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use canvas_traits::{CanvasCommonMsg, CanvasMsg, WebMetalCommand};
+use dom::bindings::cell::DOMRefCell;
 use dom::bindings::codegen::Bindings::WebMetalRenderingContextBinding as binding;
 use dom::bindings::js::{JS, LayoutJS, Root};
 use dom::bindings::inheritance::Castable;
@@ -17,6 +18,8 @@ use euclid::size::Size2D;
 use ipc_channel::ipc::{self, IpcSender};
 use script_traits::ScriptMsg as ConstellationMsg;
 use std::cell::Cell;
+use std::rc::Rc;
+use webmetal_resource_proxy::WebMetalResourceProxy;
 use webmetal::WebMetalCapabilities;
 
 #[dom_struct]
@@ -28,6 +31,8 @@ pub struct WebMetalRenderingContext {
     capabilities: WebMetalCapabilities,
     canvas: JS<HTMLCanvasElement>,
     device: JS<WebMetalDevice>,
+    #[ignore_heap_size_of = "nothing to see here"]
+    resource_proxy: Rc<DOMRefCell<WebMetalResourceProxy>>,
     current_target_index: Cell<usize>,
     swap_targets: Vec<JS<WebMetalTargetView>>,
 }
@@ -41,12 +46,13 @@ impl WebMetalRenderingContext {
               .send(ConstellationMsg::CreateWebMetalPaintThread(size, num_frames, sender))
               .unwrap();
         let response = receiver.recv().unwrap();
-        response.map(|(ipc_renderer, targets, caps)| WebMetalRenderingContext {
+        response.map(|(ipc, targets, caps)| WebMetalRenderingContext {
             reflector: Reflector::new(),
-            ipc_renderer: ipc_renderer.clone(),
+            ipc_renderer: ipc.clone(),
             capabilities: caps,
             canvas: JS::from_ref(canvas),
-            device: JS::from_ref(&*WebMetalDevice::new(global, ipc_renderer)),
+            device: JS::from_ref(&*WebMetalDevice::new(global, ipc.clone())),
+            resource_proxy: Rc::new(DOMRefCell::new(WebMetalResourceProxy::new(ipc))),
             current_target_index: Cell::new(0),
             swap_targets: targets.into_iter().map(|view|
                 JS::from_ref(&*WebMetalTargetView::new(global, view))
@@ -86,7 +92,10 @@ impl binding::WebMetalRenderingContextMethods for WebMetalRenderingContext {
         let msg = WebMetalCommand::MakeCommandBuffer(sender);
         self.ipc_renderer.send(CanvasMsg::WebMetal(msg)).unwrap();
         let inner = receiver.recv().unwrap().unwrap();
-        WebMetalCommandBuffer::new(&self.global(), self.ipc_renderer.clone(), inner)
+        WebMetalCommandBuffer::new(&self.global(),
+                                   self.ipc_renderer.clone(),
+                                   self.resource_proxy.clone(),
+                                   inner)
     }
 
     fn NextFrameTarget(&self) -> Root<WebMetalTargetView> {

@@ -128,10 +128,10 @@ struct RenderEncoderThread {
 
 impl RenderEncoderThread {
     fn new(share: &Arc<webmetal::Share>, com: webmetal::CommandBuffer,
-           pass: webmetal::RenderPass, clears: webmetal::RenderPassClearValues,
-           framebuf: webmetal::FrameBuffer)
+           pass: webmetal::RenderPass, framebuf: webmetal::FrameBuffer,
+           clear_data: webmetal::FrameClearData)
            -> RenderEncoderThread {
-        com.begin_pass(share, &pass, &clears, &framebuf);
+        com.begin_pass(share, &pass, &framebuf, clear_data);
         RenderEncoderThread {
             share: share.clone(),
             com: com,
@@ -211,21 +211,10 @@ impl WebMetalPaintThread {
                 let com = self.cbuf_tracker.produce(&self.device);
                 sender.send(Some(com)).unwrap();
             }
-            WebMetalCommand::MakeRenderEncoder(sender, sub_receiver, com, targets) => {
-                //WM TODO: cache passes on the script side
-                let (pass, clears) = self.device.make_render_pass(&targets);
-                sender.send(Some(pass.clone())).unwrap();
-                let done_sender = self.encoder_tracker.add(&com);
+            WebMetalCommand::MakeRenderPass(sender, targets) => {
+                let (pass, clear_data) = self.device.make_render_pass(&targets);
                 let framebuf = self.device.make_frame_buffer(&targets, &pass);
-                let mut thread = RenderEncoderThread::new(&self.device.share, com, pass, clears, framebuf);
-                spawn_named("RenderEncoder".to_owned(), move || {
-                    while let Ok(message) = sub_receiver.recv() {
-                        if !thread.handle_message(message) {
-                            done_sender.send(()).unwrap();
-                            return;
-                        }
-                    }
-                });
+                sender.send(Some((pass, framebuf, clear_data))).unwrap();
             }
             WebMetalCommand::MakeShader(sender, code, stype) => {
                 let shader = self.device.make_shader(&code, stype);
@@ -235,6 +224,18 @@ impl WebMetalPaintThread {
                 let pso_layout = self.device.make_pipeline_layout();
                 let pso = self.device.make_pipeline(&desc, &pso_layout, &pass);
                 sender.send(Some(pso)).unwrap();
+            }
+            WebMetalCommand::StartRenderEncoder(receiver, com, pass, framebuf, clear_data) => {
+                let done_sender = self.encoder_tracker.add(&com);
+                let mut thread = RenderEncoderThread::new(&self.device.share, com, pass, framebuf, clear_data);
+                spawn_named("RenderEncoder".to_owned(), move || {
+                    while let Ok(message) = receiver.recv() {
+                        if !thread.handle_message(message) {
+                            done_sender.send(()).unwrap();
+                            return;
+                        }
+                    }
+                });
             }
             WebMetalCommand::Present(frame_index) => {
                 let mut res = webmetal::ResourceState::new();
