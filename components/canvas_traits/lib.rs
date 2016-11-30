@@ -19,6 +19,7 @@ extern crate heapsize;
 extern crate ipc_channel;
 extern crate serde;
 #[macro_use] extern crate serde_derive;
+extern crate webmetal;
 extern crate webrender_traits;
 
 use azure::azure::AzFloat;
@@ -49,7 +50,7 @@ pub enum CanvasMsg {
     FromLayout(FromLayoutMsg),
     FromScript(FromScriptMsg),
     WebGL(WebGLCommand),
-    //WebMetal(WebMetalCommand),
+    WebMetal(WebMetalCommand),
 }
 
 #[derive(Clone, Deserialize, Serialize)]

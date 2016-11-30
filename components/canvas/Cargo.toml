@@ -20,6 +20,7 @@ num-traits = "0.1.32"
 offscreen_gl_context = "0.5.0"
 plugins = {path = "../plugins"}
 util = {path = "../util"}
+webmetal = {path = "../webmetal"}
 
 [dependencies.webrender_traits]
 git = "https://github.com/servo/webrender"

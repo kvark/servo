@@ -208,7 +208,8 @@ impl<'a> CanvasPaintThread<'a> {
                             }
                         }
                     }
-                    CanvasMsg::WebGL(_) => panic!("Wrong message sent to Canvas2D thread"),
+                    CanvasMsg::WebGL(_) |
+                    CanvasMsg::WebMetal(_) => panic!("Wrong message sent to Canvas2D thread"),
                 }
             }
         });

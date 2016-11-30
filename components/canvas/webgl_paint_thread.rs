@@ -188,7 +188,8 @@ impl WebGLPaintThread {
                                 painter.send_data(chan),
                         }
                     }
-                    CanvasMsg::Canvas2d(_) => panic!("Wrong message sent to WebGLThread"),
+                    CanvasMsg::Canvas2d(_) |
+                    CanvasMsg::WebMetal(_) => panic!("Wrong message sent to WebGLThread"),
                 }
             }
         });

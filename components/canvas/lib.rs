@@ -18,7 +18,9 @@ extern crate log;
 extern crate num_traits;
 extern crate offscreen_gl_context;
 extern crate util;
+extern crate webmetal;
 extern crate webrender_traits;
 
 pub mod canvas_paint_thread;
 pub mod webgl_paint_thread;
+pub mod webmetal_paint_thread;
