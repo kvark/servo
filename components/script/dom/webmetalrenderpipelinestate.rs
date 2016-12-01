@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use canvas_traits::{CanvasMsg, WebMetalCommand};
+use canvas_traits::{CanvasMsg, WebMetalCommand, WebMetalDeviceRequest};
 use dom::bindings::cell::DOMRefCell;
 use dom::bindings::codegen::Bindings::WebMetalRenderPipelineStateBinding as binding;
 use dom::bindings::js::Root;
@@ -42,7 +42,8 @@ impl WebMetalRenderPipelineState {
             Entry::Occupied(entry) => entry.get().clone(),
             Entry::Vacant(entry) => {
                 let (sender, receiver) = ipc::channel().unwrap();
-                let msg = WebMetalCommand::MakeRenderPipeline(sender, self.desc.clone(), pass.clone());
+                let req = WebMetalDeviceRequest::MakeRenderPipeline(sender, self.desc.clone(), pass.clone());
+                let msg = WebMetalCommand::Device(req);
                 self.ipc_renderer.send(CanvasMsg::WebMetal(msg)).unwrap();
                 let inner = receiver.recv().unwrap().unwrap();
                 entry.insert(inner).clone()

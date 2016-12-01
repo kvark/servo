@@ -1,4 +1,4 @@
-use canvas_traits::{CanvasMsg, WebMetalCommand};
+use canvas_traits::{CanvasMsg, WebMetalCommand, WebMetalDeviceRequest};
 use ipc_channel::ipc::{self, IpcSender};
 use std::collections::btree_map::{Entry, BTreeMap};
 use webmetal;
@@ -24,7 +24,8 @@ impl WebMetalResourceProxy {
             Entry::Occupied(entry) => entry.get().clone(),
             Entry::Vacant(entry) => {
                 let (sender, receiver) = ipc::channel().unwrap();
-                let msg = WebMetalCommand::MakeRenderPass(sender, entry.key().clone());
+                let req = WebMetalDeviceRequest::MakeRenderPass(sender, entry.key().clone());
+                let msg = WebMetalCommand::Device(req);
                 self.ipc_device.send(CanvasMsg::WebMetal(msg)).unwrap();
                 let data = receiver.recv().unwrap().unwrap();
                 entry.insert(data).clone()

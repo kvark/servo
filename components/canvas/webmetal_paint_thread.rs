@@ -4,7 +4,7 @@
 
 use canvas_traits::{CanvasCommonMsg, CanvasData, CanvasImageData, CanvasMsg, byte_swap};
 use canvas_traits::{FromLayoutMsg, FromScriptMsg};
-use canvas_traits::{WebMetalCommand, WebMetalEncoderCommand, WebMetalInit};
+use canvas_traits::{WebMetalCommand, WebMetalDeviceRequest, WebMetalEncoderCommand, WebMetalInit};
 use euclid::size::Size2D;
 use ipc_channel::ipc::{self, IpcSender};
 use std::collections::VecDeque;
@@ -204,26 +204,34 @@ impl WebMetalPaintThread {
         //WM TODO
     }
 
-    fn handle_message(&mut self, message: WebMetalCommand) {
-        debug!("WebMetal message: {:?}", message);
-        match message {
-            WebMetalCommand::MakeCommandBuffer(sender) => {
+    fn handle_device_request(&mut self, request: WebMetalDeviceRequest) {
+        match request {
+            WebMetalDeviceRequest::MakeCommandBuffer(sender) => {
                 let com = self.cbuf_tracker.produce(&self.device);
                 sender.send(Some(com)).unwrap();
             }
-            WebMetalCommand::MakeRenderPass(sender, targets) => {
+            WebMetalDeviceRequest::MakeRenderPass(sender, targets) => {
                 let (pass, clear_data) = self.device.make_render_pass(&targets);
                 let framebuf = self.device.make_frame_buffer(&targets, &pass);
                 sender.send(Some((pass, framebuf, clear_data))).unwrap();
             }
-            WebMetalCommand::MakeShader(sender, code, stype) => {
+            WebMetalDeviceRequest::MakeShader(sender, code, stype) => {
                 let shader = self.device.make_shader(&code, stype);
                 sender.send(Some(shader)).unwrap();
             }
-            WebMetalCommand::MakeRenderPipeline(sender, desc, pass) => {
+            WebMetalDeviceRequest::MakeRenderPipeline(sender, desc, pass) => {
                 let pso_layout = self.device.make_pipeline_layout();
                 let pso = self.device.make_pipeline(&desc, &pso_layout, &pass);
                 sender.send(Some(pso)).unwrap();
+            }
+        }
+    }
+
+    fn handle_message(&mut self, message: WebMetalCommand) {
+        debug!("WebMetal message: {:?}", message);
+        match message {
+            WebMetalCommand::Device(request) => {
+                self.handle_device_request(request);
             }
             WebMetalCommand::StartRenderEncoder(receiver, com, pass, framebuf, clear_data) => {
                 let done_sender = self.encoder_tracker.add(&com);

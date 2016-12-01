@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use canvas_traits::{CanvasMsg, WebMetalCommand};
+use canvas_traits::{CanvasMsg, WebMetalCommand, WebMetalDeviceRequest};
 use dom::bindings::codegen::Bindings::WebMetalDeviceBinding as binding;
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{Reflectable, Reflector, reflect_dom_object};
@@ -42,12 +42,14 @@ impl binding::WebMetalDeviceMethods for WebMetalDevice {
                                -> Root<WebMetalRenderPipelineState> {
         let (sender_vs, receiver_vs) = ipc::channel().unwrap();
         let (sender_fs, receiver_fs) = ipc::channel().unwrap();
-        let msg_vs = WebMetalCommand::MakeShader(sender_vs,
-                                                 (*desc.vertexFunction).to_string(),
-                                                 webmetal::ShaderType::Vertex);
-        let msg_fs = WebMetalCommand::MakeShader(sender_fs,
-                                                 (*desc.fragmentFunction).to_string(),
-                                                 webmetal::ShaderType::Fragment);
+        let msg_vs = WebMetalCommand::Device(
+            WebMetalDeviceRequest::MakeShader(sender_vs,
+                                              (*desc.vertexFunction).to_string(),
+                                              webmetal::ShaderType::Vertex));
+        let msg_fs = WebMetalCommand::Device(
+            WebMetalDeviceRequest::MakeShader(sender_fs,
+                                              (*desc.fragmentFunction).to_string(),
+                                              webmetal::ShaderType::Fragment));
         self.ipc_renderer.send(CanvasMsg::WebMetal(msg_vs)).unwrap();
         self.ipc_renderer.send(CanvasMsg::WebMetal(msg_fs)).unwrap();
         let desc = webmetal::PipelineDesc {

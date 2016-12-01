@@ -129,7 +129,7 @@ pub enum WebMetalEncoderCommand {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub enum WebMetalCommand {
+pub enum WebMetalDeviceRequest {
     MakeCommandBuffer(IpcSender<Option<webmetal::CommandBuffer>>),
     MakeRenderPass(IpcSender<Option<(webmetal::RenderPass,
                                      webmetal::FrameBuffer,
@@ -138,6 +138,11 @@ pub enum WebMetalCommand {
     MakeShader(IpcSender<Option<webmetal::Shader>>, String, webmetal::ShaderType),
     MakeRenderPipeline(IpcSender<Option<webmetal::Pipeline>>,
                        webmetal::PipelineDesc, webmetal::RenderPass),
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub enum WebMetalCommand {
+    Device(WebMetalDeviceRequest),
     StartRenderEncoder(IpcReceiver<WebMetalEncoderCommand>,
                        webmetal::CommandBuffer, webmetal::RenderPass,
                        webmetal::FrameBuffer, webmetal::FrameClearData),

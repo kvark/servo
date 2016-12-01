@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use canvas_traits::{CanvasCommonMsg, CanvasMsg, WebMetalCommand};
+use canvas_traits::{CanvasCommonMsg, CanvasMsg, WebMetalCommand, WebMetalDeviceRequest};
 use dom::bindings::cell::DOMRefCell;
 use dom::bindings::codegen::Bindings::WebMetalRenderingContextBinding as binding;
 use dom::bindings::js::{JS, LayoutJS, Root};
@@ -89,7 +89,8 @@ impl binding::WebMetalRenderingContextMethods for WebMetalRenderingContext {
 
     fn MakeCommandBuffer(&self) -> Root<WebMetalCommandBuffer> {
         let (sender, receiver) = ipc::channel().unwrap();
-        let msg = WebMetalCommand::MakeCommandBuffer(sender);
+        let req = WebMetalDeviceRequest::MakeCommandBuffer(sender);
+        let msg = WebMetalCommand::Device(req);
         self.ipc_renderer.send(CanvasMsg::WebMetal(msg)).unwrap();
         let inner = receiver.recv().unwrap().unwrap();
         WebMetalCommandBuffer::new(&self.global(),
