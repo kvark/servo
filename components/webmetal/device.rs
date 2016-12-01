@@ -3,6 +3,7 @@ use shared_library::dynamic_library::DynamicLibrary;
 use std::{iter, mem, ptr};
 use std::io::Read;
 use std::ffi::{CStr, CString};
+use std::os::raw;
 use std::path::Path;
 use std::sync::Arc;
 use vk;
@@ -105,6 +106,21 @@ pub struct Device {
 #[derive(Debug)]
 pub struct InitError;
 
+extern "system" fn callback(_ty: vk::DebugReportFlagsEXT,
+                            _: vk::DebugReportObjectTypeEXT, _object: u64,
+                            _location: usize, _msg_code: i32,
+                            layer_prefix: *const raw::c_char,
+                            description: *const raw::c_char,
+                            _user_data: *mut raw::c_void)
+                            -> u32 {
+    unsafe {
+        let layer_prefix = CStr::from_ptr(layer_prefix).to_str().unwrap();
+        let description = CStr::from_ptr(description).to_str().unwrap();
+        warn!("[{}] {}", layer_prefix, description);
+        vk::FALSE
+    }
+}
+
 impl Device {
     pub fn new(debug: bool)
                -> Result<(Device, Queue, WebMetalCapabilities), InitError> {
@@ -190,6 +206,23 @@ impl Device {
         let inst_pointers = vk::InstancePointers::load(|name| unsafe {
             mem::transmute(lib.GetInstanceProcAddr(instance, name.as_ptr()))
         });
+
+        if debug {
+            let info = vk::DebugReportCallbackCreateInfoEXT {
+                sType: vk::STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT,
+                pNext: ptr::null(),
+                flags: vk::DEBUG_REPORT_WARNING_BIT_EXT |
+                       vk::DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT |
+                       vk::DEBUG_REPORT_ERROR_BIT_EXT,
+                pfnCallback: callback,
+                pUserData: ptr::null_mut(),
+            };
+            let mut output = 0;
+            assert_eq!(vk::SUCCESS, unsafe {
+                inst_pointers.CreateDebugReportCallbackEXT(instance, &info,
+                                                           ptr::null(), &mut output)
+            });
+        }
 
         let physical_devices = {
             let mut num = 0;

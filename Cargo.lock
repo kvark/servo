@@ -3,6 +3,7 @@ name = "webmetal"
 version = "0.1.0"
 dependencies = [
  "glsl-to-spirv 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "plugins 0.0.1",
  "serde 0.8.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 0.8.18 (registry+https://github.com/rust-lang/crates.io-index)",

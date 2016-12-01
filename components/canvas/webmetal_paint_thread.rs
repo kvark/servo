@@ -259,7 +259,7 @@ impl WebMetalPaintThread {
                       WebMetalCapabilities),
                      String> {
 
-        let debug = false; //use command line instead for now
+        let debug = true; //use command line instead for now
         let (dev, queue, caps) = match webmetal::Device::new(debug) {
             Ok(ok) => ok,
             Err(e) => return Err(format!("{:?}", e)),

@@ -11,6 +11,7 @@ path = "lib.rs"
 
 [dependencies]
 glsl-to-spirv = "0.1"
+log = "0.3"
 plugins = {path = "../plugins"}
 serde = {version = "0.8", features = ["unstable"]}
 serde_derive = "0.8"

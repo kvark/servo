@@ -9,6 +9,7 @@
 #![plugin(plugins)]
 
 extern crate glsl_to_spirv;
+#[macro_use] extern crate log;
 #[macro_use] extern crate serde_derive;
 extern crate shared_library;
 extern crate vk_sys as vk;
