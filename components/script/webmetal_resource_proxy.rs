@@ -1,4 +1,4 @@
-use canvas_traits::{CanvasMsg, WebMetalCommand, WebMetalDeviceRequest};
+use canvas_traits::WebMetalDeviceRequest;
 use ipc_channel::ipc::{self, IpcSender};
 use std::collections::btree_map::{Entry, BTreeMap};
 use webmetal;
@@ -6,17 +6,23 @@ use webmetal;
 pub type PassData = (webmetal::RenderPass, webmetal::FrameBuffer, webmetal::FrameClearData);
 
 pub struct WebMetalResourceProxy {
-    //TODO: change to the Device-only sender
-    ipc_device: IpcSender<CanvasMsg>,
+    ipc_device: IpcSender<WebMetalDeviceRequest>,
     passes: BTreeMap<webmetal::TargetSet, PassData>,
 }
 
 impl WebMetalResourceProxy {
-    pub fn new(ipc: IpcSender<CanvasMsg>) -> WebMetalResourceProxy {
+    pub fn new(ipc: IpcSender<WebMetalDeviceRequest>) -> WebMetalResourceProxy {
         WebMetalResourceProxy {
             ipc_device: ipc,
             passes: BTreeMap::new(),
         }
+    }
+
+    pub fn make_command_buffer(&self) -> webmetal::CommandBuffer {
+        let (sender, receiver) = ipc::channel().unwrap();
+        let req = WebMetalDeviceRequest::MakeCommandBuffer(sender);
+        self.ipc_device.send(req).unwrap();
+        receiver.recv().unwrap().unwrap()
     }
 
     pub fn make_render_pass(&mut self, targets: webmetal::TargetSet) -> PassData {
@@ -25,8 +31,7 @@ impl WebMetalResourceProxy {
             Entry::Vacant(entry) => {
                 let (sender, receiver) = ipc::channel().unwrap();
                 let req = WebMetalDeviceRequest::MakeRenderPass(sender, entry.key().clone());
-                let msg = WebMetalCommand::Device(req);
-                self.ipc_device.send(CanvasMsg::WebMetal(msg)).unwrap();
+                self.ipc_device.send(req).unwrap();
                 let data = receiver.recv().unwrap().unwrap();
                 entry.insert(data).clone()
             }

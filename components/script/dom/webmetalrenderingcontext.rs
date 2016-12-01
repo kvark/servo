@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use canvas_traits::{CanvasCommonMsg, CanvasMsg, WebMetalCommand, WebMetalDeviceRequest};
+use canvas_traits::{CanvasCommonMsg, CanvasMsg, WebMetalCommand};
 use dom::bindings::cell::DOMRefCell;
 use dom::bindings::codegen::Bindings::WebMetalRenderingContextBinding as binding;
 use dom::bindings::js::{JS, LayoutJS, Root};
@@ -46,13 +46,13 @@ impl WebMetalRenderingContext {
               .send(ConstellationMsg::CreateWebMetalPaintThread(size, num_frames, sender))
               .unwrap();
         let response = receiver.recv().unwrap();
-        response.map(|(ipc, targets, caps)| WebMetalRenderingContext {
+        response.map(|(ipc_context, ipc_device, targets, caps)| WebMetalRenderingContext {
             reflector: Reflector::new(),
-            ipc_renderer: ipc.clone(),
+            ipc_renderer: ipc_context,
             capabilities: caps,
             canvas: JS::from_ref(canvas),
-            device: JS::from_ref(&*WebMetalDevice::new(global, ipc.clone())),
-            resource_proxy: Rc::new(DOMRefCell::new(WebMetalResourceProxy::new(ipc))),
+            device: JS::from_ref(&*WebMetalDevice::new(global, ipc_device.clone())),
+            resource_proxy: Rc::new(DOMRefCell::new(WebMetalResourceProxy::new(ipc_device))),
             current_target_index: Cell::new(0),
             swap_targets: targets.into_iter().map(|view|
                 JS::from_ref(&*WebMetalTargetView::new(global, view))
@@ -88,15 +88,11 @@ impl binding::WebMetalRenderingContextMethods for WebMetalRenderingContext {
     }
 
     fn MakeCommandBuffer(&self) -> Root<WebMetalCommandBuffer> {
-        let (sender, receiver) = ipc::channel().unwrap();
-        let req = WebMetalDeviceRequest::MakeCommandBuffer(sender);
-        let msg = WebMetalCommand::Device(req);
-        self.ipc_renderer.send(CanvasMsg::WebMetal(msg)).unwrap();
-        let inner = receiver.recv().unwrap().unwrap();
+        let com = self.resource_proxy.borrow_mut().make_command_buffer();
         WebMetalCommandBuffer::new(&self.global(),
                                    self.ipc_renderer.clone(),
                                    self.resource_proxy.clone(),
-                                   inner)
+                                   com)
     }
 
     fn NextFrameTarget(&self) -> Root<WebMetalTargetView> {

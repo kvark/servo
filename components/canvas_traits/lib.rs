@@ -130,6 +130,9 @@ pub enum WebMetalEncoderCommand {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum WebMetalDeviceRequest {
+    Recycle(webmetal::CommandBuffer,
+            Option<IpcSender<Option<webmetal::CommandBuffer>>>),
+    ReadBack(webmetal::Texture, u32),
     MakeCommandBuffer(IpcSender<Option<webmetal::CommandBuffer>>),
     MakeRenderPass(IpcSender<Option<(webmetal::RenderPass,
                                      webmetal::FrameBuffer,
@@ -142,7 +145,6 @@ pub enum WebMetalDeviceRequest {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum WebMetalCommand {
-    Device(WebMetalDeviceRequest),
     StartRenderEncoder(IpcReceiver<WebMetalEncoderCommand>,
                        webmetal::CommandBuffer, webmetal::RenderPass,
                        webmetal::FrameBuffer, webmetal::FrameClearData),
@@ -151,6 +153,7 @@ pub enum WebMetalCommand {
 }
 
 pub type WebMetalInit = (IpcSender<CanvasMsg>,
+                         IpcSender<WebMetalDeviceRequest>,
                          Vec<webmetal::TargetView>,
                          webmetal::WebMetalCapabilities);
 

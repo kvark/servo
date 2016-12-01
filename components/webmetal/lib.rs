@@ -16,7 +16,7 @@ extern crate vk_sys as vk;
 mod command;
 mod device;
 
-pub use self::command::{CommandBuffer, Queue};
+pub use self::command::{CommandBuffer, CommandPool, Queue};
 pub use self::device::{Device, DeviceMapper};
 
 use std::cmp;
@@ -133,6 +133,10 @@ pub struct Texture {
 }
 
 impl Texture {
+    pub fn get_dimensions(&self) -> Dimensions {
+        self.dim.clone()
+    }
+
     fn get_layer_size(&self) -> u32 {
         let bpp = 4; //TODO
         bpp * self.dim.w * self.dim.h * self.dim.d
@@ -241,8 +245,8 @@ impl SwapChain {
         self.views.clone()
     }
 
-    pub fn get_dimensions(&self) -> Dimensions {
-        self.gpu_texture.dim.clone()
+    pub fn get_staging_texture(&self) -> (Arc<Texture>, u32) {
+        (self.cpu_texture.clone(), self.cpu_current_layer)
     }
 
     pub fn fetch_frame(&mut self, share: &Share, res: &mut ResourceState,
@@ -256,6 +260,7 @@ impl SwapChain {
     }
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq, Deserialize, Serialize)]
 pub struct Fence {
     inner: vk::Fence,
 }

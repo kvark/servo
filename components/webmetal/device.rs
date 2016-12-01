@@ -6,8 +6,9 @@ use std::ffi::{CStr, CString};
 use std::path::Path;
 use std::sync::Arc;
 use vk;
-use {CommandBuffer, Dimensions, Fence, FrameBuffer, FrameClearData,
-     Queue, RenderPass, Pipeline, PipelineDesc, PipelineLayout,
+use {CommandBuffer, CommandPool, Dimensions, Fence,
+     FrameBuffer, FrameClearData, Queue,
+     RenderPass, Pipeline, PipelineDesc, PipelineLayout,
      Shader, ShaderType, Share, SwapChain,
      TargetSet, TargetView, Texture, WebMetalCapabilities};
 
@@ -46,7 +47,6 @@ struct PhysicalDeviceInfo {
 }
 
 impl PhysicalDeviceInfo {
-    #[allow(unsafe_code)]
     pub fn new(dev: vk::PhysicalDevice, vk: &vk::InstancePointers) -> PhysicalDeviceInfo {
         PhysicalDeviceInfo {
             device: dev,
@@ -272,7 +272,7 @@ impl Device {
             mem_system: msys_id,
             mem_video: mvid_id,
         };
-        let queue = device.make_queue(qf_id as u32);
+        let queue = device.get_queue(qf_id as u32);
 
         Ok((device, queue, WebMetalCapabilities))
     }
@@ -291,40 +291,45 @@ impl Device {
         mem
     }
 
-    fn make_queue(&self, family_id: u32) -> Queue {
-        let com_info = vk::CommandPoolCreateInfo {
+    fn get_queue(&self, family_id: u32) -> Queue {
+        let mut out = 0;
+        unsafe {
+            self.share.vk.GetDeviceQueue(self.inner, family_id, 0, &mut out);
+        };
+        Queue::new(out, family_id)
+    }
+
+    pub fn make_command_pool(&self, family_id: u32) -> CommandPool {
+        let info = vk::CommandPoolCreateInfo {
             sType: vk::STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
             pNext: ptr::null(),
             flags: vk::COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
             queueFamilyIndex: family_id,
         };
-        let mut com_pool = 0;
-        let vk = &self.share.vk;
-        assert_eq!(vk::SUCCESS, unsafe {
-            vk.CreateCommandPool(self.inner, &com_info, ptr::null(), &mut com_pool)
-        });
 
-        let queue = unsafe {
-            let mut out = mem::zeroed();
-            vk.GetDeviceQueue(self.inner, family_id, 0, &mut out);
-            out
-        };
-        Queue::new(queue, family_id, com_pool)
+        let mut out = 0;
+        assert_eq!(vk::SUCCESS, unsafe {
+            self.share.vk.CreateCommandPool(self.inner, &info, ptr::null(), &mut out)
+        });
+        CommandPool::new(out, family_id)
     }
 
-    pub fn make_command_buffer(&self, queue: &Queue) -> CommandBuffer {
+    pub fn make_command_buffer(&self, pool: &CommandPool) -> CommandBuffer {
         let info = vk::CommandBufferAllocateInfo {
             sType: vk::STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
             pNext: ptr::null(),
-            commandPool: queue.get_pool(),
+            commandPool: pool.get_inner(),
             level: vk::COMMAND_BUFFER_LEVEL_PRIMARY,
             commandBufferCount: 1,
         };
-        let mut buf = 0;
+
+        let mut out = 0;
         assert_eq!(vk::SUCCESS, unsafe {
-            self.share.vk.AllocateCommandBuffers(self.inner, &info, &mut buf)
+            self.share.vk.AllocateCommandBuffers(self.inner, &info, &mut out)
         });
-        CommandBuffer::new(buf, queue.get_family_id())
+
+        let fence = self.make_fence(true);
+        CommandBuffer::new(out, pool.get_family_id(), fence)
     }
 
     pub fn make_fence(&self, signalled: bool) -> Fence {
@@ -881,20 +886,20 @@ impl Device {
         }
     }
 
-    pub fn read_frame(&mut self, swap_chain: &SwapChain) -> DeviceMapper {
+    pub fn read_frame(&mut self, texture: &Texture, layer: u32) -> DeviceMapper {
         //TODO: check for VkPhysicalDeviceLimits::minMemoryMapAlignment
-        let layer_size = swap_chain.cpu_texture.get_layer_size();
+        let layer_size = texture.get_layer_size();
         let mut ptr = ptr::null_mut();
         assert_eq!(vk::SUCCESS, unsafe {
             self.share.vk.MapMemory(self.inner,
-                                    swap_chain.cpu_texture.memory,
-                                    (layer_size * swap_chain.cpu_current_layer) as u64,
+                                    texture.memory,
+                                    (layer_size * layer) as u64,
                                     layer_size as u64, 0, &mut ptr)
         });
         DeviceMapper {
             pointer: ptr as *const _,
             size: layer_size,
-            memory: swap_chain.cpu_texture.memory,
+            memory: texture.memory,
             device: self,
         }
     }

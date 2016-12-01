@@ -8,14 +8,20 @@ use {Fence, FrameBuffer, FrameClearData, Pipeline,
 pub struct CommandBuffer {
     inner: vk::CommandBuffer,
     family_index: u32,
+    fence: Fence,
 }
 
 impl CommandBuffer {
-    pub fn new(inner: vk::CommandBuffer, family_id: u32) -> CommandBuffer {
+    pub fn new(inner: vk::CommandBuffer, family_id: u32, fence: Fence) -> CommandBuffer {
         CommandBuffer {
             inner: inner,
             family_index: family_id,
+            fence: fence,
         }
+    }
+
+    pub fn get_fence(&self) -> &Fence {
+        &self.fence
     }
 
     pub fn begin(&self, share: &Share) {
@@ -224,18 +230,16 @@ impl CommandBuffer {
     }
 }
 
-pub struct Queue {
-    inner: vk::Queue,
+pub struct CommandPool {
+    inner: vk::CommandPool,
     family_index: u32,
-    command_pool: vk::CommandPool,
 }
 
-impl Queue {
-    pub fn new(inner: vk::Queue, family_id: u32, pool: vk::CommandPool) -> Queue {
-        Queue {
+impl CommandPool {
+    pub fn new(inner: vk::CommandPool, family_id: u32) -> CommandPool {
+        CommandPool {
             inner: inner,
             family_index: family_id,
-            command_pool: pool,
         }
     }
 
@@ -243,12 +247,29 @@ impl Queue {
         self.family_index
     }
 
-    pub fn get_pool(&self) -> vk::CommandPool {
-        self.command_pool
+    pub fn get_inner(&self) -> vk::CommandPool {
+        self.inner
+    }
+}
+
+pub struct Queue {
+    inner: vk::Queue,
+    family_index: u32,
+}
+
+impl Queue {
+    pub fn new(inner: vk::Queue, family_id: u32) -> Queue {
+        Queue {
+            inner: inner,
+            family_index: family_id,
+        }
     }
 
-    pub fn submit(&self, share: &Share, com: &CommandBuffer,
-                  fence_opt: Option<&Fence>) {
+    pub fn get_family_id(&self) -> u32 {
+        self.family_index
+    }
+
+    pub fn submit(&self, share: &Share, com: &CommandBuffer) {
         assert_eq!(self.family_index, com.family_index);
         com.end(share);
 
@@ -258,10 +279,8 @@ impl Queue {
             pCommandBuffers: &com.inner,
             .. unsafe { mem::zeroed() }
         };
-        let fence = match fence_opt {
-            Some(fence) => fence.get_inner(),
-            None => 0,
-        };
+        let fence = com.fence.get_inner();
+
         assert_eq!(vk::SUCCESS, unsafe {
             share.vk.QueueSubmit(self.inner, 1, &info, fence)
         });

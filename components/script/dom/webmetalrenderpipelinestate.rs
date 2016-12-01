@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use canvas_traits::{CanvasMsg, WebMetalCommand, WebMetalDeviceRequest};
+use canvas_traits::WebMetalDeviceRequest;
 use dom::bindings::cell::DOMRefCell;
 use dom::bindings::codegen::Bindings::WebMetalRenderPipelineStateBinding as binding;
 use dom::bindings::js::Root;
@@ -18,7 +18,7 @@ pub struct WebMetalRenderPipelineState {
     #[ignore_heap_size_of = "Defined in webmetal"]
     desc: webmetal::PipelineDesc,
     #[ignore_heap_size_of = "Defined in ipc-channel"]
-    ipc_renderer: IpcSender<CanvasMsg>, //WM TODO: dedicated device channel
+    ipc_device: IpcSender<WebMetalDeviceRequest>,
     #[ignore_heap_size_of = "Defined in webmetal"]
     pipelines: DOMRefCell<HashMap<webmetal::RenderPassKey, webmetal::Pipeline>>,
 }
@@ -26,12 +26,12 @@ pub struct WebMetalRenderPipelineState {
 impl WebMetalRenderPipelineState {
     pub fn new(global: &GlobalScope,
                desc: webmetal::PipelineDesc,
-               ipc_renderer: IpcSender<CanvasMsg>)
+               ipc_device: IpcSender<WebMetalDeviceRequest>)
                -> Root<WebMetalRenderPipelineState> {
         let object = box WebMetalRenderPipelineState {
             reflector: Reflector::new(),
             desc: desc,
-            ipc_renderer: ipc_renderer,
+            ipc_device: ipc_device,
             pipelines: DOMRefCell::new(HashMap::new()),
         };
         reflect_dom_object(object, global, binding::Wrap)
@@ -43,8 +43,7 @@ impl WebMetalRenderPipelineState {
             Entry::Vacant(entry) => {
                 let (sender, receiver) = ipc::channel().unwrap();
                 let req = WebMetalDeviceRequest::MakeRenderPipeline(sender, self.desc.clone(), pass.clone());
-                let msg = WebMetalCommand::Device(req);
-                self.ipc_renderer.send(CanvasMsg::WebMetal(msg)).unwrap();
+                self.ipc_device.send(req).unwrap();
                 let inner = receiver.recv().unwrap().unwrap();
                 entry.insert(inner).clone()
             },
