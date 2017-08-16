@@ -4,6 +4,7 @@
 
 use bluetooth_traits::BluetoothRequest;
 use canvas_traits::webgl::WebGLPipeline;
+use canvas_traits::webgpu::WebGpuPipeline;
 use compositing::CompositionPipeline;
 use compositing::CompositorProxy;
 use compositing::compositor_thread::Msg as CompositorMsg;
@@ -176,6 +177,9 @@ pub struct InitialPipelineState {
     /// A channel to the webgl thread.
     pub webgl_chan: WebGLPipeline,
 
+    /// A channel to the webgpu thread.
+    pub webgpu_chan: WebGpuPipeline,
+
     /// A channel to the webvr thread.
     pub webvr_chan: Option<IpcSender<WebVRMsg>>,
 }
@@ -276,6 +280,7 @@ impl Pipeline {
                     webrender_api_sender: state.webrender_api_sender,
                     webrender_document: state.webrender_document,
                     webgl_chan: state.webgl_chan,
+                    webgpu_chan: state.webgpu_chan,
                     webvr_chan: state.webvr_chan,
                 };
 
@@ -477,6 +482,7 @@ pub struct UnprivilegedPipelineContent {
     webrender_api_sender: webrender_api::RenderApiSender,
     webrender_document: webrender_api::DocumentId,
     webgl_chan: WebGLPipeline,
+    webgpu_chan: WebGpuPipeline,
     webvr_chan: Option<IpcSender<WebVRMsg>>,
 }
 
@@ -507,6 +513,7 @@ impl UnprivilegedPipelineContent {
             pipeline_namespace_id: self.pipeline_namespace_id,
             content_process_shutdown_chan: self.script_content_process_shutdown_chan,
             webgl_chan: self.webgl_chan,
+            webgpu_chan: self.webgpu_chan,
             webvr_chan: self.webvr_chan,
         }, self.load_data.clone());
 

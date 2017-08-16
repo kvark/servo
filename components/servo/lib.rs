@@ -70,6 +70,7 @@ use bluetooth::BluetoothThreadFactory;
 use bluetooth_traits::BluetoothRequest;
 use canvas::gl_context::GLContextFactory;
 use canvas::webgl_thread::WebGLThreads;
+use canvas::webgpu_thread::WebGpuThreads;
 use compositing::IOCompositor;
 use compositing::compositor_thread::{self, CompositorProxy, CompositorReceiver, InitialCompositorState};
 use compositing::windowing::WindowEvent;
@@ -327,6 +328,7 @@ fn create_constellation(user_agent: Cow<'static, str>,
     let (webgl_threads, image_handler) = WebGLThreads::new(gl_factory,
                                                            webrender_api_sender.clone(),
                                                            webvr_compositor.map(|c| c as Box<_>));
+    let webgpu_threads = WebGpuThreads::new();
     // Set webrender external image handler for WebGL textures
     webrender.set_external_image_handler(image_handler);
 
@@ -344,6 +346,7 @@ fn create_constellation(user_agent: Cow<'static, str>,
         webrender_document,
         webrender_api_sender,
         webgl_threads,
+        webgpu_threads,
         webvr_chan,
     };
     let (constellation_chan, from_swmanager_sender) =

@@ -6,6 +6,7 @@ use app_units::Au;
 use base64;
 use bluetooth_traits::BluetoothRequest;
 use canvas_traits::webgl::WebGLChan;
+use canvas_traits::webgpu::WebGpuChan;
 use cssparser::{Parser, ParserInput};
 use devtools_traits::{ScriptToDevtoolsControlMsg, TimelineMarker, TimelineMarkerType};
 use dom::bindings::cell::DOMRefCell;
@@ -263,9 +264,13 @@ pub struct Window {
 
     test_runner: MutNullableJS<TestRunner>,
 
-    /// A handle for communicating messages to the webvr thread, if available.
+    /// A handle for communicating messages to the webgl thread, if available.
     #[ignore_heap_size_of = "channels are hard"]
     webgl_chan: WebGLChan,
+
+    /// A handle for communicating messages to the webgpu thread, if available.
+    #[ignore_heap_size_of = "channels are hard"]
+    webgpu_chan: WebGpuChan,
 
     /// A handle for communicating messages to the webvr thread, if available.
     #[ignore_heap_size_of = "channels are hard"]
@@ -387,6 +392,10 @@ impl Window {
 
     pub fn webgl_chan(&self) -> WebGLChan {
         self.webgl_chan.clone()
+    }
+
+    pub fn webgpu_chan(&self) -> WebGpuChan {
+        self.webgpu_chan.clone()
     }
 
     pub fn webvr_thread(&self) -> Option<IpcSender<WebVRMsg>> {
@@ -1810,6 +1819,7 @@ impl Window {
                navigation_start: u64,
                navigation_start_precise: f64,
                webgl_chan: WebGLChan,
+               webgpu_chan: WebGpuChan,
                webvr_chan: Option<IpcSender<WebVRMsg>>)
                -> Root<Window> {
         let layout_rpc: Box<LayoutRPC + Send> = {
@@ -1876,8 +1886,9 @@ impl Window {
             scroll_offsets: DOMRefCell::new(HashMap::new()),
             media_query_lists: WeakMediaQueryListVec::new(),
             test_runner: Default::default(),
-            webgl_chan: webgl_chan,
-            webvr_chan: webvr_chan,
+            webgl_chan,
+            webgpu_chan,
+            webvr_chan,
             permission_state_invocation_results: DOMRefCell::new(HashMap::new()),
             pending_layout_images: DOMRefCell::new(HashMap::new()),
             unminified_js_dir: DOMRefCell::new(None),

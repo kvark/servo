@@ -19,6 +19,7 @@
 
 use bluetooth_traits::BluetoothRequest;
 use canvas_traits::webgl::WebGLPipeline;
+use canvas_traits::webgpu::WebGpuPipeline;
 use devtools;
 use devtools_traits::{DevtoolScriptControlMsg, DevtoolsPageInfo};
 use devtools_traits::{ScriptToDevtoolsControlMsg, WorkerId};
@@ -512,6 +513,9 @@ pub struct ScriptThread {
     /// A handle to the webgl thread
     webgl_chan: WebGLPipeline,
 
+    /// A handle to the webgpu thread
+    webgpu_chan: WebGpuPipeline,
+
     /// A handle to the webvr thread, if available
     webvr_chan: Option<IpcSender<WebVRMsg>>,
 
@@ -886,6 +890,7 @@ impl ScriptThread {
             layout_to_constellation_chan: state.layout_to_constellation_chan,
 
             webgl_chan: state.webgl_chan,
+            webgpu_chan: state.webgpu_chan,
             webvr_chan: state.webvr_chan,
 
             worklet_thread_pool: Default::default(),
@@ -2034,6 +2039,7 @@ impl ScriptThread {
                                  incomplete.navigation_start,
                                  incomplete.navigation_start_precise,
                                  self.webgl_chan.channel(),
+                                 self.webgpu_chan.channel(),
                                  self.webvr_chan.clone());
 
         // Initialize the browsing context for the window.

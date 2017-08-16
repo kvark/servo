@@ -218,7 +218,7 @@ impl HTMLCanvasElement {
             let window = window_from_node(self);
             let size = self.get_size();
 
-            let maybe_ctx = WebGpuRenderingContext::new(window.upcast(), self, size);
+            let maybe_ctx = WebGpuRenderingContext::new(&window, self, size);
 
             *self.context.borrow_mut() = maybe_ctx.map(|ctx| CanvasContext::WebGpu(JS::from_ref(&*ctx)));
         }
