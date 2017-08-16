@@ -22,4 +22,5 @@ extern crate webrender_api;
 
 pub mod canvas;
 pub mod webgl;
+pub mod webgpu;
 mod webgl_channel;

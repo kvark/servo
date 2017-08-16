@@ -21,3 +21,4 @@ pub mod canvas_paint_thread;
 pub mod gl_context;
 mod webgl_mode;
 pub mod webgl_thread;
+pub mod webgpu_thread;

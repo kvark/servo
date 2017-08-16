@@ -10,7 +10,7 @@ use dom::bindings::codegen::Bindings::CanvasRenderingContext2DBinding::CanvasRen
 use dom::bindings::codegen::Bindings::HTMLCanvasElementBinding;
 use dom::bindings::codegen::Bindings::HTMLCanvasElementBinding::HTMLCanvasElementMethods;
 use dom::bindings::codegen::Bindings::WebGLRenderingContextBinding::WebGLContextAttributes;
-use dom::bindings::codegen::UnionTypes::CanvasRenderingContext2DOrWebGLRenderingContext;
+use dom::bindings::codegen::UnionTypes::CanvasRenderingContext2DOrWebGLRenderingContextOrWebGpuRenderingContext as RenderingContext;
 use dom::bindings::conversions::ConversionResult;
 use dom::bindings::error::{Error, Fallible};
 use dom::bindings::inheritance::Castable;
@@ -25,6 +25,7 @@ use dom::htmlelement::HTMLElement;
 use dom::node::{Node, window_from_node};
 use dom::virtualmethods::VirtualMethods;
 use dom::webglrenderingcontext::{LayoutCanvasWebGLRenderingContextHelpers, WebGLRenderingContext};
+use dom::webgpurenderingcontext::{LayoutCanvasWebGpuRenderingContextHelpers, WebGpuRenderingContext};
 use dom_struct::dom_struct;
 use euclid::Size2D;
 use html5ever::{LocalName, Prefix};
@@ -46,6 +47,7 @@ const DEFAULT_HEIGHT: u32 = 150;
 pub enum CanvasContext {
     Context2d(JS<CanvasRenderingContext2D>),
     WebGL(JS<WebGLRenderingContext>),
+    WebGpu(JS<WebGpuRenderingContext>),
 }
 
 #[dom_struct]
@@ -79,6 +81,7 @@ impl HTMLCanvasElement {
             match *context {
                 CanvasContext::Context2d(ref context) => context.set_bitmap_dimensions(size),
                 CanvasContext::WebGL(ref context) => context.recreate(size),
+                CanvasContext::WebGpu(ref context) => context.recreate(size),
             }
         }
     }
@@ -109,10 +112,13 @@ impl LayoutHTMLCanvasElementHelpers for LayoutJS<HTMLCanvasElement> {
             let source = match canvas.context.borrow_for_layout().as_ref() {
                 Some(&CanvasContext::Context2d(ref context)) => {
                     HTMLCanvasDataSource::Image(Some(context.to_layout().get_ipc_renderer()))
-                },
+                }
                 Some(&CanvasContext::WebGL(ref context)) => {
                     context.to_layout().canvas_data_source()
-                },
+                }
+                Some(&CanvasContext::WebGpu(ref context)) => {
+                    context.to_layout().canvas_data_source()
+                }
                 None => {
                     HTMLCanvasDataSource::Image(None)
                 }
@@ -167,8 +173,9 @@ impl HTMLCanvasElement {
 
     #[allow(unsafe_code)]
     pub fn get_or_init_webgl_context(&self,
-                                 cx: *mut JSContext,
-                                 attrs: Option<HandleValue>) -> Option<Root<WebGLRenderingContext>> {
+        cx: *mut JSContext,
+        attrs: Option<HandleValue>,
+    ) -> Option<Root<WebGLRenderingContext>> {
         if self.context.borrow().is_none() {
             let window = window_from_node(self);
             let size = self.get_size();
@@ -202,6 +209,27 @@ impl HTMLCanvasElement {
         }
     }
 
+    #[allow(unsafe_code)]
+    pub fn get_or_init_webgpu_context(&self,
+        _cx: *mut JSContext,
+        _attrs: Option<HandleValue>,
+    ) -> Option<Root<WebGpuRenderingContext>> {
+        if self.context.borrow().is_none() {
+            let window = window_from_node(self);
+            let size = self.get_size();
+
+            let maybe_ctx = WebGpuRenderingContext::new(window.upcast(), self, size);
+
+            *self.context.borrow_mut() = maybe_ctx.map(|ctx| CanvasContext::WebGpu(JS::from_ref(&*ctx)));
+        }
+
+        if let Some(CanvasContext::WebGpu(ref context)) = *self.context.borrow() {
+            Some(Root::from_ref(&*context))
+        } else {
+            None
+        }
+    }
+
     pub fn is_valid(&self) -> bool {
         self.Height() != 0 && self.Width() != 0
     }
@@ -225,11 +253,15 @@ impl HTMLCanvasElement {
                         return None;
                     }
                 }
-            },
+            }
             Some(&CanvasContext::WebGL(_)) => {
                 // TODO: add a method in WebGLRenderingContext to get the pixels.
                 return None;
-            },
+            }
+            Some(&CanvasContext::WebGpu(_)) => {
+                // TODO: add a method in WebGpuRenderingContext to get the pixels.
+                return None;
+            }
             None => {
                 repeat(0xffu8).take((size.height as usize) * (size.width as usize) * 4).collect()
             }
@@ -258,15 +290,19 @@ impl HTMLCanvasElementMethods for HTMLCanvasElement {
                   cx: *mut JSContext,
                   id: DOMString,
                   attributes: Vec<HandleValue>)
-        -> Option<CanvasRenderingContext2DOrWebGLRenderingContext> {
+        -> Option<RenderingContext> {
         match &*id {
             "2d" => {
                 self.get_or_init_2d_context()
-                    .map(CanvasRenderingContext2DOrWebGLRenderingContext::CanvasRenderingContext2D)
+                    .map(RenderingContext::CanvasRenderingContext2D)
             }
             "webgl" | "experimental-webgl" => {
                 self.get_or_init_webgl_context(cx, attributes.get(0).cloned())
-                    .map(CanvasRenderingContext2DOrWebGLRenderingContext::WebGLRenderingContext)
+                    .map(RenderingContext::WebGLRenderingContext)
+            }
+            "experimental-webgpu" => {
+                self.get_or_init_webgpu_context(cx, attributes.get(0).cloned())
+                    .map(RenderingContext::WebGpuRenderingContext)
             }
             _ => None
         }
