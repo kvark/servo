@@ -8,21 +8,23 @@ use canvas_traits::webgpu::webgpu_channel;
 use dom::bindings::codegen::Bindings::WebGpuRenderingContextBinding as binding;
 use dom::bindings::js::{JS, LayoutJS, Root};
 //use dom::bindings::inheritance::Castable;
-use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
+use dom::bindings::reflector::{Reflector, reflect_dom_object};
 use dom::htmlcanvaselement::HTMLCanvasElement;
+use dom::webgpuadapter::WebGpuAdapter;
 use dom::window::Window;
 //use dom::node::{Node, NodeDamage};
 //use dom::webmetalcommandbuffer::WebMetalCommandBuffer;
 //use dom::webmetaldevice::WebMetalDevice;
 //use dom::webmetaltargetview::WebMetalTargetView;
 use dom_struct::dom_struct;
-use euclid::Size2D;
+//use euclid::Size2D;
 use script_layout_interface::HTMLCanvasDataSource;
 //use script_traits::ScriptMsg as ConstellationMsg;
 //use std::cell::Cell;
 //use std::rc::Rc;
 //use webmetal_resource_proxy::WebMetalResourceProxy;
 //use webmetal::WebMetalCapabilities;
+//use webgpu::gpu;
 
 #[dom_struct]
 pub struct WebGpuRenderingContext {
@@ -32,6 +34,7 @@ pub struct WebGpuRenderingContext {
     //#[ignore_heap_size_of = "Defined in webmetal"]
     //capabilities: WebMetalCapabilities,
     canvas: JS<HTMLCanvasElement>,
+    adapters: Vec<Root<WebGpuAdapter>>,
     //device: JS<WebMetalDevice>,
     //#[ignore_heap_size_of = "nothing to see here"]
     //resource_proxy: Rc<DOMRefCell<WebMetalResourceProxy>>,
@@ -43,45 +46,37 @@ impl WebGpuRenderingContext {
     fn new_internal(
         window: &Window,
         canvas: &HTMLCanvasElement,
-        size: Size2D<i32>,
     ) -> Result<WebGpuRenderingContext, String>
     {
         let (sender, receiver) = webgpu_channel().unwrap();
         let webgpu_chan = window.webgpu_chan();
 
-        let num_frames = 3;
-        webgpu_chan.send(WebGpuMsg::CreateContext { size, num_frames, sender })
-                   .unwrap();
-        let result = receiver.recv().unwrap();
-        result.map(|ctx_data| {
-            WebGpuRenderingContext {
-                reflector_: Reflector::new(),
-                webgpu_sender: ctx_data.sender,
-                canvas: JS::from_ref(canvas),
-            }
-        })
-        /*
-        response.map(|(ipc_context, ipc_device, targets, caps)| WebMetalRenderingContext {
-            reflector: Reflector::new(),
-            ipc_renderer: ipc_context,
-            capabilities: caps,
-            canvas: JS::from_ref(canvas),
-            device: JS::from_ref(&*WebMetalDevice::new(global, ipc_device.clone())),
-            resource_proxy: Rc::new(DOMRefCell::new(WebMetalResourceProxy::new(ipc_device))),
-            current_target_index: Cell::new(0),
-            swap_targets: targets.into_iter().map(|view|
-                JS::from_ref(&*WebMetalTargetView::new(global, view))
-                ).collect(),
-        })*/
+        webgpu_chan
+            .send(WebGpuMsg::CreateContext(sender))
+            .unwrap();
+        receiver
+            .recv()
+            .unwrap()
+            .map(|mut init| {
+                let adapters = init.adapters
+                    .drain(..)
+                    .map(|info| WebGpuAdapter::new(window, info))
+                    .collect();
+                WebGpuRenderingContext {
+                    reflector_: Reflector::new(),
+                    webgpu_sender: init.sender,
+                    adapters,
+                    canvas: JS::from_ref(canvas),
+                }
+            })
     }
 
     #[allow(unrooted_must_root)]
     pub fn new(
         window: &Window,
         canvas: &HTMLCanvasElement,
-        size: Size2D<i32>,
     ) -> Option<Root<WebGpuRenderingContext>> {
-        match Self::new_internal(window, canvas, size) {
+        match Self::new_internal(window, canvas) {
             Ok(ctx) => Some(reflect_dom_object(box ctx, window, binding::Wrap)),
             Err(msg) => {
                 error!("Couldn't create WebGpuRenderingContext: {}", msg);
@@ -91,18 +86,28 @@ impl WebGpuRenderingContext {
         }
     }
 
-    pub fn recreate(&self, size: Size2D<i32>) {
-        unimplemented!()
-        //self.ipc_renderer.send(CanvasMsg::Common(CanvasCommonMsg::Recreate(size))).unwrap();
-    }
-
     pub fn webgpu_sender(&self) -> WebGpuMsgSender {
         self.webgpu_sender.clone()
+    }
+
+    pub fn recreate(&self) {
+        //TODO
     }
 }
 
 impl binding::WebGpuRenderingContextMethods for WebGpuRenderingContext {
-    /*fn GetDevice(&self) -> Root<WebMetalDevice> {
+    fn EnumerateAdapters(&self) -> Vec<Root<WebGpuAdapter>> {
+        Vec::new() //TODO
+    }
+    fn EndFrame(&self) {
+        //TODO
+        //let msg = WebMetalCommand::Present(self.current_target_index.get() as u32);
+        //self.ipc_renderer.send(CanvasMsg::WebMetal(msg)).unwrap();
+        //TODO: wait for a fence
+        //self.canvas.upcast::<Node>().dirty(NodeDamage::OtherNodeDamage);
+    }
+    /*
+    fn GetDevice(&self) -> Root<WebMetalDevice> {
         Root::from_ref(&self.device)
     }
 
@@ -122,14 +127,6 @@ impl binding::WebGpuRenderingContextMethods for WebGpuRenderingContext {
         self.current_target_index.set(index);
         Root::from_ref(&self.swap_targets[index])
     }*/
-
-    fn EndFrame(&self) {
-        //TODO
-        //let msg = WebMetalCommand::Present(self.current_target_index.get() as u32);
-        //self.ipc_renderer.send(CanvasMsg::WebMetal(msg)).unwrap();
-        //TODO: wait for a fence
-        //self.canvas.upcast::<Node>().dirty(NodeDamage::OtherNodeDamage);
-    }
 }
 
 pub trait LayoutCanvasWebGpuRenderingContextHelpers {

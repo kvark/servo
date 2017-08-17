@@ -5,6 +5,7 @@
 //typedef unsigned long       WebGpuSize;
 
 interface WebGpuRenderingContext {
+    sequence<WebGpuAdapter> enumerateAdapters();
     //WebMetalDevice          getDevice();
     //WebMetalCommandBuffer   makeCommandBuffer();
     //WebMetalTargetView      nextFrameTarget();

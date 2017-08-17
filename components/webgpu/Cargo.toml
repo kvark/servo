@@ -1,0 +1,18 @@
+[package]
+name = "webgpu"
+version = "0.0.1"
+authors = ["The Servo Project Developers"]
+license = "MPL-2.0"
+publish = false
+
+[lib]
+name = "webgpu"
+path = "lib.rs"
+
+[dependencies]
+gfx_corell = { path = "../../../gfx/src/corell", features = ["serialize"] }
+gfx_device_vulkanll = { path = "../../../gfx/src/backend/vulkanll" }
+heapsize = "0.4"
+heapsize_derive = "0.1"
+serde = "1"
+serde_derive = "1"

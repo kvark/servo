@@ -473,6 +473,7 @@ pub mod webglshader;
 pub mod webglshaderprecisionformat;
 pub mod webgltexture;
 pub mod webgluniformlocation;
+pub mod webgpuadapter;
 pub mod webgpurenderingcontext;
 pub mod websocket;
 pub mod window;

@@ -50,6 +50,7 @@ pub extern crate servo_url;
 pub extern crate style;
 pub extern crate style_traits;
 pub extern crate webrender_api;
+pub extern crate webgpu;
 pub extern crate webvr;
 pub extern crate webvr_traits;
 

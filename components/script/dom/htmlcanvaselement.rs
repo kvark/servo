@@ -81,7 +81,7 @@ impl HTMLCanvasElement {
             match *context {
                 CanvasContext::Context2d(ref context) => context.set_bitmap_dimensions(size),
                 CanvasContext::WebGL(ref context) => context.recreate(size),
-                CanvasContext::WebGpu(ref context) => context.recreate(size),
+                CanvasContext::WebGpu(ref context) => context.recreate(),
             }
         }
     }
@@ -216,9 +216,8 @@ impl HTMLCanvasElement {
     ) -> Option<Root<WebGpuRenderingContext>> {
         if self.context.borrow().is_none() {
             let window = window_from_node(self);
-            let size = self.get_size();
 
-            let maybe_ctx = WebGpuRenderingContext::new(&window, self, size);
+            let maybe_ctx = WebGpuRenderingContext::new(&window, self);
 
             *self.context.borrow_mut() = maybe_ctx.map(|ctx| CanvasContext::WebGpu(JS::from_ref(&*ctx)));
         }

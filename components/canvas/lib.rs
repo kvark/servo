@@ -16,6 +16,7 @@ extern crate num_traits;
 extern crate offscreen_gl_context;
 extern crate webrender;
 extern crate webrender_api;
+extern crate webgpu;
 
 pub mod canvas_paint_thread;
 pub mod gl_context;

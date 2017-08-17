@@ -3,18 +3,26 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use canvas_traits::webgpu::*;
-use euclid::Size2D;
 use std::thread;
+use webgpu::{backend, QueueType};
+use webgpu::gpu::{Adapter, Instance, QueueFamily};
+
 
 pub struct WebGpuThread {
     /// Id generator for new WebGpuContexts.
     next_webgpu_id: usize,
+    instance: backend::Instance,
+    adapters: Vec<backend::Adapter>,
 }
 
 impl WebGpuThread {
     fn new() -> Self {
+        let instance = backend::Instance::create();
+        let adapters = instance.enumerate_adapters();
         WebGpuThread {
             next_webgpu_id: 0,
+            instance,
+            adapters,
         }
     }
 
@@ -42,13 +50,14 @@ impl WebGpuThread {
     #[inline]
     fn handle_msg(&mut self, msg: WebGpuMsg, webgpu_chan: &WebGpuChan) -> bool {
         match msg {
-            WebGpuMsg::CreateContext { size, num_frames, sender } => {
-                let result = self.create_webgpu_context(size, num_frames);
-                sender.send(result.map(|id|
-                    WebGpuInit {
+            WebGpuMsg::CreateContext(sender) => {
+                let init = self
+                    .create_webgpu_context()
+                    .map(|(id, adapters)| WebGpuInit {
                         sender: WebGpuMsgSender::new(id, webgpu_chan.clone()),
-                    }
-                )).unwrap();
+                        adapters,
+                    });
+                sender.send(init).unwrap();
             }
             WebGpuMsg::Exit => {
                 return true;
@@ -59,14 +68,37 @@ impl WebGpuThread {
     }
 
     /// Creates a new WebGpuContext
-    fn create_webgpu_context(&mut self,
-        size: Size2D<i32>,
-        num_frames: u8,
-    ) -> Result<WebGpuContextId, String>
+    fn create_webgpu_context(&mut self
+    ) -> Result<(WebGpuContextId, Vec<AdapterInfo>), String>
     {
+        let adapters = self.adapters
+            .iter()
+            .map(|ad| {
+                let queue_families = ad
+                    .get_queue_families()
+                    .map(|family| {
+                        let ty = if family.supports_graphics() {
+                            QueueType::Graphics
+                        } else if family.supports_compute() {
+                            QueueType::Compute
+                        } else {
+                            QueueType::Transfer
+                        };
+                        QueueInfo {
+                            ty,
+                            count: family.num_queues() as u8,
+                        }
+                    })
+                    .collect();
+                AdapterInfo {
+                    info: ad.get_info().clone(),
+                    queue_families,
+                }
+            })
+            .collect();
         let id = WebGpuContextId(self.next_webgpu_id);
         self.next_webgpu_id += 1;
-        Ok(id)
+        Ok((id, adapters))
     }
 }
 
