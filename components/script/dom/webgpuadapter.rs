@@ -7,8 +7,9 @@ use canvas_traits::webgpu::{
     WebGpuChan, WebGpuMsg, webgpu_channel,
 };
 use dom::bindings::codegen::Bindings::WebGpuAdapterBinding as binding;
-use dom::bindings::js::{Root};
-use dom::bindings::reflector::{Reflector, reflect_dom_object};
+use dom::bindings::js::Root;
+use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
+use dom::webgpudevice::WebGpuDevice;
 use dom::window::Window;
 use dom_struct::dom_struct;
 
@@ -52,7 +53,7 @@ impl binding::WebGpuAdapterMethods for WebGpuAdapter {
             .collect()
     }
 
-    fn Open(&self, queues: Vec<binding::WebGpuRequestedQueues>) {
+    fn Open(&self, queues: Vec<binding::WebGpuRequestedQueues>) -> Root<WebGpuDevice> {
         let queue_families = queues
             .iter()
             .map(|q| (q.id as QueueFamilyId, q.count as QueueCount))
@@ -67,5 +68,6 @@ impl binding::WebGpuAdapterMethods for WebGpuAdapter {
         }).unwrap();
 
         let device = receiver.recv().unwrap();
+        WebGpuDevice::new(&self.global(), device)
     }
 }

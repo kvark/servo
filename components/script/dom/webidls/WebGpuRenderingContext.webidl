@@ -9,5 +9,5 @@ interface WebGpuRenderingContext {
     //WebMetalDevice          getDevice();
     //WebMetalCommandBuffer   makeCommandBuffer();
     //WebMetalTargetView      nextFrameTarget();
-    void                    endFrame();
+    //void                    endFrame();
 };

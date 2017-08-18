@@ -25,6 +25,7 @@ pub fn webgpu_channel<T: Serialize + for<'de> Deserialize<'de>>(
 pub type AdapterId = u8;
 pub type QueueFamilyId = u32;
 pub type QueueCount = u8;
+pub type DeviceId = u32;
 
 #[derive(Clone, Deserialize, Serialize, HeapSizeOf)]
 pub struct QueueFamilyInfo {
@@ -42,11 +43,12 @@ pub struct AdapterInfo {
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct DeviceInfo {
+    pub id: DeviceId,
 }
 
 /// Contains the WebGpuCommand sender and information about a WebGpuContext
 #[derive(Clone, Deserialize, Serialize)]
-pub struct WebGpuInit {
+pub struct ContextInfo {
     /// Sender instance to send commands to the specific WebGpuContext.
     pub sender: WebGpuMsgSender,
     /// Vector of available adapters.
@@ -57,7 +59,7 @@ pub struct WebGpuInit {
 #[derive(Clone, Deserialize, Serialize)]
 pub enum WebGpuMsg {
     /// Creates a new WebGPU context instance.
-    CreateContext(WebGpuSender<Result<WebGpuInit, String>>),
+    CreateContext(WebGpuSender<Result<ContextInfo, String>>),
     /// Create a new device on the adapter.
     OpenAdapter {
         adapter_id: AdapterId,
