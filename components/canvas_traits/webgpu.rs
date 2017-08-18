@@ -5,14 +5,13 @@
 use ipc_channel;
 use serde::{Deserialize, Serialize};
 use std::io;
-use webgpu_component::{gpu, QueueType};
+use webgpu_component::gpu;
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub use webgpu_component::QueueType;
+
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, HeapSizeOf)]
 pub struct WebGpuContextId(pub usize);
-
-impl ::heapsize::HeapSizeOf for WebGpuContextId {
-    fn heap_size_of_children(&self) -> usize { 0 }
-}
 
 pub type WebGpuSender<T> = ipc_channel::ipc::IpcSender<T>;
 pub type WebGpuReceiver<T> = ipc_channel::ipc::IpcReceiver<T>;
@@ -23,16 +22,26 @@ pub fn webgpu_channel<T: Serialize + for<'de> Deserialize<'de>>(
     ipc_channel::ipc::channel()
 }
 
-#[derive(Clone, Deserialize, Serialize)]
-pub struct QueueInfo {
+pub type AdapterId = u8;
+pub type QueueFamilyId = u32;
+pub type QueueCount = u8;
+
+#[derive(Clone, Deserialize, Serialize, HeapSizeOf)]
+pub struct QueueFamilyInfo {
     pub ty: QueueType,
-    pub count: u8,
+    pub count: QueueCount,
+    pub original_id: QueueFamilyId,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct AdapterInfo {
     pub info: gpu::AdapterInfo,
-    pub queue_families: Vec<QueueInfo>,
+    pub queue_families: Vec<QueueFamilyInfo>,
+    pub original_id: AdapterId,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct DeviceInfo {
 }
 
 /// Contains the WebGpuCommand sender and information about a WebGpuContext
@@ -49,6 +58,12 @@ pub struct WebGpuInit {
 pub enum WebGpuMsg {
     /// Creates a new WebGPU context instance.
     CreateContext(WebGpuSender<Result<WebGpuInit, String>>),
+    /// Create a new device on the adapter.
+    OpenAdapter {
+        adapter_id: AdapterId,
+        queue_families: Vec<(QueueFamilyId, QueueCount)>,
+        result: WebGpuSender<DeviceInfo>,
+    },
     /// Frees all resources and closes the thread.
     Exit,
 }
@@ -69,7 +84,7 @@ impl WebGpuPipeline {
 pub struct WebGpuMsgSender {
     ctx_id: WebGpuContextId,
     #[ignore_heap_size_of = "channels are hard"]
-    sender: WebGpuChan,
+    pub sender: WebGpuChan,
 }
 
 impl WebGpuMsgSender {

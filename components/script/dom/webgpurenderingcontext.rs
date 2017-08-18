@@ -58,9 +58,10 @@ impl WebGpuRenderingContext {
             .recv()
             .unwrap()
             .map(|mut init| {
+                let sender = init.sender.sender.clone();
                 let adapters = init.adapters
                     .drain(..)
-                    .map(|info| WebGpuAdapter::new(window, info))
+                    .map(|info| WebGpuAdapter::new(window, sender.clone(), info))
                     .collect();
                 WebGpuRenderingContext {
                     reflector_: Reflector::new(),
@@ -97,7 +98,7 @@ impl WebGpuRenderingContext {
 
 impl binding::WebGpuRenderingContextMethods for WebGpuRenderingContext {
     fn EnumerateAdapters(&self) -> Vec<Root<WebGpuAdapter>> {
-        Vec::new() //TODO
+        self.adapters.clone()
     }
     fn EndFrame(&self) {
         //TODO

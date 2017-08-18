@@ -11,7 +11,7 @@ use webgpu::gpu::{Adapter, Instance, QueueFamily};
 pub struct WebGpuThread {
     /// Id generator for new WebGpuContexts.
     next_webgpu_id: usize,
-    instance: backend::Instance,
+    _instance: backend::Instance,
     adapters: Vec<backend::Adapter>,
 }
 
@@ -21,7 +21,7 @@ impl WebGpuThread {
         let adapters = instance.enumerate_adapters();
         WebGpuThread {
             next_webgpu_id: 0,
-            instance,
+            _instance: instance,
             adapters,
         }
     }
@@ -59,6 +59,9 @@ impl WebGpuThread {
                     });
                 sender.send(init).unwrap();
             }
+            WebGpuMsg::OpenAdapter { adapter_id, queue_families, result } => {
+                unimplemented!()
+            }
             WebGpuMsg::Exit => {
                 return true;
             }
@@ -73,10 +76,12 @@ impl WebGpuThread {
     {
         let adapters = self.adapters
             .iter()
-            .map(|ad| {
+            .enumerate()
+            .map(|(aid, ad)| {
                 let queue_families = ad
                     .get_queue_families()
-                    .map(|family| {
+                    .enumerate()
+                    .map(|(qid, family)| {
                         let ty = if family.supports_graphics() {
                             QueueType::Graphics
                         } else if family.supports_compute() {
@@ -84,15 +89,17 @@ impl WebGpuThread {
                         } else {
                             QueueType::Transfer
                         };
-                        QueueInfo {
+                        QueueFamilyInfo {
                             ty,
                             count: family.num_queues() as u8,
+                            original_id: qid as QueueFamilyId,
                         }
                     })
                     .collect();
                 AdapterInfo {
                     info: ad.get_info().clone(),
                     queue_families,
+                    original_id: aid as AdapterId,
                 }
             })
             .collect();
