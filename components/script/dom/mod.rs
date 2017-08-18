@@ -477,6 +477,7 @@ pub mod webgpuadapter;
 pub mod webgpucommandqueue;
 pub mod webgpudevice;
 pub mod webgpurenderingcontext;
+pub mod webgpuswapchain;
 pub mod websocket;
 pub mod window;
 pub mod windowproxy;

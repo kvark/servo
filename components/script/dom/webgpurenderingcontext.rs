@@ -6,9 +6,11 @@ use canvas_traits::webgpu::{WebGpuChan, WebGpuMsg};
 use canvas_traits::webgpu::webgpu_channel;
 use dom::bindings::codegen::Bindings::WebGpuRenderingContextBinding as binding;
 use dom::bindings::js::{JS, LayoutJS, Root};
-use dom::bindings::reflector::{Reflector, reflect_dom_object};
+use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
 use dom::htmlcanvaselement::HTMLCanvasElement;
 use dom::webgpuadapter::WebGpuAdapter;
+use dom::webgpucommandqueue::WebGpuCommandQueue;
+use dom::webgpuswapchain::WebGpuSwapchain;
 use dom::window::Window;
 use dom_struct::dom_struct;
 use script_layout_interface::HTMLCanvasDataSource;
@@ -76,6 +78,9 @@ impl WebGpuRenderingContext {
 impl binding::WebGpuRenderingContextMethods for WebGpuRenderingContext {
     fn EnumerateAdapters(&self) -> Vec<Root<WebGpuAdapter>> {
         self.adapters.clone()
+    }
+    fn BuildSwapchain(&self, queue: &WebGpuCommandQueue) -> Root<WebGpuSwapchain> {
+        WebGpuSwapchain::new(&self.global())
     }
     /*
     fn EndFrame(&self) {
