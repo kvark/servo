@@ -3,18 +3,55 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use canvas_traits::webgpu as w;
-use std::thread;
 use webgpu::{backend, QueueType};
-use webgpu::gpu::{Adapter, Device, Instance, QueueFamily};
+use webgpu::gpu::{self, Adapter, Factory, Instance, QueueFamily};
 
-type BackendDevice = Device<backend::Resources, backend::Factory, backend::CommandQueue>;
+use euclid::Size2D;
+
+use std::{ops, thread};
+
+
+type BackendDevice = gpu::Device<backend::Resources, backend::Factory, backend::CommandQueue>;
+
+struct LazyVec<T> {
+    inner: Vec<Option<T>>,
+}
+
+impl<T> LazyVec<T> {
+    fn new() -> Self {
+        LazyVec {
+            inner: Vec::new(),
+        }
+    }
+
+    fn push(&mut self, value: T) -> usize {
+        let id = self.inner.len(); //TODO: recycle
+        self.inner.push(Some(value));
+        id
+    }
+}
+
+impl<T> ops::Index<usize> for LazyVec<T> {
+    type Output = T;
+    fn index(&self, index: usize) -> &T {
+        self.inner[index].as_ref().unwrap()
+    }
+}
+impl<T> ops::IndexMut<usize> for LazyVec<T> {
+    fn index_mut(&mut self, index: usize) -> &mut T {
+        self.inner[index].as_mut().unwrap()
+    }
+}
+
 
 pub struct WebGpuThread {
     /// Id generator for new WebGpuContexts.
     next_webgpu_id: usize,
     _instance: backend::Instance,
     adapters: Vec<backend::Adapter>,
-    devices: Vec<Option<BackendDevice>>,
+    devices: LazyVec<BackendDevice>,
+    heaps: LazyVec<<backend::Resources as gpu::Resources>::Heap>,
+    images: LazyVec<<backend::Resources as gpu::Resources>::Image>,
 }
 
 impl WebGpuThread {
@@ -25,7 +62,9 @@ impl WebGpuThread {
             next_webgpu_id: 0,
             _instance: instance,
             adapters,
-            devices: Vec::new(),
+            devices: LazyVec::new(),
+            heaps: LazyVec::new(),
+            images: LazyVec::new(),
         }
     }
 
@@ -75,10 +114,16 @@ impl WebGpuThread {
                     });
                 let device = adapter.open(families);
                 let info = w::DeviceInfo {
-                    id: self.devices.len() as w::DeviceId,
+                    id: self.devices.push(device) as w::DeviceId,
                 };
-                self.devices.push(Some(device)); //TODO: recycle
                 result.send(info).unwrap();
+            }
+            w::WebGpuMsg::BuildSwapchain { device_id, size, result } => {
+                let swapchain = self.build_swapchain(device_id, size);
+                result.send(swapchain).unwrap();
+            }
+            w::WebGpuMsg::Present(image_id) => {
+                //TODO
             }
             w::WebGpuMsg::Exit => {
                 return true;
@@ -124,6 +169,52 @@ impl WebGpuThread {
         let id = w::WebGpuContextId(self.next_webgpu_id);
         self.next_webgpu_id += 1;
         Ok((id, adapters))
+    }
+
+    fn build_swapchain(&mut self, device_id: w::DeviceId, size: Size2D<u32>) -> w::SwapchainInfo {
+        let device = &mut self.devices[device_id as usize];
+        let image_store = &mut self.images;
+        let num_frames = 3; //TODO
+        let alignment = 0x3F;
+        let bytes_per_image = 4 *
+            (size.width as u64 | alignment + 1)*
+            (size.height as u64| alignment + 1);
+
+        let heap = {
+            let heap_type = device.heap_types
+                .iter()
+                .find(|ht| ht.properties.contains(gpu::memory::DEVICE_LOCAL))
+                .unwrap();
+            device.factory.create_heap(
+                heap_type,
+                gpu::factory::ResourceHeapType::Images,
+                num_frames * bytes_per_image,
+            ).unwrap()
+        };
+
+        let images = (0 .. num_frames).map(|i| {
+            let unbound_image = device.factory.create_image(
+                gpu::image::Kind::D2(
+                    size.width as gpu::image::Size,
+                    size.height as gpu::image::Size,
+                    gpu::image::AaMode::Single,
+                ),
+                1,
+                <gpu::format::Srgba8 as gpu::format::Formatted>::get_format(),
+                gpu::image::COLOR_ATTACHMENT | gpu::image::TRANSFER_SRC,
+            ).unwrap();
+            let image = device.factory.bind_image_memory(
+                &heap,
+                i * bytes_per_image,
+                unbound_image,
+            ).unwrap();
+            image_store.push(image) as w::ImageId
+        }).collect();
+
+        w::SwapchainInfo {
+            heap_id: self.heaps.push(heap) as w::HeapId,
+            images,
+        }
     }
 }
 

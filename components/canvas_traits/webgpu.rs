@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+use euclid::Size2D;
 use ipc_channel;
 use serde::{Deserialize, Serialize};
 use std::io;
@@ -26,6 +27,17 @@ pub type AdapterId = u8;
 pub type QueueFamilyId = u32;
 pub type QueueCount = u8;
 pub type DeviceId = u32;
+pub type HeapId = u32;
+pub type ImageId = u32;
+
+/// Contains the WebGpuCommand sender and information about a WebGpuContext
+#[derive(Clone, Deserialize, Serialize)]
+pub struct ContextInfo {
+    /// Sender instance to send commands to the specific WebGpuContext.
+    pub sender: WebGpuMsgSender,
+    /// Vector of available adapters.
+    pub adapters: Vec<AdapterInfo>,
+}
 
 #[derive(Clone, Deserialize, Serialize, HeapSizeOf)]
 pub struct QueueFamilyInfo {
@@ -46,13 +58,10 @@ pub struct DeviceInfo {
     pub id: DeviceId,
 }
 
-/// Contains the WebGpuCommand sender and information about a WebGpuContext
 #[derive(Clone, Deserialize, Serialize)]
-pub struct ContextInfo {
-    /// Sender instance to send commands to the specific WebGpuContext.
-    pub sender: WebGpuMsgSender,
-    /// Vector of available adapters.
-    pub adapters: Vec<AdapterInfo>,
+pub struct SwapchainInfo {
+    pub heap_id: HeapId,
+    pub images: Vec<ImageId>,
 }
 
 /// WebGpu Message API
@@ -66,6 +75,14 @@ pub enum WebGpuMsg {
         queue_families: Vec<(QueueFamilyId, QueueCount)>,
         result: WebGpuSender<DeviceInfo>,
     },
+    /// Build a new swapchain on the device.
+    BuildSwapchain {
+        device_id: DeviceId,
+        size: Size2D<u32>,
+        result: WebGpuSender<SwapchainInfo>,
+    },
+    /// Present the specified image on screen.
+    Present(ImageId),
     /// Frees all resources and closes the thread.
     Exit,
 }

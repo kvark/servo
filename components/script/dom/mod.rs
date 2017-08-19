@@ -476,6 +476,7 @@ pub mod webgluniformlocation;
 pub mod webgpuadapter;
 pub mod webgpucommandqueue;
 pub mod webgpudevice;
+pub mod webgpuheap;
 pub mod webgpurenderingcontext;
 pub mod webgpuswapchain;
 pub mod websocket;

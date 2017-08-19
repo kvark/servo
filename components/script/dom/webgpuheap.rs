@@ -2,8 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use canvas_traits::webgpu::DeviceId;
-use dom::bindings::codegen::Bindings::WebGpuCommandQueueBinding as binding;
+use canvas_traits::webgpu::HeapId;
+use dom::bindings::codegen::Bindings::WebGpuHeapBinding as binding;
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
@@ -11,24 +11,17 @@ use dom_struct::dom_struct;
 
 
 #[dom_struct]
-pub struct WebGpuCommandQueue {
+pub struct WebGpuHeap {
     reflector_: Reflector,
-    device_id: DeviceId,
+    id: HeapId,
 }
 
-impl WebGpuCommandQueue {
-    pub fn new(global: &GlobalScope, device_id: DeviceId) -> Root<Self> {
-        let obj = box WebGpuCommandQueue {
+impl WebGpuHeap {
+    pub fn new(global: &GlobalScope, id: HeapId) -> Root<Self> {
+        let obj = box WebGpuHeap {
             reflector_: Reflector::new(),
-            device_id,
+            id,
         };
         reflect_dom_object(obj, global, binding::Wrap)
     }
-
-    pub fn device_id(&self) -> DeviceId {
-        self.device_id
-    }
 }
-
-//impl binding::WebGpuCommandQueueMethods for WebGpuDevice {
-//}

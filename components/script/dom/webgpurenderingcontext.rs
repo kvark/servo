@@ -2,8 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use canvas_traits::webgpu::{WebGpuChan, WebGpuMsg};
-use canvas_traits::webgpu::webgpu_channel;
+use canvas_traits::webgpu::{WebGpuChan, WebGpuMsg, webgpu_channel};
 use dom::bindings::codegen::Bindings::WebGpuRenderingContextBinding as binding;
 use dom::bindings::js::{JS, LayoutJS, Root};
 use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
@@ -80,24 +79,17 @@ impl binding::WebGpuRenderingContextMethods for WebGpuRenderingContext {
         self.adapters.clone()
     }
     fn BuildSwapchain(&self, queue: &WebGpuCommandQueue) -> Root<WebGpuSwapchain> {
-        WebGpuSwapchain::new(&self.global())
+        let (sender, receiver) = webgpu_channel().unwrap();
+        let msg = WebGpuMsg::BuildSwapchain {
+            device_id: queue.device_id(),
+            size: self.canvas.get_size().cast().unwrap(),
+            result: sender,
+        };
+        self.sender.send(msg).unwrap();
+        let swapchain = receiver.recv().unwrap();
+
+        WebGpuSwapchain::new(&self.global(), self.sender.clone(), swapchain)
     }
-    /*
-    fn EndFrame(&self) {
-        //TODO
-        //let msg = WebMetalCommand::Present(self.current_target_index.get() as u32);
-        //self.ipc_renderer.send(CanvasMsg::WebMetal(msg)).unwrap();
-        //TODO: wait for a fence
-        //self.canvas.upcast::<Node>().dirty(NodeDamage::OtherNodeDamage);
-    }
-    fn NextFrameTarget(&self) -> Root<WebMetalTargetView> {
-        let mut index = self.current_target_index.get() + 1;
-        if index >= self.swap_targets.len() {
-            index = 0;
-        }
-        self.current_target_index.set(index);
-        Root::from_ref(&self.swap_targets[index])
-    }*/
 }
 
 pub trait LayoutCanvasWebGpuRenderingContextHelpers {
