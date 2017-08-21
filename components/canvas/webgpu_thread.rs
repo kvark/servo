@@ -4,7 +4,10 @@
 
 use canvas_traits::webgpu as w;
 use webgpu::{backend, QueueType};
-use webgpu::gpu::{self, Adapter, Factory, Instance, QueueFamily};
+use webgpu::gpu::{self,
+    Adapter, Factory, Instance, QueueFamily,
+    CommandPool, GeneralCommandPool,
+};
 
 use euclid::Size2D;
 
@@ -113,14 +116,20 @@ impl WebGpuThread {
                         (family, count as u32)
                     });
                 let device = adapter.open(families);
+                let general_queues = (0 .. device.general_queues.len() as w::QueueId).collect();
                 let info = w::DeviceInfo {
                     id: self.devices.push(device) as w::DeviceId,
+                    general: general_queues,
                 };
                 result.send(info).unwrap();
             }
             w::WebGpuMsg::BuildSwapchain { device_id, size, result } => {
                 let swapchain = self.build_swapchain(device_id, size);
                 result.send(swapchain).unwrap();
+            }
+            w::WebGpuMsg::CreateCommandPool { device_id, queue_id, max_buffers, result } => {
+                let command_pool = self.create_command_pool(device_id, queue_id, max_buffers);
+                result.send(command_pool).unwrap();
             }
             w::WebGpuMsg::Present(image_id) => {
                 //TODO
@@ -216,7 +225,40 @@ impl WebGpuThread {
             images,
         }
     }
+
+    fn create_command_pool(&mut self,
+        device_id: w::DeviceId,
+        queue_id: w::QueueId,
+        max_buffers: u32,
+    ) -> w::CommandPoolInfo
+    {
+        let device = &mut self.devices[device_id as usize];
+        let queue = &mut device.general_queues[queue_id as usize]; //TODO
+        let pool = backend::GeneralCommandPool::from_queue(queue, max_buffers as usize);
+        let (channel, receiver) = w::webgpu_channel().unwrap();
+        thread::spawn(move|| {
+            Self::run_command_thread(receiver, pool)
+        });
+        w::CommandPoolInfo {
+            channel
+        }
+    }
+
+    fn run_command_thread(
+        receiver: w::WebGpuReceiver<w::WebGpuCommand>,
+        mut pool: backend::GeneralCommandPool,
+    ) {
+        while let Ok(com) = receiver.recv() {
+            match com {
+                w::WebGpuCommand::Reset => {
+                    pool.reset();
+                }
+                w::WebGpuCommand::Exit => { return }
+            }
+        }
+    }
 }
+
 
 /// WebGPU Threading API entry point that lives in the constellation.
 pub struct WebGpuThreads(w::WebGpuSender<w::WebGpuMsg>);

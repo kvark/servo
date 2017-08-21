@@ -68,6 +68,6 @@ impl binding::WebGpuAdapterMethods for WebGpuAdapter {
         }).unwrap();
 
         let device = receiver.recv().unwrap();
-        WebGpuDevice::new(&self.global(), device)
+        WebGpuDevice::new(&self.global(), self.sender.clone(), device)
     }
 }

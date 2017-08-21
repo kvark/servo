@@ -26,6 +26,7 @@ pub fn webgpu_channel<T: Serialize + for<'de> Deserialize<'de>>(
 pub type AdapterId = u8;
 pub type QueueFamilyId = u32;
 pub type QueueCount = u8;
+pub type QueueId = u32;
 pub type DeviceId = u32;
 pub type HeapId = u32;
 pub type ImageId = u32;
@@ -56,6 +57,7 @@ pub struct AdapterInfo {
 #[derive(Clone, Deserialize, Serialize)]
 pub struct DeviceInfo {
     pub id: DeviceId,
+    pub general: Vec<QueueId>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -63,6 +65,22 @@ pub struct SwapchainInfo {
     pub heap_id: HeapId,
     pub images: Vec<ImageId>,
 }
+
+
+/// WebGpu Command API
+#[derive(Clone, Deserialize, Serialize)]
+pub enum WebGpuCommand {
+    Reset,
+    Exit,
+}
+
+pub type WebGpuCommandChan = WebGpuSender<WebGpuCommand>;
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct CommandPoolInfo {
+    pub channel: WebGpuCommandChan,
+}
+
 
 /// WebGpu Message API
 #[derive(Clone, Deserialize, Serialize)]
@@ -80,6 +98,12 @@ pub enum WebGpuMsg {
         device_id: DeviceId,
         size: Size2D<u32>,
         result: WebGpuSender<SwapchainInfo>,
+    },
+    CreateCommandPool {
+        device_id: DeviceId,
+        queue_id: QueueId,
+        max_buffers: u32,
+        result: WebGpuSender<CommandPoolInfo>,
     },
     /// Present the specified image on screen.
     Present(ImageId),

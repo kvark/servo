@@ -474,6 +474,7 @@ pub mod webglshaderprecisionformat;
 pub mod webgltexture;
 pub mod webgluniformlocation;
 pub mod webgpuadapter;
+pub mod webgpucommandpool;
 pub mod webgpucommandqueue;
 pub mod webgpudevice;
 pub mod webgpuheap;
