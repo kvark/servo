@@ -3,13 +3,14 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use euclid::Size2D;
+use heapsize::HeapSizeOf;
 use ipc_channel;
 use serde::{Deserialize, Serialize};
 use std::io;
 use webgpu_component::gpu;
 
-pub use webgpu_component::QueueType;
 
+pub use webgpu_component::gpu::QueueType;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, HeapSizeOf)]
 pub struct WebGpuContextId(pub usize);
@@ -24,12 +25,18 @@ pub fn webgpu_channel<T: Serialize + for<'de> Deserialize<'de>>(
 }
 
 pub type AdapterId = u8;
+pub type GpuId = u32;
 pub type QueueFamilyId = u32;
 pub type QueueCount = u8;
 pub type QueueId = u32;
-pub type DeviceId = u32;
 pub type HeapId = u32;
 pub type ImageId = u32;
+pub type CommandBufferId = u32;
+pub type CommandBufferEpoch = u32;
+pub type CommandPoolId = u64;
+pub type FenceId = u32;
+pub type SemaphoreId = u32;
+pub type SubmitEpoch = u32;
 
 /// Contains the WebGpuCommand sender and information about a WebGpuContext
 #[derive(Clone, Deserialize, Serialize)]
@@ -40,11 +47,17 @@ pub struct ContextInfo {
     pub adapters: Vec<AdapterInfo>,
 }
 
-#[derive(Clone, Deserialize, Serialize, HeapSizeOf)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct QueueFamilyInfo {
     pub ty: QueueType,
     pub count: QueueCount,
     pub original_id: QueueFamilyId,
+}
+
+impl HeapSizeOf for QueueFamilyInfo {
+    fn heap_size_of_children(&self) -> usize {
+        0
+    }
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -55,8 +68,8 @@ pub struct AdapterInfo {
 }
 
 #[derive(Clone, Deserialize, Serialize)]
-pub struct DeviceInfo {
-    pub id: DeviceId,
+pub struct GpuInfo {
+    pub id: GpuId,
     pub general: Vec<QueueId>,
 }
 
@@ -66,12 +79,28 @@ pub struct SwapchainInfo {
     pub images: Vec<ImageId>,
 }
 
+#[derive(Clone, Deserialize, Serialize, HeapSizeOf)]
+pub struct CommandBufferInfo {
+    pub id: CommandBufferId,
+    pub epoch: CommandBufferEpoch,
+}
+
+#[derive(Clone, Deserialize, Serialize, HeapSizeOf)]
+pub struct SubmitInfo {
+    pub pool_id: CommandPoolId,
+    pub cb: CommandBufferInfo,
+    pub submit_epoch: SubmitEpoch,
+}
+
 
 /// WebGpu Command API
 #[derive(Clone, Deserialize, Serialize)]
 pub enum WebGpuCommand {
     Reset,
     Exit,
+    AcquireCommandBuffer(WebGpuSender<CommandBufferInfo>),
+    ReturnCommandBuffer(CommandBufferId),
+    Finish(CommandBufferInfo, SubmitEpoch),
 }
 
 pub type WebGpuCommandChan = WebGpuSender<WebGpuCommand>;
@@ -79,6 +108,7 @@ pub type WebGpuCommandChan = WebGpuSender<WebGpuCommand>;
 #[derive(Clone, Deserialize, Serialize)]
 pub struct CommandPoolInfo {
     pub channel: WebGpuCommandChan,
+    pub id: CommandPoolId,
 }
 
 
@@ -91,19 +121,27 @@ pub enum WebGpuMsg {
     OpenAdapter {
         adapter_id: AdapterId,
         queue_families: Vec<(QueueFamilyId, QueueCount)>,
-        result: WebGpuSender<DeviceInfo>,
+        result: WebGpuSender<GpuInfo>,
     },
     /// Build a new swapchain on the device.
     BuildSwapchain {
-        device_id: DeviceId,
+        gpu_id: GpuId,
         size: Size2D<u32>,
         result: WebGpuSender<SwapchainInfo>,
     },
     CreateCommandPool {
-        device_id: DeviceId,
+        gpu_id: GpuId,
         queue_id: QueueId,
         max_buffers: u32,
         result: WebGpuSender<CommandPoolInfo>,
+    },
+    Submit {
+        gpu_id: GpuId,
+        queue_id: QueueId,
+        command_buffers: Vec<SubmitInfo>,
+        wait_semaphores: Vec<SemaphoreId>,
+        signal_semaphores: Vec<SemaphoreId>,
+        fence: Option<FenceId>,
     },
     /// Present the specified image on screen.
     Present(ImageId),

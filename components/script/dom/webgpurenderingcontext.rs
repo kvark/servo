@@ -39,10 +39,10 @@ impl WebGpuRenderingContext {
         receiver
             .recv()
             .unwrap()
-            .map(|mut init| {
+            .map(|init| {
                 let sender = init.sender.sender.clone();
                 let adapters = init.adapters
-                    .drain(..)
+                    .into_iter()
                     .map(|info| WebGpuAdapter::new(window, sender.clone(), info))
                     .collect();
                 WebGpuRenderingContext {
@@ -81,7 +81,7 @@ impl binding::WebGpuRenderingContextMethods for WebGpuRenderingContext {
     fn BuildSwapchain(&self, queue: &WebGpuCommandQueue) -> Root<WebGpuSwapchain> {
         let (sender, receiver) = webgpu_channel().unwrap();
         let msg = WebGpuMsg::BuildSwapchain {
-            device_id: queue.device_id(),
+            gpu_id: queue.gpu_id(),
             size: self.canvas.get_size().cast().unwrap(),
             result: sender,
         };

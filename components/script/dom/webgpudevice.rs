@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use canvas_traits::webgpu::{DeviceId, DeviceInfo, WebGpuChan};
+use canvas_traits::webgpu::{GpuId, GpuInfo, WebGpuChan};
 use dom::bindings::codegen::Bindings::WebGpuDeviceBinding as binding;
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{Reflector, reflect_dom_object};
@@ -16,7 +16,7 @@ pub struct WebGpuDevice {
     reflector_: Reflector,
     #[ignore_heap_size_of = "Channels are hard"]
     sender: WebGpuChan,
-    id: DeviceId,
+    id: GpuId,
     general_queues: Vec<Root<WebGpuCommandQueue>>,
 }
 
@@ -24,20 +24,20 @@ impl WebGpuDevice {
     pub fn new(
         global: &GlobalScope,
         sender: WebGpuChan,
-        mut device: DeviceInfo,
+        gpu: GpuInfo,
     ) -> Root<Self>
     {
-        let device_id = device.id;
-        let general_queues = device.general
-            .drain(..)
+        let gpu_id = gpu.id;
+        let general_queues = gpu.general
+            .into_iter()
             .map(|id| {
-                WebGpuCommandQueue::new(global, sender.clone(), id, device_id)
+                WebGpuCommandQueue::new(global, sender.clone(), gpu_id, id)
             })
             .collect();
         let obj = box WebGpuDevice {
             reflector_: Reflector::new(),
             sender,
-            id: device.id,
+            id: gpu_id,
             general_queues,
         };
         reflect_dom_object(obj, global, binding::Wrap)

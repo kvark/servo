@@ -5,6 +5,7 @@
 use canvas_traits::webgpu::{SwapchainInfo, WebGpuChan, WebGpuMsg};
 use dom::bindings::cell::DOMRefCell;
 use dom::bindings::codegen::Bindings::WebGpuSwapchainBinding as binding;
+use dom::bindings::codegen::Bindings::WebGpuDeviceBinding::WebGpuSemaphore;
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
@@ -94,7 +95,8 @@ impl WebGpuSwapchain {
 }
 
 impl binding::WebGpuSwapchainMethods for WebGpuSwapchain {
-    fn AcquireNextImage(&self) -> binding::WebGpuSwapchainImageId { //semaphore: binding::WebGpuSemaphore
+    fn AcquireNextImage(&self, _semaphore: WebGpuSemaphore) -> binding::WebGpuSwapchainImageId {
+        //TODO: semaphore
         self.id_rotation.borrow_mut().acquire().unwrap()
     }
 

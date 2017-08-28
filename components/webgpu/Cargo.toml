@@ -10,8 +10,9 @@ name = "webgpu"
 path = "lib.rs"
 
 [dependencies]
-gfx_corell = { path = "../../../gfx/src/corell", features = ["serialize"] }
-gfx_device_vulkanll = { path = "../../../gfx/src/backend/vulkanll" }
+gfx_core = { path = "../../../gfx/src/core", features = ["serialize"] }
+#gfx_device_gl = { path = "../../../gfx/src/backend/gl" }
+gfx_device_vulkan = { path = "../../../gfx/src/backend/vulkan" }
 heapsize = "0.4"
 heapsize_derive = "0.1"
 serde = "1"

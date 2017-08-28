@@ -42,7 +42,8 @@ impl binding::WebGpuAdapterMethods for WebGpuAdapter {
             .map(|family| {
                 binding::WebGpuQueueFamilyInfo {
                     flags: match family.ty {
-                        QueueType::Graphics => 0x7,
+                        QueueType::General => 0x7,
+                        QueueType::Graphics => 0x5,
                         QueueType::Compute => 0x6,
                         QueueType::Transfer => 0x4,
                     },
