@@ -31,10 +31,10 @@ impl<T> LazyVec<T> {
         value.1.take()
     }
 
-    pub fn retain<F: Fn(&T) -> bool>(&mut self, fun: F) {
+    pub fn retain<F: Fn(&mut T) -> bool>(&mut self, fun: F) {
         for &mut (_, ref mut option) in &mut self.inner {
             let keep = match *option {
-                Some(ref value) => fun(value),
+                Some(ref mut value) => fun(value),
                 None => true,
             };
             if !keep {

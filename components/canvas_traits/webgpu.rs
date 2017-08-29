@@ -133,7 +133,7 @@ pub enum WebGpuCommand {
     Exit,
     AcquireCommandBuffer(WebGpuSender<CommandBufferInfo>),
     ReturnCommandBuffer(CommandBufferId),
-    Finish(CommandBufferInfo, SubmitEpoch),
+    Finish(CommandBufferId, SubmitEpoch),
     PipelineBarrier(Vec<BufferBarrier>, Vec<ImageBarrier>),
 }
 

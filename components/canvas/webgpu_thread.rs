@@ -12,7 +12,8 @@ use webgpu::gpu::{self,
 use euclid::Size2D;
 
 use std::thread;
-use std::collections::hash_map::{Entry, HashMap};
+use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::sync::{mpsc, Arc};
 
 use webgpu_mode::{LazyVec, ResourceHub};
@@ -25,22 +26,39 @@ enum InternalCommand {
     ExitPool(w::CommandPoolId),
 }
 enum PoolCommand<B: gpu::Backend> {
-    FinishBuffer(w::CommandBufferInfo, w::SubmitEpoch, B::SubmitInfo),
+    FinishBuffer(w::CommandBufferId, w::SubmitEpoch, B::SubmitInfo),
+    Reset,
+    Destroy,
 }
 
 struct CommandPoolHandle<B: gpu::Backend> {
     _join: thread::JoinHandle<()>,
+    //Note: you can't have more than one buffer encoded at a single time,
+    // but you can have multiple finished command buffers ready for submission.
     submits: HashMap<w::CommandBufferId, (w::SubmitEpoch, B::SubmitInfo)>,
     receiver: mpsc::Receiver<PoolCommand<B>>,
-
+    is_alive: bool,
 }
 
 impl<B: gpu::Backend> CommandPoolHandle<B> {
-    fn receive_message(&mut self) {
-        match self.receiver.recv().unwrap() {
-            PoolCommand::FinishBuffer(cb_info, submit_epoch, submit_info) => {
-                self.submits.insert(cb_info.id, (submit_epoch, submit_info));
+    fn process_command(&mut self, command: PoolCommand<B>) {
+        match command {
+            PoolCommand::FinishBuffer(cb_id, submit_epoch, submit_info) => {
+                self.submits.insert(cb_id, (submit_epoch, submit_info));
             }
+            PoolCommand::Reset => {
+                self.submits.clear();
+            }
+            PoolCommand::Destroy => {
+                //self.join.join(
+                self.is_alive = false;
+            }
+        }
+    }
+
+    fn check_commands(&mut self) {
+        while let Ok(command) = self.receiver.recv() {
+            self.process_command(command);
         }
     }
 
@@ -50,13 +68,21 @@ impl<B: gpu::Backend> CommandPoolHandle<B> {
     ) -> B::SubmitInfo
     {
         loop {
-            if let Entry::Occupied(e) = self.submits.entry(cb_id) {
-                if e.get().0 == submit_epoch {
-                    let value = e.remove();
-                    return value.1
+            if let Some(value) = self.submits.remove(&cb_id) {
+                match value.0.cmp(&submit_epoch) {
+                    Ordering::Less => {
+                        warn!("Skipping submission epoch {:?}", value.0);
+                    }
+                    Ordering::Greater => {
+                        panic!("Stale submission epoch {:?}", value.0);
+                    }
+                    Ordering::Equal => {
+                        return value.1
+                    }
                 }
             }
-            self.receive_message();
+            let command = self.receiver.recv().unwrap();
+            self.process_command(command);
         }
     }
 }
@@ -87,6 +113,7 @@ impl WebGpuThread<backend::Backend> {
             };
             let webgpu_chan = sender;
             loop {
+                renderer.process_pool_commands();
                 let msg = receiver.recv().unwrap();
                 let exit = renderer.handle_msg(msg, &webgpu_chan);
                 if exit {
@@ -260,6 +287,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
             _join: join,
             submits: HashMap::new(),
             receiver: int_receiver,
+            is_alive: true,
         };
 
         w::CommandPoolInfo {
@@ -280,10 +308,10 @@ impl<B: gpu::Backend> WebGpuThread<B> {
             match com {
                 w::WebGpuCommand::Reset => {
                     pool.reset();
+                    channel.send(PoolCommand::Reset).unwrap();
                 }
                 w::WebGpuCommand::Exit => {
-                    //TODO
-                    //channel.send(PoolCommand::Destroy).unwrap();
+                    channel.send(PoolCommand::Destroy).unwrap();
                     return
                 }
                 w::WebGpuCommand::AcquireCommandBuffer(result) => {
@@ -302,10 +330,10 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                         pool.return_command_buffer(cb)
                     };
                 }
-                w::WebGpuCommand::Finish(info, submit_epoch) => {
+                w::WebGpuCommand::Finish(id, submit_epoch) => {
                     //TODO: check cb epoch
-                    let submit = com_buffers[info.id].finish();
-                    let cmd = PoolCommand::FinishBuffer(info, submit_epoch,submit);
+                    let submit = com_buffers[id].finish();
+                    let cmd = PoolCommand::FinishBuffer(id, submit_epoch, submit);
                     channel.send(cmd).unwrap();
                 }
                 w::WebGpuCommand::PipelineBarrier(_, _) => {
@@ -331,5 +359,12 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         unsafe {
             queue.submit_raw(submission, None)
         };
+    }
+
+    fn process_pool_commands(&mut self) {
+        self.command_pools.retain(|pool| {
+            pool.check_commands();
+            pool.is_alive
+        });
     }
 }

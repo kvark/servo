@@ -57,6 +57,10 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
     fn Finish(&self) -> Root<WebGpuSubmit> {
         let submit_epoch = self.submit_epoch.get() + 1;
         self.submit_epoch.set(submit_epoch); //TODO
+
+        let msg = WebGpuCommand::Finish(self.info.id, submit_epoch);
+        self.sender.send(msg).unwrap();
+
         let info = SubmitInfo {
             pool_id: self.pool_id,
             cb_id: self.info.id,
