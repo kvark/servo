@@ -10,7 +10,7 @@ use std::io;
 use webgpu_component::gpu;
 
 
-pub use webgpu_component::gpu::QueueType;
+pub use webgpu_component::gpu::{QueueType};
 pub use webgpu_component::gpu::buffer::State as BufferState;
 pub use webgpu_component::gpu::image::State as ImageState;
 
@@ -26,20 +26,26 @@ pub fn webgpu_channel<T: Serialize + for<'de> Deserialize<'de>>(
     ipc_channel::ipc::channel()
 }
 
+pub type Epoch = u32;
+#[derive(Clone, Copy, Hash, Eq, PartialEq, HeapSizeOf, Deserialize, Serialize)]
+pub struct Key {
+    pub index: usize, //TODO: u32
+    pub epoch: u32,
+}
+
 pub type AdapterId = u8;
-pub type GpuId = u32;
+pub type GpuId = Key;
 pub type QueueFamilyId = u32;
 pub type QueueCount = u8;
-pub type QueueId = u32;
-pub type HeapId = u32;
-pub type BufferId = u32;
-pub type ImageId = u32;
-pub type CommandBufferId = u32;
-pub type CommandBufferEpoch = u32;
-pub type CommandPoolId = u64;
+pub type QueueId = u8;
+pub type HeapId = Key;
+pub type BufferId = Key;
+pub type ImageId = Key;
+pub type CommandBufferId = Key;
+pub type CommandPoolId = Key;
 pub type FenceId = u32;
 pub type SemaphoreId = u32;
-pub type SubmitEpoch = u32;
+pub type SubmitEpoch = Epoch;
 
 /// Contains the WebGpuCommand sender and information about a WebGpuContext
 #[derive(Clone, Deserialize, Serialize)]
@@ -85,13 +91,12 @@ pub struct SwapchainInfo {
 #[derive(Clone, Deserialize, Serialize, HeapSizeOf)]
 pub struct CommandBufferInfo {
     pub id: CommandBufferId,
-    pub epoch: CommandBufferEpoch,
 }
 
 #[derive(Clone, Deserialize, Serialize, HeapSizeOf)]
 pub struct SubmitInfo {
     pub pool_id: CommandPoolId,
-    pub cb: CommandBufferInfo,
+    pub cb_id: CommandBufferId,
     pub submit_epoch: SubmitEpoch,
 }
 

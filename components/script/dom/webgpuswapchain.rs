@@ -5,11 +5,12 @@
 use canvas_traits::webgpu::{SwapchainInfo, WebGpuChan, WebGpuMsg};
 use dom::bindings::cell::DOMRefCell;
 use dom::bindings::codegen::Bindings::WebGpuSwapchainBinding as binding;
-use dom::bindings::codegen::Bindings::WebGpuDeviceBinding as dev_binding;
+use dom::bindings::codegen::Bindings::WebGpuDeviceBinding::WebGpuSemaphore; //TEMP
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
 use dom::webgpuheap::WebGpuHeap;
+use dom::webgpuimage::WebGpuImage;
 use dom_struct::dom_struct;
 
 
@@ -67,7 +68,7 @@ pub struct WebGpuSwapchain {
     #[ignore_heap_size_of = "Channels are hard"]
     sender: WebGpuChan,
     heap: Root<WebGpuHeap>,
-    images: Vec<dev_binding::WebGpuImage>,
+    images: Vec<Root<WebGpuImage>>,
     #[ignore_heap_size_of = "Nothing to see here"]
     id_rotation: DOMRefCell<IdRotation>,
 }
@@ -76,7 +77,7 @@ impl WebGpuSwapchain {
     pub fn new(
         global: &GlobalScope,
         sender: WebGpuChan,
-        mut swapchain: SwapchainInfo,
+        swapchain: SwapchainInfo,
     ) -> Root<Self>
     {
         let count = swapchain.images.len();
@@ -85,8 +86,8 @@ impl WebGpuSwapchain {
             sender,
             heap: WebGpuHeap::new(global, swapchain.heap_id),
             images: swapchain.images
-                .drain(..)
-                .map(|id| id as dev_binding::WebGpuImage)
+                .into_iter()
+                .map(|id| WebGpuImage::new(global, id))
                 .collect(),
             id_rotation: DOMRefCell::new(IdRotation::new(count as _)),
         };
@@ -96,21 +97,21 @@ impl WebGpuSwapchain {
 
 impl binding::WebGpuSwapchainMethods for WebGpuSwapchain {
     fn AcquireNextImage(&self,
-        _semaphore: dev_binding::WebGpuSemaphore,
+        _semaphore: WebGpuSemaphore,
     ) -> binding::WebGpuSwapchainImageId
     {
         //TODO: semaphore
         self.id_rotation.borrow_mut().acquire().unwrap()
     }
 
-    fn GetImages(&self) -> Vec<dev_binding::WebGpuImage> {
+    fn GetImages(&self) -> Vec<Root<WebGpuImage>> {
         self.images.clone()
     }
 
     fn Present(&self) {
         let id = self.id_rotation.borrow_mut().present().unwrap();
-        let image = self.images[id as usize];
-        let msg = WebGpuMsg::Present(image);
+        let image_key = self.images[id as usize].get_id();
+        let msg = WebGpuMsg::Present(image_key);
         self.sender.send(msg).unwrap();
     }
 }

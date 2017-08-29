@@ -37,7 +37,7 @@ impl WebGpuCommandQueue {
     }
 
     pub fn gpu_id(&self) -> GpuId {
-        self.id.1
+        self.id.0
     }
 }
 

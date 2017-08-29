@@ -8,6 +8,7 @@ use dom::bindings::js::Root;
 use dom::bindings::reflector::{Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
 use dom::webgpucommandqueue::WebGpuCommandQueue;
+use dom::webgpuimage::WebGpuImage;
 use dom_struct::dom_struct;
 
 
@@ -65,7 +66,7 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
     }
 
     fn ViewImageAsRenderTarget(&self,
-        image: binding::WebGpuImage,
+        image: &WebGpuImage,
     ) -> binding::WebGpuRenderTargetView
     {
         0

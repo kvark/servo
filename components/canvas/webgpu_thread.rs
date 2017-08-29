@@ -13,12 +13,11 @@ use euclid::Size2D;
 
 use std::thread;
 use std::collections::hash_map::{Entry, HashMap};
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc};
 
-use webgpu_mode::LazyVec;
-
+use webgpu_mode::{LazyVec, ResourceHub};
 /// WebGL Threading API entry point that lives in the constellation.
-/// It allows to get a WebGLThread handle for each script pipeline.
+/// It allows to get a WebGpuThread handle for each script pipeline.
 pub use ::webgpu_mode::WebGpuThreads;
 
 
@@ -31,7 +30,7 @@ enum PoolCommand<B: gpu::Backend> {
 
 struct CommandPoolHandle<B: gpu::Backend> {
     _join: thread::JoinHandle<()>,
-    submits: HashMap<w::CommandBufferId, (w::CommandBufferEpoch, w::SubmitEpoch, B::SubmitInfo)>,
+    submits: HashMap<w::CommandBufferId, (w::SubmitEpoch, B::SubmitInfo)>,
     receiver: mpsc::Receiver<PoolCommand<B>>,
 
 }
@@ -40,22 +39,21 @@ impl<B: gpu::Backend> CommandPoolHandle<B> {
     fn receive_message(&mut self) {
         match self.receiver.recv().unwrap() {
             PoolCommand::FinishBuffer(cb_info, submit_epoch, submit_info) => {
-                let value = (cb_info.epoch, submit_epoch, submit_info);
-                self.submits.insert(cb_info.id, value);
+                self.submits.insert(cb_info.id, (submit_epoch, submit_info));
             }
         }
     }
 
     fn extract_submit(&mut self,
-        cb: w::CommandBufferInfo,
+        cb_id: w::CommandBufferId,
         submit_epoch: w::SubmitEpoch,
     ) -> B::SubmitInfo
     {
         loop {
-            if let Entry::Occupied(e) = self.submits.entry(cb.id) {
-                if e.get().0 == cb.epoch && e.get().1 == submit_epoch {
+            if let Entry::Occupied(e) = self.submits.entry(cb_id) {
+                if e.get().0 == submit_epoch {
                     let value = e.remove();
-                    return value.2
+                    return value.1
                 }
             }
             self.receive_message();
@@ -68,8 +66,7 @@ pub struct WebGpuThread<B: gpu::Backend> {
     next_webgpu_id: usize,
     adapters: Vec<B::Adapter>,
     gpus: LazyVec<gpu::Gpu<B>>,
-    heaps: LazyVec<B::Heap>,
-    images: LazyVec<B::Image>,
+    rehub: Arc<ResourceHub<B>>,
     command_pools: LazyVec<CommandPoolHandle<B>>,
 }
 
@@ -85,8 +82,7 @@ impl WebGpuThread<backend::Backend> {
                 next_webgpu_id: 0,
                 adapters: instance.enumerate_adapters(),
                 gpus: LazyVec::new(),
-                heaps: LazyVec::new(),
-                images: LazyVec::new(),
+                rehub: ResourceHub::new(),
                 command_pools: LazyVec::new(),
             };
             let webgpu_chan = sender;
@@ -129,7 +125,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 let gpu = adapter.open(&families);
                 let general_queues = (0 .. gpu.general_queues.len() as w::QueueId).collect();
                 let info = w::GpuInfo {
-                    id: self.gpus.push(gpu).1 as w::GpuId,
+                    id: self.gpus.push(gpu),
                     general: general_queues,
                 };
                 result.send(info).unwrap();
@@ -146,8 +142,8 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 let cmd_buffers = command_buffers
                     .into_iter()
                     .map(|info| {
-                        self.command_pools[info.pool_id as usize]
-                            .extract_submit(info.cb, info.submit_epoch)
+                        self.command_pools[info.pool_id]
+                            .extract_submit(info.cb_id, info.submit_epoch)
                     })
                     .collect();
                 self.submit(gpu_id, queue_id, cmd_buffers);
@@ -196,8 +192,8 @@ impl<B: gpu::Backend> WebGpuThread<B> {
     }
 
     fn build_swapchain(&mut self, gpu_id: w::GpuId, size: Size2D<u32>) -> w::SwapchainInfo {
-        let gpu = &mut self.gpus[gpu_id as usize];
-        let image_store = &mut self.images;
+        let gpu = &mut self.gpus[gpu_id];
+        let mut image_store = self.rehub.images.write().unwrap();
         let num_frames = 3; //TODO
         let alignment = 0x3F;
         let bytes_per_image = 4 *
@@ -232,11 +228,11 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 i * bytes_per_image,
                 unbound_image,
             ).unwrap();
-            image_store.push(image).1 as w::ImageId
+            image_store.push(image)
         }).collect();
 
         w::SwapchainInfo {
-            heap_id: self.heaps.push(heap).1 as w::HeapId,
+            heap_id: self.rehub.heaps.write().unwrap().push(heap),
             images,
         }
     }
@@ -248,7 +244,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         max_buffers: u32,
     ) -> w::CommandPoolInfo
     {
-        let gpu = &mut self.gpus[gpu_id as usize];
+        let gpu = &mut self.gpus[gpu_id];
         let queue = gpu.general_queues[queue_id as usize].as_raw();//TODO
         let pool = unsafe {
             B::CommandPool::from_queue(queue, max_buffers as usize)
@@ -265,11 +261,10 @@ impl<B: gpu::Backend> WebGpuThread<B> {
             submits: HashMap::new(),
             receiver: int_receiver,
         };
-        let id = self.command_pools.push(handle).1 as w::CommandPoolId;
 
         w::CommandPoolInfo {
             channel,
-            id,
+            id: self.command_pools.push(handle),
         }
     }
 
@@ -295,23 +290,21 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                     let cb = unsafe {
                         pool.acquire_command_buffer()
                     };
-                    let (epoch, id) = com_buffers.push(cb);
                     let info = w::CommandBufferInfo {
-                        id: id as w::CommandBufferId,
-                        epoch: epoch as w::CommandBufferEpoch,
+                        id: com_buffers.push(cb),
                     };
                     result.send(info).unwrap();
                 }
                 w::WebGpuCommand::ReturnCommandBuffer(id) => {
                     //TODO: notify the gpu thread?
-                    let cb = com_buffers.pop(id as usize).unwrap();
+                    let cb = com_buffers.remove(id).unwrap();
                     unsafe {
                         pool.return_command_buffer(cb)
                     };
                 }
                 w::WebGpuCommand::Finish(info, submit_epoch) => {
                     //TODO: check cb epoch
-                    let submit = com_buffers[info.id as usize].finish();
+                    let submit = com_buffers[info.id].finish();
                     let cmd = PoolCommand::FinishBuffer(info, submit_epoch,submit);
                     channel.send(cmd).unwrap();
                 }
@@ -328,7 +321,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         queue_id: w::QueueId,
         cmd_buffers: Vec<B::SubmitInfo>,
     ) {
-        let gpu = &mut self.gpus[gpu_id as usize];
+        let gpu = &mut self.gpus[gpu_id];
         let queue = gpu.general_queues[queue_id as usize].as_mut();
         let submission = gpu::RawSubmission {
             cmd_buffers: &cmd_buffers,

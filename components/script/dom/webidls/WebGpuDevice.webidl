@@ -4,8 +4,6 @@
  
 typedef unsigned long WebGpuSemaphore;
 typedef unsigned long WebGpuFence;
-typedef unsigned long WebGpuBuffer;
-typedef unsigned long WebGpuImage;
 typedef unsigned long WebGpuRenderpass;
 typedef unsigned long WebGpuFramebuffer;
 typedef unsigned long WebGpuFormat;

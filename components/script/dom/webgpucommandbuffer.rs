@@ -59,7 +59,7 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
         self.submit_epoch.set(submit_epoch); //TODO
         let info = SubmitInfo {
             pool_id: self.pool_id,
-            cb: self.info.clone(),
+            cb_id: self.info.id,
             submit_epoch,
         };
         WebGpuSubmit::new(&self.global(), info)
@@ -74,7 +74,7 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
             .map(|bar| BufferBarrier {
                 state_src: map_buffer_state(bar.stateSrc),
                 state_dst: map_buffer_state(bar.stateDst),
-                target: bar.target,
+                target: bar.target.get_id(),
             })
             .collect();
         let images = image_bars
@@ -82,7 +82,7 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
             .map(|bar| ImageBarrier {
                 state_src: map_image_state(bar.stateSrc),
                 state_dst: map_image_state(bar.stateDst),
-                target: bar.target,
+                target: bar.target.get_id(),
             })
             .collect();
 
