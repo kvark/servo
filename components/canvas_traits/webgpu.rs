@@ -11,6 +11,8 @@ use webgpu_component::gpu;
 
 
 pub use webgpu_component::gpu::QueueType;
+pub use webgpu_component::gpu::buffer::State as BufferState;
+pub use webgpu_component::gpu::image::State as ImageState;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, HeapSizeOf)]
 pub struct WebGpuContextId(pub usize);
@@ -30,6 +32,7 @@ pub type QueueFamilyId = u32;
 pub type QueueCount = u8;
 pub type QueueId = u32;
 pub type HeapId = u32;
+pub type BufferId = u32;
 pub type ImageId = u32;
 pub type CommandBufferId = u32;
 pub type CommandBufferEpoch = u32;
@@ -92,6 +95,31 @@ pub struct SubmitInfo {
     pub submit_epoch: SubmitEpoch,
 }
 
+#[derive(Clone, Deserialize, Serialize)]
+pub struct BufferBarrier {
+    pub state_src: BufferState,
+    pub state_dst: BufferState,
+    pub target: BufferId,
+}
+
+impl HeapSizeOf for BufferBarrier {
+    fn heap_size_of_children(&self) -> usize {
+        0
+    }
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct ImageBarrier {
+    pub state_src: ImageState,
+    pub state_dst: ImageState,
+    pub target: ImageId,
+}
+
+impl HeapSizeOf for ImageBarrier {
+    fn heap_size_of_children(&self) -> usize {
+        0
+    }
+}
 
 /// WebGpu Command API
 #[derive(Clone, Deserialize, Serialize)]
@@ -101,6 +129,7 @@ pub enum WebGpuCommand {
     AcquireCommandBuffer(WebGpuSender<CommandBufferInfo>),
     ReturnCommandBuffer(CommandBufferId),
     Finish(CommandBufferInfo, SubmitEpoch),
+    PipelineBarrier(Vec<BufferBarrier>, Vec<ImageBarrier>),
 }
 
 pub type WebGpuCommandChan = WebGpuSender<WebGpuCommand>;

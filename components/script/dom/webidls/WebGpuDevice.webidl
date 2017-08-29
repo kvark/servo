@@ -4,7 +4,28 @@
  
 typedef unsigned long WebGpuSemaphore;
 typedef unsigned long WebGpuFence;
+typedef unsigned long WebGpuBuffer;
+typedef unsigned long WebGpuImage;
+typedef unsigned long WebGpuRenderpass;
+typedef unsigned long WebGpuFramebuffer;
+typedef unsigned long WebGpuFormat;
+typedef unsigned long WebGpuRenderTargetView;
+
+dictionary WebGpuAttachmentDesc {
+	required WebGpuFormat format;
+};
+dictionary WebGpuSubpassDesc {
+	sequence<unsigned long> colorAttachments;
+};
 
 interface WebGpuDevice {
-    readonly attribute WebGpuCommandQueue generalQueue; //TODO: FrozenArray<>
+	readonly attribute WebGpuCommandQueue generalQueue; //TODO: FrozenArray<>
+
+	WebGpuRenderpass createRenderPass(
+		sequence<WebGpuAttachmentDesc> attachments,
+		sequence<WebGpuSubpassDesc> subpasses
+	);
+
+	WebGpuFramebuffer createFramebuffer(sequence<WebGpuRenderTargetView> colors);
+	WebGpuRenderTargetView viewImageAsRenderTarget(WebGpuImage image);
 };

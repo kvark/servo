@@ -357,6 +357,9 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                     let cmd = PoolCommand::FinishBuffer(info, submit_epoch,submit);
                     channel.send(cmd).unwrap();
                 }
+                w::WebGpuCommand::PipelineBarrier(_, _) => {
+                    //TODO
+                }
             }
         }
     }

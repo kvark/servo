@@ -5,7 +5,7 @@
 use canvas_traits::webgpu::{SwapchainInfo, WebGpuChan, WebGpuMsg};
 use dom::bindings::cell::DOMRefCell;
 use dom::bindings::codegen::Bindings::WebGpuSwapchainBinding as binding;
-use dom::bindings::codegen::Bindings::WebGpuDeviceBinding::WebGpuSemaphore;
+use dom::bindings::codegen::Bindings::WebGpuDeviceBinding as dev_binding;
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
@@ -67,7 +67,7 @@ pub struct WebGpuSwapchain {
     #[ignore_heap_size_of = "Channels are hard"]
     sender: WebGpuChan,
     heap: Root<WebGpuHeap>,
-    images: Vec<binding::WebGpuImage>,
+    images: Vec<dev_binding::WebGpuImage>,
     #[ignore_heap_size_of = "Nothing to see here"]
     id_rotation: DOMRefCell<IdRotation>,
 }
@@ -86,7 +86,7 @@ impl WebGpuSwapchain {
             heap: WebGpuHeap::new(global, swapchain.heap_id),
             images: swapchain.images
                 .drain(..)
-                .map(|id| id as binding::WebGpuImage)
+                .map(|id| id as dev_binding::WebGpuImage)
                 .collect(),
             id_rotation: DOMRefCell::new(IdRotation::new(count as _)),
         };
@@ -95,12 +95,15 @@ impl WebGpuSwapchain {
 }
 
 impl binding::WebGpuSwapchainMethods for WebGpuSwapchain {
-    fn AcquireNextImage(&self, _semaphore: WebGpuSemaphore) -> binding::WebGpuSwapchainImageId {
+    fn AcquireNextImage(&self,
+        _semaphore: dev_binding::WebGpuSemaphore,
+    ) -> binding::WebGpuSwapchainImageId
+    {
         //TODO: semaphore
         self.id_rotation.borrow_mut().acquire().unwrap()
     }
 
-    fn GetImages(&self) -> Vec<binding::WebGpuImage> {
+    fn GetImages(&self) -> Vec<dev_binding::WebGpuImage> {
         self.images.clone()
     }
 

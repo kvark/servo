@@ -48,4 +48,26 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
     fn GeneralQueue(&self) -> Root<WebGpuCommandQueue> {
         self.general_queues[0].clone()
     }
+
+    fn CreateRenderPass(&self,
+        attachments: Vec<binding::WebGpuAttachmentDesc>,
+        subpasses: Vec<binding::WebGpuSubpassDesc>,
+    ) -> binding::WebGpuRenderpass
+    {
+        0
+    }
+
+    fn CreateFramebuffer(&self,
+        colors: Vec<binding::WebGpuRenderTargetView>,
+    ) -> binding::WebGpuFramebuffer
+    {
+        0
+    }
+
+    fn ViewImageAsRenderTarget(&self,
+        image: binding::WebGpuImage,
+    ) -> binding::WebGpuRenderTargetView
+    {
+        0
+    }
 }

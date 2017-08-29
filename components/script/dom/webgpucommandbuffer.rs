@@ -5,8 +5,10 @@
 use canvas_traits::webgpu::{
     WebGpuCommand, WebGpuCommandChan,
     CommandBufferInfo, CommandPoolId, SubmitEpoch, SubmitInfo,
+    BufferBarrier, BufferState, ImageBarrier, ImageState,
 };
 use dom::bindings::codegen::Bindings::WebGpuCommandBufferBinding as binding;
+//use dom::bindings::codegen::Bindings::WebGpuDeviceBinding as dev_binding;
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
@@ -43,6 +45,14 @@ impl WebGpuCommandBuffer {
     }
 }
 
+fn map_buffer_state(_state: binding::WebGpuBufferState) -> BufferState {
+    unimplemented!()
+}
+
+fn map_image_state(_state: binding::WebGpuImageState) -> ImageState {
+    unimplemented!()
+}
+
 impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
     fn Finish(&self) -> Root<WebGpuSubmit> {
         let submit_epoch = self.submit_epoch.get() + 1;
@@ -53,6 +63,31 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
             submit_epoch,
         };
         WebGpuSubmit::new(&self.global(), info)
+    }
+
+    fn PipelineBarrier(&self,
+        buffer_bars: Vec<binding::WebGpuBufferBarrier>,
+        image_bars: Vec<binding::WebGpuImageBarrier>,
+    ) {
+        let buffers = buffer_bars
+            .into_iter()
+            .map(|bar| BufferBarrier {
+                state_src: map_buffer_state(bar.stateSrc),
+                state_dst: map_buffer_state(bar.stateDst),
+                target: bar.target,
+            })
+            .collect();
+        let images = image_bars
+            .into_iter()
+            .map(|bar| ImageBarrier {
+                state_src: map_image_state(bar.stateSrc),
+                state_dst: map_image_state(bar.stateDst),
+                target: bar.target,
+            })
+            .collect();
+
+        let msg = WebGpuCommand::PipelineBarrier(buffers, images);
+        self.sender.send(msg).unwrap();
     }
 }
 

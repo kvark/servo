@@ -3,7 +3,6 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 typedef unsigned long WebGpuSwapchainImageId;
-typedef unsigned long WebGpuImage; //TODO
 
 interface WebGpuSwapchain {
     WebGpuSwapchainImageId acquireNextImage(WebGpuSemaphore semaphore);
