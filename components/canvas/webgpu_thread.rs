@@ -11,58 +11,16 @@ use webgpu::gpu::{self,
 
 use euclid::Size2D;
 
-use std::{ops, thread};
+use std::thread;
 use std::collections::hash_map::{Entry, HashMap};
 use std::sync::mpsc;
 
-type Epoch = u32;
+use webgpu_mode::LazyVec;
 
-struct LazyVec<T> {
-    inner: Vec<(Epoch, Option<T>)>,
-}
+/// WebGL Threading API entry point that lives in the constellation.
+/// It allows to get a WebGLThread handle for each script pipeline.
+pub use ::webgpu_mode::WebGpuThreads;
 
-impl<T> LazyVec<T> {
-    fn new() -> Self {
-        LazyVec {
-            inner: Vec::new(),
-        }
-    }
-
-    fn push(&mut self, value: T) -> (Epoch, usize) {
-        let id = self.inner.len(); //TODO: recycle
-        let epoch = 1;
-        self.inner.push((epoch, Some(value)));
-        (epoch, id)
-    }
-
-    fn pop(&mut self, index: usize) -> Option<T> {
-        self.inner[index].1.take()
-    }
-
-    fn retain<F: Fn(&T) -> bool>(&mut self, fun: F) {
-        for &mut (_, ref mut option) in &mut self.inner {
-            let keep = match *option {
-                Some(ref value) => fun(value),
-                None => true,
-            };
-            if !keep {
-                *option = None;
-            }
-        }
-    }
-}
-
-impl<T> ops::Index<usize> for LazyVec<T> {
-    type Output = T;
-    fn index(&self, index: usize) -> &T {
-        self.inner[index].1.as_ref().unwrap()
-    }
-}
-impl<T> ops::IndexMut<usize> for LazyVec<T> {
-    fn index_mut(&mut self, index: usize) -> &mut T {
-        self.inner[index].1.as_mut().unwrap()
-    }
-}
 
 enum InternalCommand {
     ExitPool(w::CommandPoolId),
@@ -380,28 +338,5 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         unsafe {
             queue.submit_raw(submission, None)
         };
-    }
-}
-
-
-/// WebGPU Threading API entry point that lives in the constellation.
-pub struct WebGpuThreads(w::WebGpuSender<w::WebGpuMsg>);
-
-impl WebGpuThreads {
-    /// Creates a new WebGpuThreads object
-    pub fn new() -> Self {
-        // This implementation creates a single `WebGpuThread` for all the pipelines.
-        WebGpuThreads(WebGpuThread::start())
-    }
-
-    /// Gets the WebGpuThread handle for each script pipeline.
-    pub fn pipeline(&self) -> w::WebGpuPipeline {
-        // This mode creates a single thread, so the existing WebGpuChan is just cloned.
-        w::WebGpuPipeline(self.0.clone())
-    }
-
-    /// Sends a exit message to close the WebGpuThreads and release all WebGpuContexts.
-    pub fn exit(&self) -> Result<(), &'static str> {
-        self.0.send(w::WebGpuMsg::Exit).map_err(|_| "Failed to send Exit message")
     }
 }
