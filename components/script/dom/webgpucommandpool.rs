@@ -43,11 +43,26 @@ impl binding::WebGpuCommandPoolMethods for WebGpuCommandPool {
         self.sender.send(msg).unwrap()
     }
 
-    fn AcquireCommandBuffer(&self) -> Root<WebGpuCommandBuffer> {
+    fn AllocateCommandBuffers(&self,
+        count: u32,
+    ) -> Vec<Root<WebGpuCommandBuffer>> {
         let (sender, receiver) = webgpu_channel().unwrap();
-        let msg = WebGpuCommand::AcquireCommandBuffer(sender);
+        let msg = WebGpuCommand::AllocateCommandBuffers(count, sender);
         self.sender.send(msg).unwrap();
-        let combuf = receiver.recv().unwrap();
-        WebGpuCommandBuffer::new(&self.global(), self.sender.clone(), self.id, combuf)
+
+        (0..count).map(|_| {
+            let cb = receiver.recv().unwrap();
+            WebGpuCommandBuffer::new(&self.global(), self.sender.clone(), self.id, cb)
+        }).collect()
+    }
+
+    fn FreeCommandBuffers(&self, cbufs: Vec<Root<WebGpuCommandBuffer>>) {
+        let cb_ids = cbufs
+            .into_iter()
+            .map(|cb| cb.get_id())
+            .collect();
+
+        let msg = WebGpuCommand::FreeCommandBuffers(cb_ids);
+        self.sender.send(msg).unwrap();
     }
 }

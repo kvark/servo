@@ -485,7 +485,6 @@ pub mod webgpuheap;
 pub mod webgpuimage;
 pub mod webgpurenderingcontext;
 pub mod webgpurenderpass;
-pub mod webgpusubmit;
 pub mod webgpuswapchain;
 pub mod websocket;
 pub mod window;

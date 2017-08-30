@@ -3,9 +3,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 interface WebGpuCommandQueue {    
-	WebGpuCommandPool createCommandPool(unsigned long maxCommandBuffers);
+	WebGpuCommandPool createCommandPool();
 	void submit(
-		sequence<WebGpuSubmit> commandBuffers,
+		sequence<WebGpuCommandBuffer> commandBuffers,
 		sequence<WebGpuSemaphore> waitSemaphores,
 		sequence<WebGpuSemaphore> signalSemaphores,
 		WebGpuFence? fence);

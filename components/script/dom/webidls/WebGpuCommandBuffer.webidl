@@ -55,7 +55,9 @@ interface WebGpuCommandBuffer {
 	const WebGpuAccess ACCESS_TRANSFER_WRITE         = 0x8;
 	const WebGpuAccess ACCESS_SHADER_READ            = 0x10;
 
-	WebGpuSubmit finish();
+	void begin();
+	void finish();
+
 	void pipelineBarrier(
 		sequence<WebGpuBufferBarrier> buffers,
 		sequence<WebGpuImageBarrier> images

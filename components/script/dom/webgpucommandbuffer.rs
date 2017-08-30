@@ -5,16 +5,15 @@
 use canvas_traits::webgpu::{
     WebGpuCommand, WebGpuCommandChan,
     BufferBarrier, ImageBarrier,
-    CommandBufferInfo, CommandPoolId, SubmitEpoch, SubmitInfo,
+    CommandBufferId, CommandBufferInfo, CommandPoolId, SubmitEpoch, SubmitInfo,
     gpu,
 };
 use dom::bindings::codegen::Bindings::WebGpuCommandBufferBinding as binding;
 use dom::bindings::js::Root;
-use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
+use dom::bindings::reflector::{Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
 use dom::webgpuframebuffer::WebGpuFramebuffer;
 use dom::webgpurenderpass::WebGpuRenderpass;
-use dom::webgpusubmit::WebGpuSubmit;
 use dom_struct::dom_struct;
 use std::cell::Cell;
 
@@ -26,7 +25,7 @@ pub struct WebGpuCommandBuffer {
     sender: WebGpuCommandChan,
     pool_id: CommandPoolId,
     info: CommandBufferInfo,
-    submit_epoch: Cell<SubmitEpoch>,
+    submit_epoch: Cell<SubmitEpoch>, //TODO: atomics
 }
 
 impl WebGpuCommandBuffer {
@@ -44,6 +43,18 @@ impl WebGpuCommandBuffer {
             submit_epoch: Cell::new(0),
         };
         reflect_dom_object(obj, global, binding::Wrap)
+    }
+
+    pub fn get_id(&self) -> CommandBufferId {
+        self.info.id
+    }
+
+    pub fn to_submit_info(&self) -> SubmitInfo {
+        SubmitInfo {
+            pool_id: self.pool_id,
+            cb_id: self.info.id,
+            submit_epoch: self.submit_epoch.get(),
+        }
     }
 }
 
@@ -72,19 +83,18 @@ fn map_image_state(state: binding::WebGpuImageState) -> gpu::image::State {
 }
 
 impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
-    fn Finish(&self) -> Root<WebGpuSubmit> {
+    fn Begin(&self) {
+        //TODO: remember if we are actively recording
+        let msg = WebGpuCommand::Begin(self.info.id);
+        self.sender.send(msg).unwrap();
+    }
+
+    fn Finish(&self) {
         let submit_epoch = self.submit_epoch.get() + 1;
         self.submit_epoch.set(submit_epoch); //TODO
 
         let msg = WebGpuCommand::Finish(submit_epoch);
         self.sender.send(msg).unwrap();
-
-        let info = SubmitInfo {
-            pool_id: self.pool_id,
-            cb_id: self.info.id,
-            submit_epoch,
-        };
-        WebGpuSubmit::new(&self.global(), info)
     }
 
     fn PipelineBarrier(&self,
@@ -125,13 +135,6 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
 
     fn EndRenderpass(&self) {
         let msg = WebGpuCommand::EndRenderpass;
-        self.sender.send(msg).unwrap();
-    }
-}
-
-impl Drop for WebGpuCommandBuffer {
-    fn drop(&mut self) {
-        let msg = WebGpuCommand::ReturnCommandBuffer(self.info.id);
         self.sender.send(msg).unwrap();
     }
 }

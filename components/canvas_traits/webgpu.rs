@@ -24,7 +24,7 @@ pub fn webgpu_channel<T: Serialize + for<'de> Deserialize<'de>>(
 }
 
 pub type Epoch = u32;
-#[derive(Clone, Copy, Hash, Eq, PartialEq, HeapSizeOf, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, HeapSizeOf, Deserialize, Serialize)]
 pub struct Key {
     pub index: usize, //TODO: u32
     pub epoch: u32,
@@ -164,8 +164,9 @@ pub struct RenderpassDesc {
 pub enum WebGpuCommand {
     Reset,
     Exit,
-    AcquireCommandBuffer(WebGpuSender<CommandBufferInfo>),
-    ReturnCommandBuffer(CommandBufferId),
+    AllocateCommandBuffers(u32, WebGpuSender<CommandBufferInfo>),
+    FreeCommandBuffers(Vec<CommandBufferId>),
+    Begin(CommandBufferId),
     Finish(SubmitEpoch),
     PipelineBarrier(Vec<BufferBarrier>, Vec<ImageBarrier>),
     BeginRenderpass(RenderpassId, FramebufferId), //TODO
@@ -201,7 +202,6 @@ pub enum WebGpuMsg {
     CreateCommandPool {
         gpu_id: GpuId,
         queue_id: QueueId,
-        max_buffers: u32,
         result: WebGpuSender<CommandPoolInfo>,
     },
     Submit {

@@ -8,9 +8,9 @@ use dom::bindings::codegen::Bindings::WebGpuDeviceBinding::WebGpuSemaphore;
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
+use dom::webgpucommandbuffer::WebGpuCommandBuffer;
 use dom::webgpucommandpool::WebGpuCommandPool;
 use dom::webgpufence::WebGpuFence;
-use dom::webgpusubmit::WebGpuSubmit;
 use dom_struct::dom_struct;
 
 
@@ -43,12 +43,11 @@ impl WebGpuCommandQueue {
 }
 
 impl binding::WebGpuCommandQueueMethods for WebGpuCommandQueue {
-    fn CreateCommandPool(&self, max_buffers: u32) -> Root<WebGpuCommandPool> {
+    fn CreateCommandPool(&self) -> Root<WebGpuCommandPool> {
         let (sender, receiver) = webgpu_channel().unwrap();
         let msg = WebGpuMsg::CreateCommandPool {
             gpu_id: self.id.0,
             queue_id: self.id.1,
-            max_buffers,
             result: sender,
         };
         self.sender.send(msg).unwrap();
@@ -58,7 +57,7 @@ impl binding::WebGpuCommandQueueMethods for WebGpuCommandQueue {
     }
 
     fn Submit(&self,
-        command_bufs: Vec<Root<WebGpuSubmit>>,
+        command_bufs: Vec<Root<WebGpuCommandBuffer>>,
         _waits: Vec<WebGpuSemaphore>,
         _signals: Vec<WebGpuSemaphore>,
         fence: Option<&WebGpuFence>,
@@ -67,8 +66,8 @@ impl binding::WebGpuCommandQueueMethods for WebGpuCommandQueue {
             gpu_id: self.id.0,
             queue_id: self.id.1,
             command_buffers: command_bufs
-                .iter()
-                .map(|cb| cb.to_info())
+                .into_iter()
+                .map(|cb| cb.to_submit_info())
                 .collect(),
             wait_semaphores: Vec::new(), //TODO
             signal_semaphores: Vec::new(), //TODO

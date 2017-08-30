@@ -23,7 +23,7 @@ pub use ::webgpu_mode::WebGpuThreads;
 
 
 enum PoolCommand<B: gpu::Backend> {
-    FinishBuffer(w::CommandBufferId, w::SubmitEpoch, B::SubmitInfo),
+    FinishBuffer(w::CommandBufferId, w::SubmitEpoch, B::CommandBuffer),
     Reset,
     Destroy,
 }
@@ -32,7 +32,7 @@ struct CommandPoolHandle<B: gpu::Backend> {
     _join: thread::JoinHandle<()>,
     //Note: you can't have more than one buffer encoded at a single time,
     // but you can have multiple finished command buffers ready for submission.
-    submits: HashMap<w::CommandBufferId, (w::SubmitEpoch, B::SubmitInfo)>,
+    submits: HashMap<w::CommandBufferId, (w::SubmitEpoch, B::CommandBuffer)>,
     receiver: mpsc::Receiver<PoolCommand<B>>,
     is_alive: bool,
 }
@@ -40,8 +40,8 @@ struct CommandPoolHandle<B: gpu::Backend> {
 impl<B: gpu::Backend> CommandPoolHandle<B> {
     fn process_command(&mut self, command: PoolCommand<B>) {
         match command {
-            PoolCommand::FinishBuffer(cb_id, submit_epoch, submit_info) => {
-                self.submits.insert(cb_id, (submit_epoch, submit_info));
+            PoolCommand::FinishBuffer(cb_id, submit_epoch, cb) => {
+                self.submits.insert(cb_id, (submit_epoch, cb));
             }
             PoolCommand::Reset => {
                 self.submits.clear();
@@ -62,7 +62,7 @@ impl<B: gpu::Backend> CommandPoolHandle<B> {
     fn extract_submit(&mut self,
         cb_id: w::CommandBufferId,
         submit_epoch: w::SubmitEpoch,
-    ) -> B::SubmitInfo
+    ) -> B::CommandBuffer
     {
         loop {
             if let Some(value) = self.submits.remove(&cb_id) {
@@ -160,8 +160,8 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 let swapchain = self.build_swapchain(gpu_id, size);
                 result.send(swapchain).unwrap();
             }
-            w::WebGpuMsg::CreateCommandPool { gpu_id, queue_id, max_buffers, result } => {
-                let command_pool = self.create_command_pool(gpu_id, queue_id, max_buffers);
+            w::WebGpuMsg::CreateCommandPool { gpu_id, queue_id, result } => {
+                let command_pool = self.create_command_pool(gpu_id, queue_id);
                 result.send(command_pool).unwrap();
             }
             w::WebGpuMsg::Submit { gpu_id, queue_id, command_buffers, .. } => {
@@ -297,13 +297,12 @@ impl<B: gpu::Backend> WebGpuThread<B> {
     fn create_command_pool(&mut self,
         gpu_id: w::GpuId,
         queue_id: w::QueueId,
-        max_buffers: u32,
     ) -> w::CommandPoolInfo
     {
         let gpu = &mut self.gpus[gpu_id];
         let queue = gpu.general_queues[queue_id as usize].as_raw();//TODO
         let pool = unsafe {
-            B::CommandPool::from_queue(queue, max_buffers as usize)
+            B::CommandPool::from_queue(queue)
         };
 
         let (channel, receiver) = w::webgpu_channel().unwrap();
@@ -339,38 +338,49 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         while let Ok(com) = receiver.recv() {
             match com {
                 w::WebGpuCommand::Reset => {
-                    debug_assert!(active_id.is_none());
+                    debug_assert_eq!(active_id, None);
                     pool.reset();
                     channel.send(PoolCommand::Reset).unwrap();
                 }
                 w::WebGpuCommand::Exit => {
-                    debug_assert!(active_id.is_none());
+                    debug_assert_eq!(active_id, None);
                     channel.send(PoolCommand::Destroy).unwrap();
                     return
                 }
-                w::WebGpuCommand::AcquireCommandBuffer(result) => {
-                    debug_assert!(active_id.is_none());
-                    let cb = unsafe {
-                        pool.acquire_command_buffer()
-                    };
-                    let info = w::CommandBufferInfo {
-                        id: com_buffers.push(cb),
-                    };
-                    active_id = Some(info.id);
-                    result.send(info).unwrap();
+                w::WebGpuCommand::AllocateCommandBuffers(count, result) => {
+                    let cbufs = pool.allocate(count as _);
+
+                    for cb in cbufs.into_iter() {
+                        let info = w::CommandBufferInfo {
+                            id: com_buffers.push(cb),
+                        };
+                        result.send(info).unwrap();
+                    }
                 }
-                w::WebGpuCommand::ReturnCommandBuffer(id) => {
-                    debug_assert!(active_id != Some(id));
+                w::WebGpuCommand::FreeCommandBuffers(cb_ids) => {
+                    let cbufs = cb_ids
+                        .into_iter()
+                        .map(|id| {
+                            debug_assert_ne!(active_id, Some(id));
+                            com_buffers.remove(id).unwrap()
+                        })
+                        .collect::<Vec<_>>();
+
                     //TODO: notify the gpu thread?
-                    let cb = com_buffers.remove(id).unwrap();
                     unsafe {
-                        pool.return_command_buffer(cb)
+                        pool.free(cbufs)
                     };
+                }
+                w::WebGpuCommand::Begin(id) => {
+                    debug_assert_eq!(active_id, None);
+                    active_id = Some(id);
+                    com_buffers[id].begin();
                 }
                 w::WebGpuCommand::Finish(submit_epoch) => {
                     //TODO: check cb epoch
                     let id = active_id.unwrap();
-                    let submit = com_buffers[id].finish();
+                    com_buffers[id].finish();
+                    let submit = com_buffers[id].clone();
                     let cmd = PoolCommand::FinishBuffer(id, submit_epoch, submit);
                     active_id = None;
                     channel.send(cmd).unwrap();
@@ -418,7 +428,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
     fn submit(&mut self,
         gpu_id: w::GpuId,
         queue_id: w::QueueId,
-        cmd_buffers: Vec<B::SubmitInfo>,
+        cmd_buffers: Vec<B::CommandBuffer>,
     ) {
         let gpu = &mut self.gpus[gpu_id];
         let queue = gpu.general_queues[queue_id as usize].as_mut();

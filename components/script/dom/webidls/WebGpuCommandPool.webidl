@@ -4,5 +4,6 @@
 
 interface WebGpuCommandPool {    
     void reset();
-    WebGpuCommandBuffer acquireCommandBuffer();
+    sequence<WebGpuCommandBuffer> allocateCommandBuffers(unsigned long count);
+    void freeCommandBuffers(sequence<WebGpuCommandBuffer> com_bufs);
 };
