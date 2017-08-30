@@ -40,7 +40,7 @@ pub type BufferId = Key;
 pub type ImageId = Key;
 pub type CommandBufferId = Key;
 pub type CommandPoolId = Key;
-pub type FenceId = u32;
+pub type FenceId = Key;
 pub type SemaphoreId = u32;
 pub type SubmitEpoch = Epoch;
 pub type FramebufferId = Key;
@@ -211,6 +211,21 @@ pub enum WebGpuMsg {
         wait_semaphores: Vec<SemaphoreId>,
         signal_semaphores: Vec<SemaphoreId>,
         fence: Option<FenceId>,
+    },
+    CreateFence {
+        gpu_id: GpuId,
+        set: bool,
+        result: WebGpuSender<FenceId>,
+    },
+    ResetFences {
+        gpu_id: GpuId,
+        fences: Vec<FenceId>,
+    },
+    WaitForFences {
+        gpu_id: GpuId,
+        fences: Vec<FenceId>,
+        mode: gpu::device::WaitFor,
+        timeout: u32,
     },
     CreateFramebuffer {
         gpu_id: GpuId,

@@ -8,5 +8,5 @@ interface WebGpuCommandQueue {
 		sequence<WebGpuSubmit> commandBuffers,
 		sequence<WebGpuSemaphore> waitSemaphores,
 		sequence<WebGpuSemaphore> signalSemaphores,
-		WebGpuFence fence);
+		WebGpuFence? fence);
 };

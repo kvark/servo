@@ -180,6 +180,28 @@ impl<B: gpu::Backend> WebGpuThread<B> {
             w::WebGpuMsg::Exit => {
                 return true;
             }
+            w::WebGpuMsg::CreateFence { gpu_id, set, result } => {
+                let fence = self.create_fence(gpu_id, set);
+                result.send(fence).unwrap();
+            }
+            w::WebGpuMsg::ResetFences { gpu_id, fences } => {
+                let gpu = &mut self.gpus[gpu_id];
+                let store = self.rehub.fences.read().unwrap();
+                let fences_raw = fences
+                    .into_iter()
+                    .map(|f| &store[f])
+                    .collect::<Vec<_>>();
+                gpu.device.reset_fences(&fences_raw);
+            }
+            w::WebGpuMsg::WaitForFences { gpu_id, fences, mode, timeout } => {
+                let gpu = &mut self.gpus[gpu_id];
+                let store = self.rehub.fences.read().unwrap();
+                let fences_raw = fences
+                    .into_iter()
+                    .map(|f| &store[f])
+                    .collect::<Vec<_>>();
+                gpu.device.wait_for_fences(&fences_raw, mode, timeout);
+            }
             w::WebGpuMsg::CreateFramebuffer { gpu_id, desc, result } => {
                 let framebuffer = self.create_framebuffer(gpu_id, desc);
                 result.send(framebuffer).unwrap();
@@ -415,6 +437,16 @@ impl<B: gpu::Backend> WebGpuThread<B> {
             pool.check_commands();
             pool.is_alive
         });
+    }
+
+    fn create_fence(&mut self,
+        gpu_id: w::GpuId,
+        set: bool,
+    ) -> w::FenceId {
+        let gpu = &mut self.gpus[gpu_id];
+
+        let fence = gpu.device.create_fence(set);
+        self.rehub.fences.write().unwrap().push(fence)
     }
 
     fn create_framebuffer(&mut self,

@@ -4,11 +4,12 @@
 
 use canvas_traits::webgpu::{GpuId, QueueId, WebGpuChan, WebGpuMsg, webgpu_channel};
 use dom::bindings::codegen::Bindings::WebGpuCommandQueueBinding as binding;
-use dom::bindings::codegen::Bindings::WebGpuDeviceBinding::{WebGpuFence, WebGpuSemaphore};
+use dom::bindings::codegen::Bindings::WebGpuDeviceBinding::WebGpuSemaphore;
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
 use dom::webgpucommandpool::WebGpuCommandPool;
+use dom::webgpufence::WebGpuFence;
 use dom::webgpusubmit::WebGpuSubmit;
 use dom_struct::dom_struct;
 
@@ -60,7 +61,7 @@ impl binding::WebGpuCommandQueueMethods for WebGpuCommandQueue {
         command_bufs: Vec<Root<WebGpuSubmit>>,
         _waits: Vec<WebGpuSemaphore>,
         _signals: Vec<WebGpuSemaphore>,
-        _fence: WebGpuFence,
+        fence: Option<&WebGpuFence>,
     ) {
         let msg = WebGpuMsg::Submit {
             gpu_id: self.id.0,
@@ -71,7 +72,7 @@ impl binding::WebGpuCommandQueueMethods for WebGpuCommandQueue {
                 .collect(),
             wait_semaphores: Vec::new(), //TODO
             signal_semaphores: Vec::new(), //TODO
-            fence: None, //TODO
+            fence: fence.map(|f| f.get_id()),
         };
         self.sender.send(msg).unwrap();
     }

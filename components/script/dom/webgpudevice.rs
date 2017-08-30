@@ -3,12 +3,13 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use canvas_traits::webgpu::{GpuId, GpuInfo, WebGpuChan, WebGpuMsg,
-    FramebufferDesc, RenderpassDesc, webgpu_channel};
+    FramebufferDesc, RenderpassDesc, webgpu_channel, gpu};
 use dom::bindings::codegen::Bindings::WebGpuDeviceBinding as binding;
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
 use dom::webgpucommandqueue::WebGpuCommandQueue;
+use dom::webgpufence::WebGpuFence;
 use dom::webgpuframebuffer::WebGpuFramebuffer;
 use dom::webgpuimage::WebGpuImage;
 use dom::webgpurenderpass::WebGpuRenderpass;
@@ -51,6 +52,55 @@ impl WebGpuDevice {
 impl binding::WebGpuDeviceMethods for WebGpuDevice {
     fn GeneralQueue(&self) -> Root<WebGpuCommandQueue> {
         self.general_queues[0].clone()
+    }
+
+    fn CreateFence(&self, set: bool) -> Root<WebGpuFence> {
+        let (sender, receiver) = webgpu_channel().unwrap();
+        let msg = WebGpuMsg::CreateFence {
+            gpu_id: self.id,
+            set,
+            result: sender,
+        };
+        self.sender.send(msg).unwrap();
+
+        let fence = receiver.recv().unwrap();
+        WebGpuFence::new(&self.global(), fence)
+    }
+
+    fn ResetFences(&self, fences: Vec<Root<WebGpuFence>>) {
+        let fence_ids = fences
+            .into_iter()
+            .map(|f| f.get_id())
+            .collect();
+
+        let msg = WebGpuMsg::ResetFences {
+            gpu_id: self.id,
+            fences: fence_ids,
+        };
+        self.sender.send(msg).unwrap();
+    }
+
+    fn WaitForFences(&self,
+        fences: Vec<Root<WebGpuFence>>,
+        wait_mode: binding::WebGpuFenceWait,
+        timeout: u32,
+    ) {
+        let fence_ids = fences
+            .into_iter()
+            .map(|f| f.get_id())
+            .collect();
+        let mode = match wait_mode {
+            binding::WebGpuFenceWait::Any => gpu::device::WaitFor::Any,
+            binding::WebGpuFenceWait::All => gpu::device::WaitFor::All,
+        };
+
+        let msg = WebGpuMsg::WaitForFences {
+            gpu_id: self.id,
+            fences: fence_ids,
+            mode,
+            timeout,
+        };
+        self.sender.send(msg).unwrap();
     }
 
     fn CreateRenderpass(&self,

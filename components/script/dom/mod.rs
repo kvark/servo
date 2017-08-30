@@ -479,6 +479,7 @@ pub mod webgpucommandbuffer;
 pub mod webgpucommandpool;
 pub mod webgpucommandqueue;
 pub mod webgpudevice;
+pub mod webgpufence;
 pub mod webgpuframebuffer;
 pub mod webgpuheap;
 pub mod webgpuimage;
