@@ -22,9 +22,6 @@ use webgpu_mode::{LazyVec, ResourceHub};
 pub use ::webgpu_mode::WebGpuThreads;
 
 
-enum InternalCommand {
-    ExitPool(w::CommandPoolId),
-}
 enum PoolCommand<B: gpu::Backend> {
     FinishBuffer(w::CommandBufferId, w::SubmitEpoch, B::SubmitInfo),
     Reset,
@@ -92,6 +89,7 @@ pub struct WebGpuThread<B: gpu::Backend> {
     next_webgpu_id: usize,
     adapters: Vec<B::Adapter>,
     gpus: LazyVec<gpu::Gpu<B>>,
+    heaps: LazyVec<B::Heap>,
     rehub: Arc<ResourceHub<B>>,
     command_pools: LazyVec<CommandPoolHandle<B>>,
 }
@@ -108,6 +106,7 @@ impl WebGpuThread<backend::Backend> {
                 next_webgpu_id: 0,
                 adapters: instance.enumerate_adapters(),
                 gpus: LazyVec::new(),
+                heaps: LazyVec::new(),
                 rehub: ResourceHub::new(),
                 command_pools: LazyVec::new(),
             };
@@ -180,6 +179,14 @@ impl<B: gpu::Backend> WebGpuThread<B> {
             }
             w::WebGpuMsg::Exit => {
                 return true;
+            }
+            w::WebGpuMsg::CreateFramebuffer { gpu_id, desc, result } => {
+                let framebuffer = self.create_framebuffer(gpu_id, desc);
+                result.send(framebuffer).unwrap();
+            }
+            w::WebGpuMsg::CreateRenderpass { gpu_id, desc, result } => {
+                let renderpass = self.create_renderpass(gpu_id, desc);
+                result.send(renderpass).unwrap();
             }
         }
 
@@ -259,7 +266,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         }).collect();
 
         w::SwapchainInfo {
-            heap_id: self.rehub.heaps.write().unwrap().push(heap),
+            heap_id: self.heaps.push(heap),
             images,
         }
     }
@@ -279,9 +286,10 @@ impl<B: gpu::Backend> WebGpuThread<B> {
 
         let (channel, receiver) = w::webgpu_channel().unwrap();
         let (int_sender, int_receiver) = mpsc::channel();
+        let rehub = self.rehub.clone();
 
         let join = thread::spawn(move|| {
-            Self::run_command_thread(receiver, int_sender, pool)
+            Self::run_command_thread(receiver, int_sender, pool, rehub)
         });
         let handle = CommandPoolHandle {
             _join: join,
@@ -301,43 +309,84 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         receiver: w::WebGpuReceiver<w::WebGpuCommand>,
         channel: mpsc::Sender<PoolCommand<B>>,
         mut pool: B::CommandPool,
+        rehub: Arc<ResourceHub<B>>,
     ) {
         let mut com_buffers = LazyVec::new();
+        let mut active_id = None;
 
         while let Ok(com) = receiver.recv() {
             match com {
                 w::WebGpuCommand::Reset => {
+                    debug_assert!(active_id.is_none());
                     pool.reset();
                     channel.send(PoolCommand::Reset).unwrap();
                 }
                 w::WebGpuCommand::Exit => {
+                    debug_assert!(active_id.is_none());
                     channel.send(PoolCommand::Destroy).unwrap();
                     return
                 }
                 w::WebGpuCommand::AcquireCommandBuffer(result) => {
+                    debug_assert!(active_id.is_none());
                     let cb = unsafe {
                         pool.acquire_command_buffer()
                     };
                     let info = w::CommandBufferInfo {
                         id: com_buffers.push(cb),
                     };
+                    active_id = Some(info.id);
                     result.send(info).unwrap();
                 }
                 w::WebGpuCommand::ReturnCommandBuffer(id) => {
+                    debug_assert!(active_id != Some(id));
                     //TODO: notify the gpu thread?
                     let cb = com_buffers.remove(id).unwrap();
                     unsafe {
                         pool.return_command_buffer(cb)
                     };
                 }
-                w::WebGpuCommand::Finish(id, submit_epoch) => {
+                w::WebGpuCommand::Finish(submit_epoch) => {
                     //TODO: check cb epoch
+                    let id = active_id.unwrap();
                     let submit = com_buffers[id].finish();
                     let cmd = PoolCommand::FinishBuffer(id, submit_epoch, submit);
+                    active_id = None;
                     channel.send(cmd).unwrap();
                 }
-                w::WebGpuCommand::PipelineBarrier(_, _) => {
+                w::WebGpuCommand::PipelineBarrier(buffer_bars, image_bars) => {
+                    let cb = &mut com_buffers[active_id.unwrap()];
+                    let buffer_store = rehub.buffers.read().unwrap();
+                    let image_store = rehub.images.read().unwrap();
+
+                    let buffer_iter = buffer_bars
+                        .into_iter()
+                        .map(|bar| gpu::memory::Barrier::Buffer {
+                            state_src: bar.state_src,
+                            state_dst: bar.state_dst,
+                            target: &buffer_store[bar.target],
+                            range: 0..1, //TODO
+                        });
+
+                    let image_iter = image_bars
+                        .into_iter()
+                        .map(|bar| gpu::memory::Barrier::Image {
+                            state_src: bar.state_src,
+                            state_dst: bar.state_dst,
+                            target: &image_store[bar.target],
+                            range: (0..1, 0..1), //TODO
+                        });
+
+                    let barriers = buffer_iter
+                        .chain(image_iter)
+                        .collect::<Vec<_>>();
+                    cb.pipeline_barrier(&barriers);
+                }
+                w::WebGpuCommand::BeginRenderpass(renderpass, framebuffer) => {
                     //TODO
+                }
+                w::WebGpuCommand::EndRenderpass => {
+                    let cb = &mut com_buffers[active_id.unwrap()];
+                    cb.end_renderpass();
                 }
             }
         }
@@ -366,5 +415,59 @@ impl<B: gpu::Backend> WebGpuThread<B> {
             pool.check_commands();
             pool.is_alive
         });
+    }
+
+    fn create_framebuffer(&mut self,
+        gpu_id: w::GpuId,
+        desc: w::FramebufferDesc,
+    ) -> w::FramebufferInfo {
+        let gpu = &mut self.gpus[gpu_id];
+
+        let renderpass = &self.rehub.renderpasses.read().unwrap()[desc.renderpass];
+        let rtv_store = self.rehub.rtvs.read().unwrap();
+        let color_attachments = desc.colors
+            .into_iter()
+            .map(|id| &rtv_store[id])
+            .collect::<Vec<_>>();
+        let dsv_store = self.rehub.dsvs.read().unwrap();
+        let depth_stencil_attachments = desc.depth_stencil
+            .into_iter()
+            .map(|id| &dsv_store[id])
+            .collect::<Vec<_>>();
+        let fbo = gpu.device.create_framebuffer(
+            renderpass,
+            &color_attachments,
+            &depth_stencil_attachments,
+            desc.width,
+            desc.height,
+            desc.layers,
+        );
+
+        w::FramebufferInfo {
+            id: self.rehub.framebuffers.write().unwrap().push(fbo),
+        }
+    }
+
+    fn create_renderpass(&mut self,
+        gpu_id: w::GpuId,
+        desc: w::RenderpassDesc,
+    ) -> w::RenderpassInfo {
+        let gpu = &mut self.gpus[gpu_id];
+
+        let subpasses = desc.subpasses
+            .iter()
+            .map(|sp| gpu::pass::SubpassDesc {
+                color_attachments: &sp.colors,
+            })
+            .collect::<Vec<_>>();
+        let rp = gpu.device.create_renderpass(
+            &desc.attachments,
+            &subpasses,
+            &desc.dependencies,
+        );
+
+        w::RenderpassInfo {
+            id: self.rehub.renderpasses.write().unwrap().push(rp),
+        }
     }
 }

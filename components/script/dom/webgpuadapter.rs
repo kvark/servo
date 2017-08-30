@@ -3,8 +3,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use canvas_traits::webgpu::{
-    AdapterId, AdapterInfo, QueueCount, QueueFamilyId, QueueFamilyInfo, QueueType,
-    WebGpuChan, WebGpuMsg, webgpu_channel,
+    AdapterId, AdapterInfo, QueueCount, QueueFamilyId, QueueFamilyInfo,
+    WebGpuChan, WebGpuMsg, gpu, webgpu_channel,
 };
 use dom::bindings::codegen::Bindings::WebGpuAdapterBinding as binding;
 use dom::bindings::js::Root;
@@ -42,10 +42,10 @@ impl binding::WebGpuAdapterMethods for WebGpuAdapter {
             .map(|family| {
                 binding::WebGpuQueueFamilyInfo {
                     flags: match family.ty {
-                        QueueType::General => 0x7,
-                        QueueType::Graphics => 0x5,
-                        QueueType::Compute => 0x6,
-                        QueueType::Transfer => 0x4,
+                        gpu::QueueType::General => 0x7,
+                        gpu::QueueType::Graphics => 0x5,
+                        gpu::QueueType::Compute => 0x6,
+                        gpu::QueueType::Transfer => 0x4,
                     },
                     count: family.count as binding::WebGpuQueueCount,
                     id: family.original_id as binding::WebGpuQueueFamilyId,

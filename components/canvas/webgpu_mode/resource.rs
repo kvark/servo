@@ -7,17 +7,23 @@ use webgpu::gpu;
 use super::LazyVec;
 
 pub struct ResourceHub<B: gpu::Backend> {
-    pub heaps: RwLock<LazyVec<B::Heap>>,
     pub buffers: RwLock<LazyVec<B::Buffer>>,
     pub images: RwLock<LazyVec<B::Image>>,
+    pub framebuffers: RwLock<LazyVec<B::FrameBuffer>>,
+    pub renderpasses: RwLock<LazyVec<B::RenderPass>>,
+    pub rtvs: RwLock<LazyVec<B::RenderTargetView>>,
+    pub dsvs: RwLock<LazyVec<B::DepthStencilView>>,
 }
 
 impl<B: gpu::Backend> ResourceHub<B> {
     pub fn new() -> Arc<Self> {
         Arc::new(ResourceHub {
-            heaps: RwLock::new(LazyVec::new()),
             buffers: RwLock::new(LazyVec::new()),
             images: RwLock::new(LazyVec::new()),
+            framebuffers: RwLock::new(LazyVec::new()),
+            renderpasses: RwLock::new(LazyVec::new()),
+            rtvs: RwLock::new(LazyVec::new()),
+            dsvs: RwLock::new(LazyVec::new()),
         })
     }
 }

@@ -7,12 +7,9 @@ use heapsize::HeapSizeOf;
 use ipc_channel;
 use serde::{Deserialize, Serialize};
 use std::io;
-use webgpu_component::gpu;
 
+pub use webgpu_component::gpu;
 
-pub use webgpu_component::gpu::{QueueType};
-pub use webgpu_component::gpu::buffer::State as BufferState;
-pub use webgpu_component::gpu::image::State as ImageState;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, HeapSizeOf)]
 pub struct WebGpuContextId(pub usize);
@@ -46,6 +43,10 @@ pub type CommandPoolId = Key;
 pub type FenceId = u32;
 pub type SemaphoreId = u32;
 pub type SubmitEpoch = Epoch;
+pub type FramebufferId = Key;
+pub type RenderpassId = Key;
+pub type RenderTargetViewId = Key;
+pub type DepthStencilViewId = Key;
 
 /// Contains the WebGpuCommand sender and information about a WebGpuContext
 #[derive(Clone, Deserialize, Serialize)]
@@ -58,7 +59,7 @@ pub struct ContextInfo {
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct QueueFamilyInfo {
-    pub ty: QueueType,
+    pub ty: gpu::QueueType,
     pub count: QueueCount,
     pub original_id: QueueFamilyId,
 }
@@ -102,8 +103,8 @@ pub struct SubmitInfo {
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct BufferBarrier {
-    pub state_src: BufferState,
-    pub state_dst: BufferState,
+    pub state_src: gpu::buffer::State,
+    pub state_dst: gpu::buffer::State,
     pub target: BufferId,
 }
 
@@ -115,8 +116,8 @@ impl HeapSizeOf for BufferBarrier {
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct ImageBarrier {
-    pub state_src: ImageState,
-    pub state_dst: ImageState,
+    pub state_src: gpu::image::State,
+    pub state_dst: gpu::image::State,
     pub target: ImageId,
 }
 
@@ -126,6 +127,38 @@ impl HeapSizeOf for ImageBarrier {
     }
 }
 
+#[derive(Clone, Deserialize, Serialize)]
+pub struct FramebufferInfo {
+    pub id: FramebufferId,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct FramebufferDesc {
+    pub renderpass: RenderpassId,
+    pub colors: Vec<RenderTargetViewId>,
+    pub depth_stencil: Option<DepthStencilViewId>,
+    pub width: u32,
+    pub height: u32,
+    pub layers: u32,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct RenderpassInfo {
+    pub id: RenderpassId,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct SubpassDesc {
+    pub colors: Vec<gpu::pass::AttachmentRef>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct RenderpassDesc {
+    pub attachments: Vec<gpu::pass::Attachment>,
+    pub subpasses: Vec<SubpassDesc>,
+    pub dependencies: Vec<gpu::pass::SubpassDependency>,
+}
+
 /// WebGpu Command API
 #[derive(Clone, Deserialize, Serialize)]
 pub enum WebGpuCommand {
@@ -133,8 +166,10 @@ pub enum WebGpuCommand {
     Exit,
     AcquireCommandBuffer(WebGpuSender<CommandBufferInfo>),
     ReturnCommandBuffer(CommandBufferId),
-    Finish(CommandBufferId, SubmitEpoch),
+    Finish(SubmitEpoch),
     PipelineBarrier(Vec<BufferBarrier>, Vec<ImageBarrier>),
+    BeginRenderpass(RenderpassId, FramebufferId), //TODO
+    EndRenderpass,
 }
 
 pub type WebGpuCommandChan = WebGpuSender<WebGpuCommand>;
@@ -147,7 +182,7 @@ pub struct CommandPoolInfo {
 
 
 /// WebGpu Message API
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 pub enum WebGpuMsg {
     /// Creates a new WebGPU context instance.
     CreateContext(WebGpuSender<Result<ContextInfo, String>>),
@@ -176,6 +211,16 @@ pub enum WebGpuMsg {
         wait_semaphores: Vec<SemaphoreId>,
         signal_semaphores: Vec<SemaphoreId>,
         fence: Option<FenceId>,
+    },
+    CreateFramebuffer {
+        gpu_id: GpuId,
+        desc: FramebufferDesc,
+        result: WebGpuSender<FramebufferInfo>,
+    },
+    CreateRenderpass {
+        gpu_id: GpuId,
+        desc: RenderpassDesc,
+        result: WebGpuSender<RenderpassInfo>,
     },
     /// Present the specified image on screen.
     Present(ImageId),

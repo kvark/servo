@@ -4,10 +4,9 @@
  
 typedef unsigned long WebGpuSemaphore;
 typedef unsigned long WebGpuFence;
-typedef unsigned long WebGpuRenderpass;
-typedef unsigned long WebGpuFramebuffer;
 typedef unsigned long WebGpuFormat;
 typedef unsigned long WebGpuRenderTargetView;
+typedef unsigned long WebGpuDepthStencilView;
 
 dictionary WebGpuAttachmentDesc {
 	required WebGpuFormat format;
@@ -19,11 +18,15 @@ dictionary WebGpuSubpassDesc {
 interface WebGpuDevice {
 	readonly attribute WebGpuCommandQueue generalQueue; //TODO: FrozenArray<>
 
-	WebGpuRenderpass createRenderPass(
+	WebGpuRenderpass createRenderpass(
 		sequence<WebGpuAttachmentDesc> attachments,
 		sequence<WebGpuSubpassDesc> subpasses
 	);
 
-	WebGpuFramebuffer createFramebuffer(sequence<WebGpuRenderTargetView> colors);
+	WebGpuFramebuffer createFramebuffer(
+		WebGpuRenderpass renderpass,
+		sequence<WebGpuRenderTargetView> colors,
+		WebGpuDepthStencilView? depth_stencil
+	);
 	WebGpuRenderTargetView viewImageAsRenderTarget(WebGpuImage image);
 };

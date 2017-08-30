@@ -2,13 +2,16 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use canvas_traits::webgpu::{GpuId, GpuInfo, WebGpuChan};
+use canvas_traits::webgpu::{GpuId, GpuInfo, WebGpuChan, WebGpuMsg,
+    FramebufferDesc, RenderpassDesc, webgpu_channel};
 use dom::bindings::codegen::Bindings::WebGpuDeviceBinding as binding;
 use dom::bindings::js::Root;
-use dom::bindings::reflector::{Reflector, reflect_dom_object};
+use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
 use dom::webgpucommandqueue::WebGpuCommandQueue;
+use dom::webgpuframebuffer::WebGpuFramebuffer;
 use dom::webgpuimage::WebGpuImage;
+use dom::webgpurenderpass::WebGpuRenderpass;
 use dom_struct::dom_struct;
 
 
@@ -50,19 +53,50 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         self.general_queues[0].clone()
     }
 
-    fn CreateRenderPass(&self,
+    fn CreateRenderpass(&self,
         attachments: Vec<binding::WebGpuAttachmentDesc>,
         subpasses: Vec<binding::WebGpuSubpassDesc>,
-    ) -> binding::WebGpuRenderpass
+    ) -> Root<WebGpuRenderpass>
     {
-        0
+        let (sender, receiver) = webgpu_channel().unwrap();
+        let msg = WebGpuMsg::CreateRenderpass {
+            gpu_id: self.id,
+            desc: RenderpassDesc {
+                attachments: Vec::new(),
+                subpasses: Vec::new(),
+                dependencies: Vec::new(),
+            },
+            result: sender,
+        };
+        self.sender.send(msg).unwrap();
+
+        let info = receiver.recv().unwrap();
+        WebGpuRenderpass::new(&self.global(), info)
     }
 
     fn CreateFramebuffer(&self,
+        renderpass: &WebGpuRenderpass,
         colors: Vec<binding::WebGpuRenderTargetView>,
-    ) -> binding::WebGpuFramebuffer
+        depth_stencil: Option<binding::WebGpuDepthStencilView>,
+    ) -> Root<WebGpuFramebuffer>
     {
-        0
+        let (sender, receiver) = webgpu_channel().unwrap();
+        let msg = WebGpuMsg::CreateFramebuffer {
+            gpu_id: self.id,
+            desc: FramebufferDesc {
+                renderpass: renderpass.get_id(),
+                colors: Vec::new(),
+                depth_stencil: None,
+                width: 0,
+                height: 0,
+                layers: 1,
+            },
+            result: sender,
+        };
+        self.sender.send(msg).unwrap();
+
+        let info = receiver.recv().unwrap();
+        WebGpuFramebuffer::new(&self.global(), info)
     }
 
     fn ViewImageAsRenderTarget(&self,
