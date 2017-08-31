@@ -3,22 +3,11 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 typedef unsigned long WebGpuAccess;
-enum WebGpuImageLayout {
-	"General",
-	"ColorAttachmentOptimal",
-	"DepthStencilAttachmentOptimal",
-	"DepthStencilReadOnlyOptimal",
-	"ShaderReadOnlyOptimal",
-	"TransferSrcOptimal",
-	"TransferDstOptimal",
-	"Undefined",
-	"Preinitialized",
-	"Present",
-};
 
 dictionary WebGpuBufferState {
 	required WebGpuAccess access;
 };
+
 dictionary WebGpuImageState {
 	required WebGpuAccess access;
 	required WebGpuImageLayout layout;
@@ -38,8 +27,24 @@ dictionary WebGpuImageBarrier {
 	//TODO: subresource range
 };
 
-typedef unsigned long WebGpuRectangle;
-typedef unsigned long WebGpuClearValue;
+dictionary WebGpuRectangle {
+	required unsigned long x;
+	required unsigned long y;
+	required unsigned long width;
+	required unsigned long height;
+};
+
+enum WebGpuClearValueKind {
+	"ColorUint",
+	"ColorInt",
+	"ColorFloat",
+	"DepthStencil",
+};
+
+dictionary WebGpuClearValue {
+	required WebGpuClearValueKind kind;
+	required sequence<float> data;
+};
 
 interface WebGpuCommandBuffer {
 	const WebGpuAccess ACCESS_INDEX_BUFFER_READ      = 0x1;

@@ -549,17 +549,11 @@ unsafe impl JSTraceable for Rect<f32> {
     }
 }
 
-unsafe impl<U> JSTraceable for TypedSize2D<i32, U> {
+unsafe impl<T: JSTraceable, U> JSTraceable for TypedSize2D<T, U> {
     #[inline]
-    unsafe fn trace(&self, _trc: *mut JSTracer) {
-        // Do nothing
-    }
-}
-
-unsafe impl<U> JSTraceable for TypedSize2D<f32, U> {
-    #[inline]
-    unsafe fn trace(&self, _trc: *mut JSTracer) {
-        // Do nothing
+    unsafe fn trace(&self, trc: *mut JSTracer) {
+        self.width.trace(trc);
+        self.height.trace(trc);
     }
 }
 

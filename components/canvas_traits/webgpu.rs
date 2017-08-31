@@ -169,7 +169,12 @@ pub enum WebGpuCommand {
     Begin(CommandBufferId),
     Finish(SubmitEpoch),
     PipelineBarrier(Vec<BufferBarrier>, Vec<ImageBarrier>),
-    BeginRenderpass(RenderpassId, FramebufferId), //TODO
+    BeginRenderpass {
+        renderpass: RenderpassId,
+        framebuffer: FramebufferId,
+        area: gpu::target::Rect,
+        clear_values: Vec<gpu::command::ClearValue>,
+    },
     EndRenderpass,
 }
 

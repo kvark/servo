@@ -3,7 +3,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use canvas_traits::webgpu::{GpuId, GpuInfo, WebGpuChan, WebGpuMsg,
-    FramebufferDesc, RenderpassDesc, webgpu_channel, gpu};
+    FramebufferDesc, RenderpassDesc, SubpassDesc,
+    webgpu_channel, gpu};
 use dom::bindings::codegen::Bindings::WebGpuDeviceBinding as binding;
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
@@ -46,6 +47,50 @@ impl WebGpuDevice {
             general_queues,
         };
         reflect_dom_object(obj, global, binding::Wrap)
+    }
+
+    pub fn map_image_layout(layout: binding::WebGpuImageLayout) -> gpu::image::ImageLayout {
+        use self::binding::WebGpuImageLayout::*;
+        use self::gpu::image::ImageLayout as Il;
+        match layout {
+            General => Il::General,
+            ColorAttachmentOptimal => Il::ColorAttachmentOptimal,
+            DepthStencilAttachmentOptimal => Il::DepthStencilAttachmentOptimal,
+            DepthStencilReadOnlyOptimal => Il::DepthStencilReadOnlyOptimal,
+            ShaderReadOnlyOptimal => Il::ShaderReadOnlyOptimal,
+            TransferSrcOptimal => Il::TransferSrcOptimal,
+            TransferDstOptimal => Il::TransferDstOptimal,
+            Undefined => Il::Undefined,
+            Preinitialized => Il::Preinitialized,
+            Present => Il::Present,
+        }
+    }
+
+    fn map_format(format: binding::WebGpuFormat) -> gpu::format::Format {
+        use self::binding::WebGpuFormat::*;
+        use self::gpu::format::{Format, SurfaceType, ChannelType};
+        match format {
+            R8G8B8A8_UNORM => Format(SurfaceType::R8_G8_B8_A8, ChannelType::Unorm),
+        }
+    }
+
+    fn map_load_op(op: binding::WebGpuAttachmentLoadOp) -> gpu::pass::AttachmentLoadOp {
+        use self::binding::WebGpuAttachmentLoadOp::*;
+        use self::gpu::pass::AttachmentLoadOp as Alo;
+        match op {
+            Load => Alo::Load,
+            Clear => Alo::Clear,
+            DontCare => Alo::DontCare,
+        }
+    }
+
+    fn map_store_op(op: binding::WebGpuAttachmentStoreOp) -> gpu::pass::AttachmentStoreOp {
+        use self::binding::WebGpuAttachmentStoreOp::*;
+        use self::gpu::pass::AttachmentStoreOp as Aso;
+        match op {
+            Store => Aso::Store,
+            DontCare => Aso::DontCare,
+        }
     }
 }
 
@@ -104,16 +149,42 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
     }
 
     fn CreateRenderpass(&self,
-        attachments: Vec<binding::WebGpuAttachmentDesc>,
-        subpasses: Vec<binding::WebGpuSubpassDesc>,
+        attachment_descs: Vec<binding::WebGpuAttachmentDesc>,
+        subpass_descs: Vec<binding::WebGpuSubpassDesc>,
+        dependency_descs: Vec<binding::WebGpuDependency>,
     ) -> Root<WebGpuRenderpass>
     {
+        let attachments = attachment_descs
+            .into_iter()
+            .map(|at| gpu::pass::Attachment {
+                format: Self::map_format(at.format),
+                src_layout: Self::map_image_layout(at.srcLayout),
+                dst_layout: Self::map_image_layout(at.dstLayout),
+                load_op: Self::map_load_op(at.loadOp),
+                store_op: Self::map_store_op(at.storeOp),
+                stencil_load_op: Self::map_load_op(at.stencilLoadOp),
+                stencil_store_op: Self::map_store_op(at.stencilStoreOp),
+            })
+            .collect();
+        let subpasses = subpass_descs
+            .into_iter()
+            .map(|sp| SubpassDesc {
+                colors: sp
+                    .into_iter()
+                    .map(|spa| (
+                        spa.attachmentId as _,
+                        Self::map_image_layout(spa.layout),
+                    ))
+                    .collect(),
+            })
+            .collect();
+
         let (sender, receiver) = webgpu_channel().unwrap();
         let msg = WebGpuMsg::CreateRenderpass {
             gpu_id: self.id,
             desc: RenderpassDesc {
-                attachments: Vec::new(),
-                subpasses: Vec::new(),
+                attachments,
+                subpasses,
                 dependencies: Vec::new(),
             },
             result: sender,

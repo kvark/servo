@@ -79,16 +79,17 @@ impl binding::WebGpuRenderingContextMethods for WebGpuRenderingContext {
         self.adapters.clone()
     }
     fn BuildSwapchain(&self, queue: &WebGpuCommandQueue) -> Root<WebGpuSwapchain> {
+        let size = self.canvas.get_size().cast().unwrap();
         let (sender, receiver) = webgpu_channel().unwrap();
         let msg = WebGpuMsg::BuildSwapchain {
             gpu_id: queue.gpu_id(),
-            size: self.canvas.get_size().cast().unwrap(),
+            size,
             result: sender,
         };
         self.sender.send(msg).unwrap();
         let swapchain = receiver.recv().unwrap();
 
-        WebGpuSwapchain::new(&self.global(), self.sender.clone(), swapchain)
+        WebGpuSwapchain::new(&self.global(), self.sender.clone(), size, swapchain)
     }
 }
 

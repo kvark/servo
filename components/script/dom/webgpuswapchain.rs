@@ -5,13 +5,15 @@
 use canvas_traits::webgpu::{SwapchainInfo, WebGpuChan, WebGpuMsg};
 use dom::bindings::cell::DOMRefCell;
 use dom::bindings::codegen::Bindings::WebGpuSwapchainBinding as binding;
-use dom::bindings::codegen::Bindings::WebGpuDeviceBinding::WebGpuSemaphore; //TEMP
+use dom::bindings::codegen::Bindings::WebGpuDeviceBinding::{WebGpuSemaphore}; //TEMP
+use dom::bindings::codegen::Bindings::WebGpuCommandBufferBinding::WebGpuRectangle;
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
 use dom::webgpuheap::WebGpuHeap;
 use dom::webgpuimage::WebGpuImage;
 use dom_struct::dom_struct;
+use euclid::Size2D;
 
 
 pub struct IdRotation {
@@ -67,6 +69,7 @@ pub struct WebGpuSwapchain {
     reflector_: Reflector,
     #[ignore_heap_size_of = "Channels are hard"]
     sender: WebGpuChan,
+    size: Size2D<u32>,
     heap: Root<WebGpuHeap>,
     images: Vec<Root<WebGpuImage>>,
     #[ignore_heap_size_of = "Nothing to see here"]
@@ -77,6 +80,7 @@ impl WebGpuSwapchain {
     pub fn new(
         global: &GlobalScope,
         sender: WebGpuChan,
+        size: Size2D<u32>,
         swapchain: SwapchainInfo,
     ) -> Root<Self>
     {
@@ -84,6 +88,7 @@ impl WebGpuSwapchain {
         let obj = box WebGpuSwapchain {
             reflector_: Reflector::new(),
             sender,
+            size,
             heap: WebGpuHeap::new(global, swapchain.heap_id),
             images: swapchain.images
                 .into_iter()
@@ -96,6 +101,15 @@ impl WebGpuSwapchain {
 }
 
 impl binding::WebGpuSwapchainMethods for WebGpuSwapchain {
+    fn GetRect(&self) -> WebGpuRectangle {
+        WebGpuRectangle {
+            x: 0,
+            y: 0,
+            width: self.size.width,
+            height: self.size.height,
+        }
+    }
+
     fn AcquireNextImage(&self,
         _semaphore: WebGpuSemaphore,
     ) -> binding::WebGpuSwapchainImageId

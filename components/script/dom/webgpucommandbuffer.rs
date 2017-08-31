@@ -12,6 +12,7 @@ use dom::bindings::codegen::Bindings::WebGpuCommandBufferBinding as binding;
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
+use dom::webgpudevice::WebGpuDevice;
 use dom::webgpuframebuffer::WebGpuFramebuffer;
 use dom::webgpurenderpass::WebGpuRenderpass;
 use dom_struct::dom_struct;
@@ -56,30 +57,51 @@ impl WebGpuCommandBuffer {
             submit_epoch: self.submit_epoch.get(),
         }
     }
-}
 
-fn map_buffer_state(state: binding::WebGpuBufferState) -> gpu::buffer::State {
-    let access = gpu::buffer::Access::from_bits(state.access as _).unwrap();
-    access
-}
+    fn map_buffer_state(state: binding::WebGpuBufferState) -> gpu::buffer::State {
+        let access = gpu::buffer::Access::from_bits(state.access as _).unwrap();
+        access
+    }
 
-fn map_image_state(state: binding::WebGpuImageState) -> gpu::image::State {
-    use self::binding::WebGpuImageLayout::*;
-    use self::gpu::image::ImageLayout as Il;
-    let layout = match state.layout {
-        General => Il::General,
-        ColorAttachmentOptimal => Il::ColorAttachmentOptimal,
-        DepthStencilAttachmentOptimal => Il::DepthStencilAttachmentOptimal,
-        DepthStencilReadOnlyOptimal => Il::DepthStencilReadOnlyOptimal,
-        ShaderReadOnlyOptimal => Il::ShaderReadOnlyOptimal,
-        TransferSrcOptimal => Il::TransferSrcOptimal,
-        TransferDstOptimal => Il::TransferDstOptimal,
-        Undefined => Il::Undefined,
-        Preinitialized => Il::Preinitialized,
-        Present => Il::Present,
-    };
-    let access = gpu::image::Access::from_bits(state.access as _).unwrap();
-    (access, layout)
+    fn map_image_state(state: binding::WebGpuImageState) -> gpu::image::State {
+        let layout = WebGpuDevice::map_image_layout(state.layout);
+        let access = gpu::image::Access::from_bits(state.access as _).unwrap();
+        (access, layout)
+    }
+
+    fn map_rect(rect: &binding::WebGpuRectangle) -> gpu::target::Rect {
+        gpu::target::Rect {
+            x: rect.x as _,
+            y: rect.y as _,
+            w: rect.width as _,
+            h: rect.height as _,
+        }
+    }
+
+    fn map_clear_value(cv: binding::WebGpuClearValue) -> gpu::command::ClearValue {
+        use self::binding::WebGpuClearValueKind::*;
+        use self::gpu::command::{ClearColor, ClearDepthStencil, ClearValue};
+        match cv.kind {
+            ColorUint => {
+                let data = [*cv.data[0] as u32, *cv.data[1] as u32, *cv.data[2] as u32, *cv.data[3] as u32];
+                ClearValue::Color(ClearColor::Uint(data))
+            }
+            ColorInt => {
+                let data = [*cv.data[0] as i32, *cv.data[1] as i32, *cv.data[2] as i32, *cv.data[3] as i32];
+                ClearValue::Color(ClearColor::Int(data))
+            }
+            ColorFloat => {
+                let data = [*cv.data[0] as f32, *cv.data[1] as f32, *cv.data[2] as f32, *cv.data[3] as f32];
+                ClearValue::Color(ClearColor::Float(data))
+            }
+            DepthStencil => {
+                ClearValue::DepthStencil(ClearDepthStencil {
+                    depth: *cv.data[0] as f32,
+                    stencil: *cv.data[1] as u32,
+                })
+            }
+        }
+    }
 }
 
 impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
@@ -104,16 +126,16 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
         let buffers = buffer_bars
             .into_iter()
             .map(|bar| BufferBarrier {
-                state_src: map_buffer_state(bar.stateSrc),
-                state_dst: map_buffer_state(bar.stateDst),
+                state_src: Self::map_buffer_state(bar.stateSrc),
+                state_dst: Self::map_buffer_state(bar.stateDst),
                 target: bar.target.get_id(),
             })
             .collect();
         let images = image_bars
             .into_iter()
             .map(|bar| ImageBarrier {
-                state_src: map_image_state(bar.stateSrc),
-                state_dst: map_image_state(bar.stateDst),
+                state_src: Self::map_image_state(bar.stateSrc),
+                state_dst: Self::map_image_state(bar.stateDst),
                 target: bar.target.get_id(),
             })
             .collect();
@@ -126,10 +148,20 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
     fn BeginRenderpass(&self,
         renderpass: &WebGpuRenderpass,
         framebuffer: &WebGpuFramebuffer,
-        rect: binding::WebGpuRectangle,
+        rect: &binding::WebGpuRectangle,
         clearValues: Vec<binding::WebGpuClearValue>,
     ) {
-        let msg = WebGpuCommand::BeginRenderpass(renderpass.get_id(), framebuffer.get_id());
+        let clear_values = clearValues
+            .into_iter()
+            .map(Self::map_clear_value)
+            .collect();
+
+        let msg = WebGpuCommand::BeginRenderpass {
+            renderpass: renderpass.get_id(),
+            framebuffer: framebuffer.get_id(),
+            area: Self::map_rect(rect),
+            clear_values,
+        };
         self.sender.send(msg).unwrap();
     }
 

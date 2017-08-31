@@ -413,8 +413,11 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                         .collect::<Vec<_>>();
                     cb.pipeline_barrier(&barriers);
                 }
-                w::WebGpuCommand::BeginRenderpass(renderpass, framebuffer) => {
-                    //TODO
+                w::WebGpuCommand::BeginRenderpass { renderpass, framebuffer, area, clear_values } => {
+                    let cb = &mut com_buffers[active_id.unwrap()];
+                    let pass = &rehub.renderpasses.read().unwrap()[renderpass];
+                    let fbo = &rehub.framebuffers.read().unwrap()[framebuffer];
+                    cb.begin_renderpass(pass, fbo, area, &clear_values, gpu::command::SubpassContents::Inline);
                 }
                 w::WebGpuCommand::EndRenderpass => {
                     let cb = &mut com_buffers[active_id.unwrap()];
