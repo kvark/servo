@@ -92,6 +92,13 @@ impl WebGpuDevice {
             DontCare => Aso::DontCare,
         }
     }
+
+    fn map_pass_ref(pass_ref: Option<u32>) -> gpu::pass::SubpassRef {
+        match pass_ref {
+            Some(id) => gpu::pass::SubpassRef::Pass(id as _),
+            None => gpu::pass::SubpassRef::External,
+        }
+    }
 }
 
 impl binding::WebGpuDeviceMethods for WebGpuDevice {
@@ -166,6 +173,7 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
                 stencil_store_op: Self::map_store_op(at.stencilStoreOp),
             })
             .collect();
+
         let subpasses = subpass_descs
             .into_iter()
             .map(|sp| SubpassDesc {
@@ -179,13 +187,25 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
             })
             .collect();
 
+        let dependencies = dependency_descs
+            .into_iter()
+            .map(|dep| gpu::pass::SubpassDependency {
+                src_pass: Self::map_pass_ref(dep.srcPass),
+                dst_pass: Self::map_pass_ref(dep.dstPass),
+                src_stage: gpu::pso::PipelineStage::from_bits(dep.srcStages as _).unwrap(),
+                dst_stage: gpu::pso::PipelineStage::from_bits(dep.dstStages as _).unwrap(),
+                src_access: gpu::image::Access::from_bits(dep.srcAccess as _).unwrap(),
+                dst_access: gpu::image::Access::from_bits(dep.dstAccess as _).unwrap(),
+            })
+            .collect();
+
         let (sender, receiver) = webgpu_channel().unwrap();
         let msg = WebGpuMsg::CreateRenderpass {
             gpu_id: self.id,
             desc: RenderpassDesc {
                 attachments,
                 subpasses,
-                dependencies: Vec::new(),
+                dependencies,
             },
             result: sender,
         };

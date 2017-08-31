@@ -2,14 +2,12 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-typedef unsigned long WebGpuAccess;
-
 dictionary WebGpuBufferState {
-	required WebGpuAccess access;
+	required WebGpuBufferAccess access;
 };
 
 dictionary WebGpuImageState {
-	required WebGpuAccess access;
+	required WebGpuImageAccess access;
 	required WebGpuImageLayout layout;
 };
 
@@ -47,19 +45,6 @@ dictionary WebGpuClearValue {
 };
 
 interface WebGpuCommandBuffer {
-	const WebGpuAccess ACCESS_INDEX_BUFFER_READ      = 0x1;
-	const WebGpuAccess ACCESS_VERTEX_BUFFER_READ     = 0x2;
-	const WebGpuAccess ACCESS_CONSTANT_BUFFER_READ   = 0x4;
-	const WebGpuAccess ACCESS_INDIRECT_COMMAND_READ  = 0x8;
-	const WebGpuAccess ACCESS_RENDER_TARGET_CLEAR    = 0x20;
-	const WebGpuAccess ACCESS_RESOLVE_SRC            = 0x100;
-	const WebGpuAccess ACCESS_RESOLVE_DST            = 0x200;
-	const WebGpuAccess ACCESS_COLOR_ATTACHMENT_READ  = 0x1;
-	const WebGpuAccess ACCESS_COLOR_ATTACHMENT_WRITE = 0x2;
-	const WebGpuAccess ACCESS_TRANSFER_READ          = 0x4;
-	const WebGpuAccess ACCESS_TRANSFER_WRITE         = 0x8;
-	const WebGpuAccess ACCESS_SHADER_READ            = 0x10;
-
 	void begin();
 	void finish();
 
