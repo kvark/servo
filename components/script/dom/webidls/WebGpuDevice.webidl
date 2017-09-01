@@ -3,8 +3,6 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
  
 typedef unsigned long WebGpuSemaphore;
-typedef unsigned long WebGpuRenderTargetView;
-typedef unsigned long WebGpuDepthStencilView;
 
 typedef unsigned long WebGpuBufferAccess;
 typedef unsigned long WebGpuImageAccess;
@@ -67,6 +65,12 @@ dictionary WebGpuDependency {
 	required WebGpuImageAccess dstAccess;
 	required WebGpuPipelineStage srcStages;
 	required WebGpuPipelineStage dstStages;
+};
+
+dictionary WebGpuFramebufferSize {
+	required unsigned long width;
+	required unsigned long height;
+	required unsigned long layers;
 };
 
 
@@ -138,9 +142,13 @@ interface WebGpuDevice {
 
 	WebGpuFramebuffer createFramebuffer(
 		WebGpuRenderpass renderpass,
+		WebGpuFramebufferSize size,
 		sequence<WebGpuRenderTargetView> colors,
 		WebGpuDepthStencilView? depth_stencil
 	);
 
-	WebGpuRenderTargetView viewImageAsRenderTarget(WebGpuImage image);
+	WebGpuRenderTargetView viewImageAsRenderTarget(
+		WebGpuImage image,
+		WebGpuFormat format
+	);
 };

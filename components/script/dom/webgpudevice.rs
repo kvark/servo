@@ -10,10 +10,12 @@ use dom::bindings::js::Root;
 use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
 use dom::webgpucommandqueue::WebGpuCommandQueue;
+use dom::webgpudepthstencilview::WebGpuDepthStencilView;
 use dom::webgpufence::WebGpuFence;
 use dom::webgpuframebuffer::WebGpuFramebuffer;
 use dom::webgpuimage::WebGpuImage;
 use dom::webgpurenderpass::WebGpuRenderpass;
+use dom::webgpurendertargetview::WebGpuRenderTargetView;
 use dom_struct::dom_struct;
 
 
@@ -217,8 +219,9 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
 
     fn CreateFramebuffer(&self,
         renderpass: &WebGpuRenderpass,
-        colors: Vec<binding::WebGpuRenderTargetView>,
-        depth_stencil: Option<binding::WebGpuDepthStencilView>,
+        size: &binding::WebGpuFramebufferSize,
+        colors: Vec<Root<WebGpuRenderTargetView>>,
+        depth_stencil: Option<&WebGpuDepthStencilView>,
     ) -> Root<WebGpuFramebuffer>
     {
         let (sender, receiver) = webgpu_channel().unwrap();
@@ -226,11 +229,11 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
             gpu_id: self.id,
             desc: FramebufferDesc {
                 renderpass: renderpass.get_id(),
-                colors: Vec::new(),
-                depth_stencil: None,
-                width: 0,
-                height: 0,
-                layers: 1,
+                colors: colors.into_iter().map(|v| v.get_id()).collect(),
+                depth_stencil: depth_stencil.map(|v| v.get_id()),
+                width: size.width as _,
+                height: size.height as _,
+                layers: size.layers as _,
             },
             result: sender,
         };
@@ -242,8 +245,19 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
 
     fn ViewImageAsRenderTarget(&self,
         image: &WebGpuImage,
-    ) -> binding::WebGpuRenderTargetView
+        format: binding::WebGpuFormat,
+    ) -> Root<WebGpuRenderTargetView>
     {
-        0
+        let (sender, receiver) = webgpu_channel().unwrap();
+        let msg = WebGpuMsg::ViewImageAsRenderTarget {
+            gpu_id: self.id,
+            image_id: image.get_id(),
+            format: Self::map_format(format),
+            result: sender,
+        };
+        self.sender.send(msg).unwrap();
+
+        let info = receiver.recv().unwrap();
+        WebGpuRenderTargetView::new(&self.global(), info)
     }
 }

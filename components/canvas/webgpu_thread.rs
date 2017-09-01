@@ -210,6 +210,10 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 let renderpass = self.create_renderpass(gpu_id, desc);
                 result.send(renderpass).unwrap();
             }
+            w::WebGpuMsg::ViewImageAsRenderTarget { gpu_id, image_id, format, result } => {
+                let rtv = self.view_image_as_render_target(gpu_id, image_id, format);
+                result.send(rtv).unwrap();
+            }
         }
 
         false
@@ -513,6 +517,22 @@ impl<B: gpu::Backend> WebGpuThread<B> {
 
         w::RenderpassInfo {
             id: self.rehub.renderpasses.write().unwrap().push(rp),
+        }
+    }
+
+    fn view_image_as_render_target(&mut self,
+        gpu_id: w::GpuId,
+        image_id: w::ImageId,
+        format: gpu::format::Format,
+    ) -> w::RenderTargetViewInfo {
+        let gpu = &mut self.gpus[gpu_id];
+        let image = &self.rehub.images.read().unwrap()[image_id];
+        let range = ((0..1), (0..1));
+
+        let view = gpu.device.view_image_as_render_target(image, format, range).unwrap();
+
+        w::RenderTargetViewInfo {
+            id: self.rehub.rtvs.write().unwrap().push(view),
         }
     }
 }

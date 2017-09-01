@@ -101,6 +101,16 @@ pub struct SubmitInfo {
     pub submit_epoch: SubmitEpoch,
 }
 
+#[derive(Clone, Deserialize, Serialize, HeapSizeOf)]
+pub struct RenderTargetViewInfo {
+    pub id: RenderTargetViewId,
+}
+
+#[derive(Clone, Deserialize, Serialize, HeapSizeOf)]
+pub struct DepthStencilViewInfo {
+    pub id: DepthStencilViewId,
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 pub struct BufferBarrier {
     pub state_src: gpu::buffer::State,
@@ -241,6 +251,12 @@ pub enum WebGpuMsg {
         gpu_id: GpuId,
         desc: RenderpassDesc,
         result: WebGpuSender<RenderpassInfo>,
+    },
+    ViewImageAsRenderTarget {
+        gpu_id: GpuId,
+        image_id: ImageId,
+        format: gpu::format::Format,
+        result: WebGpuSender<RenderTargetViewInfo>,
     },
     /// Present the specified image on screen.
     Present(ImageId),
