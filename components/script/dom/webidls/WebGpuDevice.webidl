@@ -129,7 +129,7 @@ interface WebGpuDevice {
 
 	WebGpuFence createFence(boolean set);
 	void resetFences(sequence<WebGpuFence> fences);
-	void waitForFences(
+	boolean waitForFences(
 		sequence<WebGpuFence> fences,
 		WebGpuFenceWait mode,
 		unsigned long timeout

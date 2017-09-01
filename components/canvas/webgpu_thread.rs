@@ -54,7 +54,7 @@ impl<B: gpu::Backend> CommandPoolHandle<B> {
     }
 
     fn check_commands(&mut self) {
-        while let Ok(command) = self.receiver.recv() {
+        while let Ok(command) = self.receiver.try_recv() {
             self.process_command(command);
         }
     }
@@ -100,9 +100,8 @@ impl WebGpuThread<backend::Backend> {
     pub fn start() -> w::WebGpuSender<w::WebGpuMsg> {
         let (sender, receiver) = w::webgpu_channel::<w::WebGpuMsg>().unwrap();
         let result = sender.clone();
-        let enable_debug = true; //TODO
         thread::Builder::new().name("WebGpuThread".to_owned()).spawn(move || {
-            let instance = backend::Instance::create("Servo", 1, enable_debug);
+            let instance = backend::Instance::create("Servo", 1);
             let mut renderer: Self = WebGpuThread {
                 next_webgpu_id: 0,
                 adapters: instance.enumerate_adapters(),
@@ -165,15 +164,8 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 let command_pool = self.create_command_pool(gpu_id, queue_id);
                 result.send(command_pool).unwrap();
             }
-            w::WebGpuMsg::Submit { gpu_id, queue_id, command_buffers, .. } => {
-                let cmd_buffers = command_buffers
-                    .into_iter()
-                    .map(|info| {
-                        self.command_pools[info.pool_id]
-                            .extract_submit(info.cb_id, info.submit_epoch)
-                    })
-                    .collect();
-                self.submit(gpu_id, queue_id, cmd_buffers);
+            w::WebGpuMsg::Submit { gpu_id, queue_id, command_buffers, fence_id, .. } => {
+                self.submit(gpu_id, queue_id, command_buffers, fence_id);
             }
             w::WebGpuMsg::Present(image_id) => {
                 //TODO
@@ -185,23 +177,25 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 let fence = self.create_fence(gpu_id, set);
                 result.send(fence).unwrap();
             }
-            w::WebGpuMsg::ResetFences { gpu_id, fences } => {
+            w::WebGpuMsg::ResetFences { gpu_id, fence_ids } => {
                 let gpu = &mut self.gpus[gpu_id];
                 let store = self.rehub.fences.read().unwrap();
-                let fences_raw = fences
+                let fences_raw = fence_ids
                     .into_iter()
                     .map(|f| &store[f])
                     .collect::<Vec<_>>();
                 gpu.device.reset_fences(&fences_raw);
             }
-            w::WebGpuMsg::WaitForFences { gpu_id, fences, mode, timeout } => {
+            w::WebGpuMsg::WaitForFences { gpu_id, fence_ids, mode, timeout, result } => {
                 let gpu = &mut self.gpus[gpu_id];
                 let store = self.rehub.fences.read().unwrap();
-                let fences_raw = fences
+                let fences_raw = fence_ids
                     .into_iter()
                     .map(|f| &store[f])
                     .collect::<Vec<_>>();
-                gpu.device.wait_for_fences(&fences_raw, mode, timeout);
+
+                let done = gpu.device.wait_for_fences(&fences_raw, mode, timeout);
+                result.send(done).unwrap();
             }
             w::WebGpuMsg::CreateFramebuffer { gpu_id, desc, result } => {
                 let framebuffer = self.create_framebuffer(gpu_id, desc);
@@ -260,10 +254,28 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         let gpu = &mut self.gpus[gpu_id];
         let mut image_store = self.rehub.images.write().unwrap();
         let num_frames = 3; //TODO
-        let alignment = 0x3F;
-        let bytes_per_image = 4 *
-            (size.width as u64 | alignment + 1)*
-            (size.height as u64| alignment + 1);
+
+        let unbound_images = (0 .. num_frames)
+            .map(|_| {
+                let image = gpu.device.create_image(
+                    gpu::image::Kind::D2(
+                        size.width as gpu::image::Size,
+                        size.height as gpu::image::Size,
+                        gpu::image::AaMode::Single,
+                    ),
+                    1,
+                    format,
+                    gpu::image::COLOR_ATTACHMENT | gpu::image::TRANSFER_SRC,
+                ).unwrap();
+                let requirements = gpu.device.get_image_requirements(&image);
+                (image, requirements)
+            })
+            .collect::<Vec<_>>();
+
+        let heap_size = unbound_images
+            .iter()
+            .map(|&(_, req)| req.alignment + req.size)
+            .sum();
 
         let heap = {
             let heap_type = gpu.heap_types
@@ -273,29 +285,26 @@ impl<B: gpu::Backend> WebGpuThread<B> {
             gpu.device.create_heap(
                 heap_type,
                 gpu::device::ResourceHeapType::Images,
-                num_frames * bytes_per_image,
+                heap_size,
             ).unwrap()
         };
 
-        let images = (0 .. num_frames).map(|i| {
-            let unbound_image = gpu.device.create_image(
-                gpu::image::Kind::D2(
-                    size.width as gpu::image::Size,
-                    size.height as gpu::image::Size,
-                    gpu::image::AaMode::Single,
-                ),
-                1,
-                format,
-                gpu::image::COLOR_ATTACHMENT | gpu::image::TRANSFER_SRC,
-            ).unwrap();
-            let image = gpu.device.bind_image_memory(
-                &heap,
-                i * bytes_per_image,
-                unbound_image,
-            ).unwrap();
-            image_store.push(image)
-        }).collect();
+        let mut offset = 0;
+        let images = unbound_images
+            .into_iter()
+            .map(|(unbound_image, req)| {
+                offset = (offset + req.alignment - 1) & !(req.alignment - 1);
+                let image = gpu.device.bind_image_memory(
+                    &heap,
+                    offset,
+                    unbound_image,
+                ).unwrap();
+                offset += req.size;
+                image_store.push(image)
+            })
+            .collect();
 
+        assert!(offset <= heap_size);
         w::SwapchainInfo {
             heap_id: self.heaps.push(heap),
             images,
@@ -311,7 +320,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         let gpu = &mut self.gpus[gpu_id];
         let queue = gpu.general_queues[queue_id as usize].as_raw();//TODO
         let pool = unsafe {
-            B::CommandPool::from_queue(queue)
+            B::CommandPool::from_queue(queue, gpu::pool::CommandPoolCreateFlags::empty())
         };
 
         let (channel, receiver) = w::webgpu_channel().unwrap();
@@ -387,11 +396,10 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 }
                 w::WebGpuCommand::Finish(submit_epoch) => {
                     //TODO: check cb epoch
-                    let id = active_id.unwrap();
+                    let id = active_id.take().unwrap();
                     com_buffers[id].finish();
                     let submit = com_buffers[id].clone();
                     let cmd = PoolCommand::FinishBuffer(id, submit_epoch, submit);
-                    active_id = None;
                     channel.send(cmd).unwrap();
                 }
                 w::WebGpuCommand::PipelineBarrier(buffer_bars, image_bars) => {
@@ -440,17 +448,29 @@ impl<B: gpu::Backend> WebGpuThread<B> {
     fn submit(&mut self,
         gpu_id: w::GpuId,
         queue_id: w::QueueId,
-        cmd_buffers: Vec<B::CommandBuffer>,
+        command_buffers: Vec<w::SubmitInfo>,
+        fence_id: Option<w::FenceId>,
     ) {
+        let cmd_buffers = command_buffers
+            .into_iter()
+            .map(|info| {
+                self.command_pools[info.pool_id]
+                    .extract_submit(info.cb_id, info.submit_epoch)
+            })
+            .collect::<Vec<_>>();
+
         let gpu = &mut self.gpus[gpu_id];
+        let fence_store = &self.rehub.fences.read().unwrap();
         let queue = gpu.general_queues[queue_id as usize].as_mut();
         let submission = gpu::RawSubmission {
             cmd_buffers: &cmd_buffers,
             wait_semaphores: &[],
             signal_semaphores: &[],
         };
+        let fence = fence_id.map(|id| &fence_store[id]);
+
         unsafe {
-            queue.submit_raw(submission, None)
+            queue.submit_raw(submission, fence)
         };
     }
 

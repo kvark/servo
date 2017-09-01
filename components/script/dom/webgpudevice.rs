@@ -130,7 +130,7 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
 
         let msg = WebGpuMsg::ResetFences {
             gpu_id: self.id,
-            fences: fence_ids,
+            fence_ids,
         };
         self.sender.send(msg).unwrap();
     }
@@ -139,7 +139,7 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         fences: Vec<Root<WebGpuFence>>,
         wait_mode: binding::WebGpuFenceWait,
         timeout: u32,
-    ) {
+    ) -> bool {
         let fence_ids = fences
             .into_iter()
             .map(|f| f.get_id())
@@ -149,13 +149,17 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
             binding::WebGpuFenceWait::All => gpu::device::WaitFor::All,
         };
 
+        let (sender, receiver) = webgpu_channel().unwrap();
         let msg = WebGpuMsg::WaitForFences {
             gpu_id: self.id,
-            fences: fence_ids,
+            fence_ids,
             mode,
             timeout,
+            result: sender,
         };
         self.sender.send(msg).unwrap();
+
+        receiver.recv().unwrap()
     }
 
     fn CreateRenderpass(&self,

@@ -226,7 +226,7 @@ pub enum WebGpuMsg {
         command_buffers: Vec<SubmitInfo>,
         wait_semaphores: Vec<SemaphoreId>,
         signal_semaphores: Vec<SemaphoreId>,
-        fence: Option<FenceId>,
+        fence_id: Option<FenceId>,
     },
     CreateFence {
         gpu_id: GpuId,
@@ -235,13 +235,14 @@ pub enum WebGpuMsg {
     },
     ResetFences {
         gpu_id: GpuId,
-        fences: Vec<FenceId>,
+        fence_ids: Vec<FenceId>,
     },
     WaitForFences {
         gpu_id: GpuId,
-        fences: Vec<FenceId>,
+        fence_ids: Vec<FenceId>,
         mode: gpu::device::WaitFor,
         timeout: u32,
+        result: WebGpuSender<bool>,
     },
     CreateFramebuffer {
         gpu_id: GpuId,
