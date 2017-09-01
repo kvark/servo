@@ -5,7 +5,9 @@
 typedef unsigned long WebGpuSwapchainImageId;
 
 interface WebGpuSwapchain {
-	WebGpuRectangle getRect();
+	readonly attribute WebGpuFormat format;
+
+	WebGpuFramebufferSize getSize();
 	WebGpuSwapchainImageId acquireNextImage(WebGpuSemaphore semaphore);
 	sequence<WebGpuImage> getImages();
 	void present();

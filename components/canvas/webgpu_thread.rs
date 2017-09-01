@@ -100,8 +100,9 @@ impl WebGpuThread<backend::Backend> {
     pub fn start() -> w::WebGpuSender<w::WebGpuMsg> {
         let (sender, receiver) = w::webgpu_channel::<w::WebGpuMsg>().unwrap();
         let result = sender.clone();
+        let enable_debug = true; //TODO
         thread::Builder::new().name("WebGpuThread".to_owned()).spawn(move || {
-            let instance = backend::Instance::create("Servo", 1);
+            let instance = backend::Instance::create("Servo", 1, enable_debug);
             let mut renderer: Self = WebGpuThread {
                 next_webgpu_id: 0,
                 adapters: instance.enumerate_adapters(),
@@ -156,8 +157,8 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 };
                 result.send(info).unwrap();
             }
-            w::WebGpuMsg::BuildSwapchain { gpu_id, size, result } => {
-                let swapchain = self.build_swapchain(gpu_id, size);
+            w::WebGpuMsg::BuildSwapchain { gpu_id, format, size, result } => {
+                let swapchain = self.build_swapchain(gpu_id, format, size);
                 result.send(swapchain).unwrap();
             }
             w::WebGpuMsg::CreateCommandPool { gpu_id, queue_id, result } => {
@@ -251,7 +252,11 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         Ok((id, adapters))
     }
 
-    fn build_swapchain(&mut self, gpu_id: w::GpuId, size: Size2D<u32>) -> w::SwapchainInfo {
+    fn build_swapchain(&mut self,
+        gpu_id: w::GpuId,
+        format: gpu::format::Format,
+        size: Size2D<u32>,
+    ) -> w::SwapchainInfo {
         let gpu = &mut self.gpus[gpu_id];
         let mut image_store = self.rehub.images.write().unwrap();
         let num_frames = 3; //TODO
@@ -280,7 +285,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                     gpu::image::AaMode::Single,
                 ),
                 1,
-                <gpu::format::Srgba8 as gpu::format::Formatted>::get_format(),
+                format,
                 gpu::image::COLOR_ATTACHMENT | gpu::image::TRANSFER_SRC,
             ).unwrap();
             let image = gpu.device.bind_image_memory(

@@ -4,10 +4,12 @@
 
 use canvas_traits::webgpu::{WebGpuChan, WebGpuMsg, webgpu_channel};
 use dom::bindings::codegen::Bindings::WebGpuRenderingContextBinding as binding;
+use dom::bindings::codegen::Bindings::WebGpuDeviceBinding::WebGpuFormat;
 use dom::bindings::js::{JS, LayoutJS, Root};
 use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
 use dom::htmlcanvaselement::HTMLCanvasElement;
 use dom::webgpuadapter::WebGpuAdapter;
+use dom::webgpudevice::WebGpuDevice;
 use dom::webgpucommandqueue::WebGpuCommandQueue;
 use dom::webgpuswapchain::WebGpuSwapchain;
 use dom::window::Window;
@@ -81,15 +83,17 @@ impl binding::WebGpuRenderingContextMethods for WebGpuRenderingContext {
     fn BuildSwapchain(&self, queue: &WebGpuCommandQueue) -> Root<WebGpuSwapchain> {
         let size = self.canvas.get_size().cast().unwrap();
         let (sender, receiver) = webgpu_channel().unwrap();
+        let format = WebGpuFormat::R8G8B8A8_SRGB;
         let msg = WebGpuMsg::BuildSwapchain {
             gpu_id: queue.gpu_id(),
+            format: WebGpuDevice::map_format(format),
             size,
             result: sender,
         };
         self.sender.send(msg).unwrap();
         let swapchain = receiver.recv().unwrap();
 
-        WebGpuSwapchain::new(&self.global(), self.sender.clone(), size, swapchain)
+        WebGpuSwapchain::new(&self.global(), self.sender.clone(), format, size, swapchain)
     }
 }
 

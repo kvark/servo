@@ -211,6 +211,7 @@ pub enum WebGpuMsg {
     /// Build a new swapchain on the device.
     BuildSwapchain {
         gpu_id: GpuId,
+        format: gpu::format::Format,
         size: Size2D<u32>,
         result: WebGpuSender<SwapchainInfo>,
     },
