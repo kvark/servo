@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 pub extern crate gfx_core as gpu;
-pub extern crate gfx_device_vulkan as backend;
+pub extern crate gfx_backend_vulkan as backend;
 //pub extern crate gfx_device_gl as backend;
 //extern crate heapsize;
 //#[macro_use]

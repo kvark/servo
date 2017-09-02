@@ -8,7 +8,7 @@ interface WebGpuSwapchain {
 	readonly attribute WebGpuFormat format;
 
 	WebGpuFramebufferSize getSize();
-	WebGpuSwapchainImageId acquireNextImage(WebGpuSemaphore semaphore);
+	WebGpuSwapchainImageId acquireNextImage(WebGpuSemaphore? semaphore);
 	sequence<WebGpuImage> getImages();
-	void present();
+	WebGpuImageState present();
 };

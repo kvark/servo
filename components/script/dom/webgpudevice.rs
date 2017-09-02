@@ -36,10 +36,11 @@ impl WebGpuDevice {
     ) -> Root<Self>
     {
         let gpu_id = gpu.id;
+        let limits = gpu.limits;
         let general_queues = gpu.general
             .into_iter()
             .map(|id| {
-                WebGpuCommandQueue::new(global, sender.clone(), gpu_id, id)
+                WebGpuCommandQueue::new(global, sender.clone(), gpu_id, id, limits)
             })
             .collect();
         let obj = box WebGpuDevice {

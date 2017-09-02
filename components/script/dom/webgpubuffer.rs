@@ -17,7 +17,8 @@ pub struct WebGpuBuffer {
 }
 
 impl WebGpuBuffer {
-    pub fn new(global: &GlobalScope, id: BufferId) -> Root<Self> {
+    #[allow(unrooted_must_root)] //TEMP
+    pub fn _new(global: &GlobalScope, id: BufferId) -> Root<Self> {
         let obj = box WebGpuBuffer {
             reflector_: Reflector::new(),
             id,

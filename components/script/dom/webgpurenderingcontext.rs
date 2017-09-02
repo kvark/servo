@@ -2,19 +2,23 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use canvas_traits::webgpu::{WebGpuChan, WebGpuMsg, webgpu_channel};
+use canvas_traits::webgpu::{
+    WebGpuChan, WebGpuMsg, WebGpuContextShareMode, webgpu_channel,
+    ContextId,
+};
 use dom::bindings::codegen::Bindings::WebGpuRenderingContextBinding as binding;
 use dom::bindings::codegen::Bindings::WebGpuDeviceBinding::WebGpuFormat;
 use dom::bindings::js::{JS, LayoutJS, Root};
 use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
 use dom::htmlcanvaselement::HTMLCanvasElement;
+use dom::bindings::inheritance::Castable;
 use dom::webgpuadapter::WebGpuAdapter;
-use dom::webgpudevice::WebGpuDevice;
 use dom::webgpucommandqueue::WebGpuCommandQueue;
 use dom::webgpuswapchain::WebGpuSwapchain;
 use dom::window::Window;
 use dom_struct::dom_struct;
 use script_layout_interface::HTMLCanvasDataSource;
+use webrender_api;
 
 
 #[dom_struct]
@@ -23,6 +27,8 @@ pub struct WebGpuRenderingContext {
     #[ignore_heap_size_of = "Channels are hard"]
     sender: WebGpuChan,
     canvas: JS<HTMLCanvasElement>,
+    id: ContextId,
+    share_mode: WebGpuContextShareMode,
     adapters: Vec<Root<WebGpuAdapter>>,
 }
 
@@ -34,15 +40,16 @@ impl WebGpuRenderingContext {
     {
         let (sender, receiver) = webgpu_channel().unwrap();
         let webgpu_chan = window.webgpu_chan();
+        let size = canvas.get_size().cast().unwrap();
 
         webgpu_chan
-            .send(WebGpuMsg::CreateContext(sender))
+            .send(WebGpuMsg::CreateContext(size, sender))
             .unwrap();
         receiver
             .recv()
             .unwrap()
             .map(|init| {
-                let sender = init.sender.sender.clone();
+                let sender = init.sender.clone();
                 let adapters = init.adapters
                     .into_iter()
                     .map(|info| WebGpuAdapter::new(window, sender.clone(), info))
@@ -50,8 +57,10 @@ impl WebGpuRenderingContext {
                 WebGpuRenderingContext {
                     reflector_: Reflector::new(),
                     sender,
-                    adapters,
                     canvas: JS::from_ref(canvas),
+                    id: init.id,
+                    share_mode: WebGpuContextShareMode::Readback,
+                    adapters,
                 }
             })
     }
@@ -74,6 +83,23 @@ impl WebGpuRenderingContext {
     pub fn recreate(&self) {
         //TODO
     }
+
+    fn layout_handle(&self) -> webrender_api::ImageKey {
+        match self.share_mode {
+            WebGpuContextShareMode::SharedTexture => {
+                unimplemented!()
+            }
+            WebGpuContextShareMode::Readback => {
+                // WR using Readback requires to update WR image every frame
+                // in order to send the new raw pixels.
+                let (sender, receiver) = webgpu_channel().unwrap();
+                let msg = WebGpuMsg::ReadWrImage(self.id, sender);
+                self.sender.send(msg).unwrap();
+                receiver.recv().unwrap()
+            }
+        }
+    }
+
 }
 
 impl binding::WebGpuRenderingContextMethods for WebGpuRenderingContext {
@@ -81,19 +107,17 @@ impl binding::WebGpuRenderingContextMethods for WebGpuRenderingContext {
         self.adapters.clone()
     }
     fn BuildSwapchain(&self, queue: &WebGpuCommandQueue) -> Root<WebGpuSwapchain> {
-        let size = self.canvas.get_size().cast().unwrap();
-        let (sender, receiver) = webgpu_channel().unwrap();
-        let format = WebGpuFormat::R8G8B8A8_SRGB;
-        let msg = WebGpuMsg::BuildSwapchain {
-            gpu_id: queue.gpu_id(),
-            format: WebGpuDevice::map_format(format),
-            size,
-            result: sender,
-        };
-        self.sender.send(msg).unwrap();
-        let swapchain = receiver.recv().unwrap();
-
-        WebGpuSwapchain::new(&self.global(), self.sender.clone(), format, size, swapchain)
+        let frame_count = 3;
+        WebGpuSwapchain::new(
+            &self.global(),
+            self.sender.clone(),
+            self.canvas.upcast(),
+            self.id,
+            queue,
+            frame_count,
+            WebGpuFormat::R8G8B8A8_SRGB,
+            self.canvas.get_size().cast().unwrap(),
+        )
     }
 }
 
@@ -105,7 +129,6 @@ pub trait LayoutCanvasWebGpuRenderingContextHelpers {
 impl LayoutCanvasWebGpuRenderingContextHelpers for LayoutJS<WebGpuRenderingContext> {
     #[allow(unsafe_code)]
     unsafe fn canvas_data_source(&self) -> HTMLCanvasDataSource {
-        unimplemented!()
-        //HTMLCanvasDataSource::WebGpu((*self.unsafe_get()).layout_handle())
+        HTMLCanvasDataSource::WebGL((*self.unsafe_get()).layout_handle())
     }
 }

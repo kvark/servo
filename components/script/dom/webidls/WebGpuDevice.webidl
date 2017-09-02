@@ -2,8 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
  
-typedef unsigned long WebGpuSemaphore;
-
 typedef unsigned long WebGpuBufferAccess;
 typedef unsigned long WebGpuImageAccess;
 typedef unsigned long WebGpuPipelineStage;
@@ -100,6 +98,7 @@ interface WebGpuDevice {
 	const WebGpuBufferAccess	ACCESS_VERTEX_BUFFER_READ     = 0x2;
 	const WebGpuBufferAccess	ACCESS_CONSTANT_BUFFER_READ   = 0x4;
 	const WebGpuBufferAccess	ACCESS_INDIRECT_COMMAND_READ  = 0x8;
+	// image access flags
 	const WebGpuImageAccess		ACCESS_COLOR_ATTACHMENT_READ  = 0x1;
 	const WebGpuImageAccess 	ACCESS_COLOR_ATTACHMENT_WRITE = 0x2;
 	const WebGpuImageAccess 	ACCESS_TRANSFER_READ          = 0x4;

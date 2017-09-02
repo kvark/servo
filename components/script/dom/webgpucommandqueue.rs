@@ -2,17 +2,27 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use canvas_traits::webgpu::{GpuId, QueueId, WebGpuChan, WebGpuMsg, webgpu_channel};
+use heapsize::HeapSizeOf;
+use canvas_traits::webgpu::{GpuId, QueueId, WebGpuChan, WebGpuMsg,
+    gpu, webgpu_channel};
 use dom::bindings::codegen::Bindings::WebGpuCommandQueueBinding as binding;
-use dom::bindings::codegen::Bindings::WebGpuDeviceBinding::WebGpuSemaphore;
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
 use dom::webgpucommandbuffer::WebGpuCommandBuffer;
 use dom::webgpucommandpool::WebGpuCommandPool;
+use dom::webgpusemaphore::WebGpuSemaphore;
 use dom::webgpufence::WebGpuFence;
 use dom_struct::dom_struct;
 
+
+pub struct LimitsWrapper(gpu::Limits);
+
+impl HeapSizeOf for LimitsWrapper {
+    fn heap_size_of_children(&self) -> usize {
+        0
+    }
+}
 
 #[dom_struct]
 pub struct WebGpuCommandQueue {
@@ -20,6 +30,7 @@ pub struct WebGpuCommandQueue {
     #[ignore_heap_size_of = "Channels are hard"]
     sender: WebGpuChan,
     id: (GpuId, QueueId),
+    limits: LimitsWrapper,
 }
 
 impl WebGpuCommandQueue {
@@ -28,17 +39,27 @@ impl WebGpuCommandQueue {
         sender: WebGpuChan,
         gpu_id: GpuId,
         id: QueueId,
+        limits: gpu::Limits,
     ) -> Root<Self> {
         let obj = box WebGpuCommandQueue {
             reflector_: Reflector::new(),
             sender,
             id: (gpu_id, id),
+            limits: LimitsWrapper(limits),
         };
         reflect_dom_object(obj, global, binding::Wrap)
     }
 
+    pub fn get_id(&self) -> QueueId {
+        self.id.1
+    }
+
     pub fn gpu_id(&self) -> GpuId {
         self.id.0
+    }
+
+    pub fn get_limits(&self) -> &gpu::Limits {
+        &self.limits.0
     }
 }
 
@@ -58,8 +79,8 @@ impl binding::WebGpuCommandQueueMethods for WebGpuCommandQueue {
 
     fn Submit(&self,
         command_bufs: Vec<Root<WebGpuCommandBuffer>>,
-        _waits: Vec<WebGpuSemaphore>,
-        _signals: Vec<WebGpuSemaphore>,
+        _waits: Vec<Root<WebGpuSemaphore>>,
+        _signals: Vec<Root<WebGpuSemaphore>>,
         fence: Option<&WebGpuFence>,
     ) {
         let msg = WebGpuMsg::Submit {

@@ -5,11 +5,9 @@
 use canvas_traits::webgpu as w;
 use webgpu::backend;
 use webgpu::gpu::{self,
-    Adapter, Device, QueueFamily,
+    Adapter, Device, Instance, QueueFamily,
     RawCommandBuffer, RawCommandPool, RawCommandQueue,
 };
-
-use euclid::Size2D;
 
 use std::thread;
 use std::cmp::Ordering;
@@ -20,6 +18,9 @@ use webgpu_mode::{LazyVec, ResourceHub};
 /// WebGL Threading API entry point that lives in the constellation.
 /// It allows to get a WebGpuThread handle for each script pipeline.
 pub use ::webgpu_mode::WebGpuThreads;
+
+use euclid::Size2D;
+use webrender_api;
 
 
 enum PoolCommand<B: gpu::Backend> {
@@ -84,12 +85,33 @@ impl<B: gpu::Backend> CommandPoolHandle<B> {
     }
 }
 
+
+struct Heap<B: gpu::Backend> {
+    raw: B::Heap,
+    size: usize,
+    resources: gpu::device::ResourceHeapType,
+}
+
+struct ReadyFrame {
+    gpu_id: w::GpuId,
+    buffer_id: w::BufferId,
+    bytes_per_row: usize,
+    fence_id: w::FenceId,
+    size: Size2D<u32>,
+}
+
+struct Context {
+    latest_frame: Option<ReadyFrame>,
+    wr_image: webrender_api::ImageKey,
+}
+
 pub struct WebGpuThread<B: gpu::Backend> {
-    /// Id generator for new WebGpuContexts.
-    next_webgpu_id: usize,
+    /// Channel used to generate/update or delete `webrender_api::ImageKey`s.
+    webrender_api: webrender_api::RenderApi,
     adapters: Vec<B::Adapter>,
+    contexts: LazyVec<Context>,
     gpus: LazyVec<gpu::Gpu<B>>,
-    heaps: LazyVec<B::Heap>,
+    heaps: LazyVec<Heap<B>>,
     rehub: Arc<ResourceHub<B>>,
     command_pools: LazyVec<CommandPoolHandle<B>>,
 }
@@ -97,14 +119,17 @@ pub struct WebGpuThread<B: gpu::Backend> {
 impl WebGpuThread<backend::Backend> {
     /// Creates a new `WebGpuThread` and returns a Sender to
     /// communicate with it.
-    pub fn start() -> w::WebGpuSender<w::WebGpuMsg> {
+    pub fn start(
+        webrender_api_sender: webrender_api::RenderApiSender,
+    ) -> w::WebGpuSender<w::WebGpuMsg> {
         let (sender, receiver) = w::webgpu_channel::<w::WebGpuMsg>().unwrap();
         let result = sender.clone();
         thread::Builder::new().name("WebGpuThread".to_owned()).spawn(move || {
             let instance = backend::Instance::create("Servo", 1);
             let mut renderer: Self = WebGpuThread {
-                next_webgpu_id: 0,
+                webrender_api: webrender_api_sender.create_api(),
                 adapters: instance.enumerate_adapters(),
+                contexts: LazyVec::new(),
                 gpus: LazyVec::new(),
                 heaps: LazyVec::new(),
                 rehub: ResourceHub::new(),
@@ -129,14 +154,15 @@ impl<B: gpu::Backend> WebGpuThread<B> {
     /// Handles a generic WebGpuMsg message
     fn handle_msg(&mut self, msg: w::WebGpuMsg, webgpu_chan: &w::WebGpuChan) -> bool {
         match msg {
-            w::WebGpuMsg::CreateContext(sender) => {
-                let init = self
-                    .create_webgpu_context()
+            w::WebGpuMsg::CreateContext(size, sender) => {
+                let info = self
+                    .create_webgpu_context(size)
                     .map(|(id, adapters)| w::ContextInfo {
-                        sender: w::WebGpuMsgSender::new(id, webgpu_chan.clone()),
+                        id,
                         adapters,
+                        sender: webgpu_chan.clone(),
                     });
-                sender.send(init).unwrap();
+                sender.send(info).unwrap();
             }
             w::WebGpuMsg::OpenAdapter { adapter_id, queue_families, result } => {
                 let adapter = &mut self.adapters[adapter_id as usize];
@@ -151,14 +177,11 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 let gpu = adapter.open(&families);
                 let general_queues = (0 .. gpu.general_queues.len() as w::QueueId).collect();
                 let info = w::GpuInfo {
+                    limits: gpu.device.get_limits().clone(),
                     id: self.gpus.push(gpu),
                     general: general_queues,
                 };
                 result.send(info).unwrap();
-            }
-            w::WebGpuMsg::BuildSwapchain { gpu_id, format, size, result } => {
-                let swapchain = self.build_swapchain(gpu_id, format, size);
-                result.send(swapchain).unwrap();
             }
             w::WebGpuMsg::CreateCommandPool { gpu_id, queue_id, result } => {
                 let command_pool = self.create_command_pool(gpu_id, queue_id);
@@ -167,8 +190,19 @@ impl<B: gpu::Backend> WebGpuThread<B> {
             w::WebGpuMsg::Submit { gpu_id, queue_id, command_buffers, fence_id, .. } => {
                 self.submit(gpu_id, queue_id, command_buffers, fence_id);
             }
-            w::WebGpuMsg::Present(image_id) => {
-                //TODO
+            w::WebGpuMsg::Present { context_id, gpu_id, buffer_id, bytes_per_row, fence_id, size }  => {
+                let context = &mut self.contexts[context_id];
+                context.latest_frame = Some(ReadyFrame {
+                    gpu_id,
+                    buffer_id,
+                    bytes_per_row,
+                    fence_id,
+                    size,
+                });
+            }
+            w::WebGpuMsg::ReadWrImage(context_id, result) => {
+                let image_key = self.read_wr_image(context_id);
+                result.send(image_key).unwrap();
             }
             w::WebGpuMsg::Exit => {
                 return true;
@@ -197,6 +231,18 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 let done = gpu.device.wait_for_fences(&fences_raw, mode, timeout);
                 result.send(done).unwrap();
             }
+            w::WebGpuMsg::CreateHeap { gpu_id, desc, result } => {
+                let heap = self.create_heap(gpu_id, desc);
+                result.send(heap).unwrap();
+            }
+            w::WebGpuMsg::CreateBuffer { gpu_id, desc, result } => {
+                let buffer = self.create_buffer(gpu_id, desc);
+                result.send(buffer).unwrap();
+            }
+            w::WebGpuMsg::CreateImage { gpu_id, desc, result } => {
+                let image = self.create_image(gpu_id, desc);
+                result.send(image).unwrap();
+            }
             w::WebGpuMsg::CreateFramebuffer { gpu_id, desc, result } => {
                 let framebuffer = self.create_framebuffer(gpu_id, desc);
                 result.send(framebuffer).unwrap();
@@ -215,8 +261,9 @@ impl<B: gpu::Backend> WebGpuThread<B> {
     }
 
     /// Creates a new WebGpuContext
-    fn create_webgpu_context(&mut self
-    ) -> Result<(w::WebGpuContextId, Vec<w::AdapterInfo>), String>
+    fn create_webgpu_context(&mut self,
+        size: Size2D<u32>,
+    ) -> Result<(w::ContextId, Vec<w::AdapterInfo>), String>
     {
         let adapters = self.adapters
             .iter()
@@ -229,86 +276,46 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                     .map(|(qid, &(ref family, ty))| {
                         w::QueueFamilyInfo {
                             ty,
-                            count: family.num_queues() as u8,
-                            original_id: qid as w::QueueFamilyId,
+                            count: family.num_queues() as _,
+                            original_id: qid as _,
                         }
                     })
                     .collect();
                 w::AdapterInfo {
                     info: ad.get_info().clone(),
                     queue_families,
-                    original_id: aid as w::AdapterId,
+                    original_id: aid as _,
                 }
             })
             .collect();
-        let id = w::WebGpuContextId(self.next_webgpu_id);
-        self.next_webgpu_id += 1;
-        Ok((id, adapters))
-    }
 
-    fn build_swapchain(&mut self,
-        gpu_id: w::GpuId,
-        format: gpu::format::Format,
-        size: Size2D<u32>,
-    ) -> w::SwapchainInfo {
-        let gpu = &mut self.gpus[gpu_id];
-        let mut image_store = self.rehub.images.write().unwrap();
-        let num_frames = 3; //TODO
 
-        let unbound_images = (0 .. num_frames)
-            .map(|_| {
-                let image = gpu.device.create_image(
-                    gpu::image::Kind::D2(
-                        size.width as gpu::image::Size,
-                        size.height as gpu::image::Size,
-                        gpu::image::AaMode::Single,
-                    ),
-                    1,
-                    format,
-                    gpu::image::COLOR_ATTACHMENT | gpu::image::TRANSFER_SRC,
-                ).unwrap();
-                let requirements = gpu.device.get_image_requirements(&image);
-                (image, requirements)
-            })
-            .collect::<Vec<_>>();
+        let wr_image = {
+            let key = self.webrender_api.generate_image_key();
 
-        let heap_size = unbound_images
-            .iter()
-            .map(|&(_, req)| req.alignment + req.size)
-            .sum();
+            let mut updates = webrender_api::ResourceUpdates::new();
+            let desc = webrender_api::ImageDescriptor {
+                format: webrender_api::ImageFormat::BGRA8,
+                width: size.width,
+                height: size.height,
+                stride: None,
+                offset: 0,
+                is_opaque: true,
+            };
+            let pixels = (0..size.width*size.height*4).map(|_| 0u8).collect(); //TEMP
+            let data = webrender_api::ImageData::Raw(Arc::new(pixels));
+            updates.add_image(key, desc, data, None);
+            self.webrender_api.update_resources(updates);
 
-        let heap = {
-            let heap_type = gpu.heap_types
-                .iter()
-                .find(|ht| ht.properties.contains(gpu::memory::DEVICE_LOCAL))
-                .unwrap();
-            gpu.device.create_heap(
-                heap_type,
-                gpu::device::ResourceHeapType::Images,
-                heap_size,
-            ).unwrap()
+            key
+        };
+        let context = Context {
+            latest_frame: None,
+            wr_image,
         };
 
-        let mut offset = 0;
-        let images = unbound_images
-            .into_iter()
-            .map(|(unbound_image, req)| {
-                offset = (offset + req.alignment - 1) & !(req.alignment - 1);
-                let image = gpu.device.bind_image_memory(
-                    &heap,
-                    offset,
-                    unbound_image,
-                ).unwrap();
-                offset += req.size;
-                image_store.push(image)
-            })
-            .collect();
-
-        assert!(offset <= heap_size);
-        w::SwapchainInfo {
-            heap_id: self.heaps.push(heap),
-            images,
-        }
+        let id = self.contexts.push(context);
+        Ok((id, adapters))
     }
 
     #[allow(unsafe_code)]
@@ -440,6 +447,13 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                     let cb = &mut com_buffers[active_id.unwrap()];
                     cb.end_renderpass();
                 }
+                w::WebGpuCommand::CopyImageToBuffer { source_id, source_layout, destination_id, regions } => {
+                    let cb = &mut com_buffers[active_id.unwrap()];
+                    let source = &rehub.images.read().unwrap()[source_id];
+                    let destination = &rehub.buffers.read().unwrap()[destination_id];
+
+                    cb.copy_image_to_buffer(source, source_layout, destination, &regions);
+                }
             }
         }
     }
@@ -481,6 +495,41 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         });
     }
 
+    fn read_wr_image(&mut self, context_id: w::ContextId) -> webrender_api::ImageKey {
+        let context = &self.contexts[context_id];
+        //TODO: use external image handler
+        match context.latest_frame {
+            Some(ref frame) => {
+                let pixels = {
+                    let device = &mut self.gpus[frame.gpu_id].device;
+                    let fence = &self.rehub.fences.read().unwrap()[frame.fence_id];
+                    device.wait_for_fences(&[fence], gpu::device::WaitFor::Any, !0); //TEMP
+                    let buffer = &self.rehub.buffers.read().unwrap()[frame.buffer_id];
+                    let total_size = frame.bytes_per_row * frame.size.height as usize;
+                    let mapping = device.read_mapping(buffer, 0, total_size as _).unwrap();
+                    mapping.to_owned()
+                };
+                let mut updates = webrender_api::ResourceUpdates::new();
+                let desc = webrender_api::ImageDescriptor {
+                    format: webrender_api::ImageFormat::BGRA8,
+                    width: frame.size.width,
+                    height: frame.size.height,
+                    stride: Some(frame.bytes_per_row as _),
+                    offset: 0,
+                    is_opaque: true,
+                };
+                let data = webrender_api::ImageData::Raw(Arc::new(pixels));
+                updates.update_image(context.wr_image, desc, data, None);
+                self.webrender_api.update_resources(updates);
+            }
+            None => {
+                warn!("Frame is not ready yet");
+            }
+        };
+
+        context.wr_image
+    }
+
     fn create_fence(&mut self,
         gpu_id: w::GpuId,
         set: bool,
@@ -489,6 +538,94 @@ impl<B: gpu::Backend> WebGpuThread<B> {
 
         let fence = gpu.device.create_fence(set);
         self.rehub.fences.write().unwrap().push(fence)
+    }
+
+    fn create_heap(&mut self,
+        gpu_id: w::GpuId,
+        desc: w::HeapDesc,
+    ) -> w::HeapInfo {
+        let gpu = &mut self.gpus[gpu_id];
+
+        let heap_type = gpu.heap_types
+            .iter()
+            .find(|ht| ht.properties.contains(desc.properties))
+            .unwrap();
+        let raw = gpu.device.create_heap(
+            heap_type,
+            desc.resources,
+            desc.size as _,
+        ).unwrap();
+        let heap = Heap {
+            raw,
+            size: desc.size,
+            resources: desc.resources,
+        };
+
+        w::HeapInfo {
+            id: self.heaps.push(heap),
+        }
+    }
+
+    fn create_buffer(&mut self,
+        gpu_id: w::GpuId,
+        desc: w::BufferDesc,
+    ) -> w::BufferInfo {
+        let gpu = &mut self.gpus[gpu_id];
+        let heap = &self.heaps[desc.heap_id];
+        match heap.resources {
+            gpu::device::ResourceHeapType::Any |
+            gpu::device::ResourceHeapType::Buffers => (),
+            _ => panic!("Heap doesn't support buffers")
+        }
+
+        let unbound = gpu.device
+            .create_buffer(desc.size as _, desc.stride as _, desc.usage)
+            .unwrap();
+        let requirements = gpu.device.get_buffer_requirements(&unbound);
+        debug_assert_ne!(requirements.alignment, 0);
+
+        let offset = (desc.heap_offset as u64 + requirements.alignment - 1) &
+            !(requirements.alignment - 1);
+        assert!(offset + requirements.size <= heap.size as u64);
+        let buffer = gpu.device
+            .bind_buffer_memory(&heap.raw, offset, unbound)
+            .unwrap();
+
+        w::BufferInfo {
+            id: self.rehub.buffers.write().unwrap().push(buffer),
+            occupied_size: (offset + requirements.size) as usize - desc.heap_offset,
+        }
+    }
+
+    fn create_image(&mut self,
+        gpu_id: w::GpuId,
+        desc: w::ImageDesc,
+    ) -> w::ImageInfo {
+        let gpu = &mut self.gpus[gpu_id];
+        let heap = &self.heaps[desc.heap_id];
+        match heap.resources {
+            gpu::device::ResourceHeapType::Any |
+            gpu::device::ResourceHeapType::Images => (),
+            _ => panic!("Heap doesn't support images")
+        }
+
+        let unbound = gpu.device
+            .create_image(desc.kind, desc.levels, desc.format, desc.usage)
+            .unwrap();
+        let requirements = gpu.device.get_image_requirements(&unbound);
+        debug_assert_ne!(requirements.alignment, 0);
+
+        let offset = (desc.heap_offset as u64 + requirements.alignment - 1) &
+            !(requirements.alignment - 1);
+        assert!(offset + requirements.size <= heap.size as u64);
+        let image = gpu.device
+            .bind_image_memory(&heap.raw, offset, unbound)
+            .unwrap();
+
+        w::ImageInfo {
+            id: self.rehub.images.write().unwrap().push(image),
+            occupied_size: (offset + requirements.size) as usize - desc.heap_offset,
+        }
     }
 
     fn create_framebuffer(&mut self,

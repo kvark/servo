@@ -17,7 +17,8 @@ pub struct WebGpuHeap {
 }
 
 impl WebGpuHeap {
-    pub fn new(global: &GlobalScope, id: HeapId) -> Root<Self> {
+    #[allow(unrooted_must_root)]
+    pub fn _new(global: &GlobalScope, id: HeapId) -> Root<Self> {
         let obj = box WebGpuHeap {
             reflector_: Reflector::new(),
             id,

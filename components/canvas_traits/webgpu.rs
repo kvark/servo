@@ -2,17 +2,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use euclid::Size2D;
 use heapsize::HeapSizeOf;
 use ipc_channel;
 use serde::{Deserialize, Serialize};
 use std::io;
+use euclid::Size2D;
+use webrender_api;
 
 pub use webgpu_component::gpu;
 
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, HeapSizeOf)]
-pub struct WebGpuContextId(pub usize);
 
 pub type WebGpuSender<T> = ipc_channel::ipc::IpcSender<T>;
 pub type WebGpuReceiver<T> = ipc_channel::ipc::IpcReceiver<T>;
@@ -30,6 +28,7 @@ pub struct Key {
     pub epoch: u32,
 }
 
+pub type ContextId = Key;
 pub type AdapterId = u8;
 pub type GpuId = Key;
 pub type QueueFamilyId = u32;
@@ -48,13 +47,24 @@ pub type RenderpassId = Key;
 pub type RenderTargetViewId = Key;
 pub type DepthStencilViewId = Key;
 
+
+#[derive(Clone, Copy, Deserialize, HeapSizeOf, Serialize)]
+pub enum WebGpuContextShareMode {
+    /// Fast: a shared texture_id is used in WebRender.
+    SharedTexture,
+    /// Slow: pixels are read back and sent to WebRender each frame.
+    Readback,
+}
+
 /// Contains the WebGpuCommand sender and information about a WebGpuContext
 #[derive(Clone, Deserialize, Serialize)]
 pub struct ContextInfo {
-    /// Sender instance to send commands to the specific WebGpuContext.
-    pub sender: WebGpuMsgSender,
+    /// Produced context ID.
+    pub id: ContextId,
     /// Vector of available adapters.
     pub adapters: Vec<AdapterInfo>,
+    /// Sender instance to send commands to the GPU thread.
+    pub sender: WebGpuChan,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -80,13 +90,8 @@ pub struct AdapterInfo {
 #[derive(Clone, Deserialize, Serialize)]
 pub struct GpuInfo {
     pub id: GpuId,
+    pub limits: gpu::Limits,
     pub general: Vec<QueueId>,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-pub struct SwapchainInfo {
-    pub heap_id: HeapId,
-    pub images: Vec<ImageId>,
 }
 
 #[derive(Clone, Deserialize, Serialize, HeapSizeOf)]
@@ -169,6 +174,50 @@ pub struct RenderpassDesc {
     pub dependencies: Vec<gpu::pass::SubpassDependency>,
 }
 
+#[derive(Clone, Deserialize, Serialize)]
+pub struct HeapDesc {
+    pub size: usize,
+    pub properties: gpu::memory::HeapProperties,
+    pub resources: gpu::device::ResourceHeapType,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct HeapInfo {
+    pub id: HeapId,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct BufferDesc {
+    pub size: usize,
+    pub stride: usize,
+    pub usage: gpu::buffer::Usage,
+    pub heap_id: HeapId,
+    pub heap_offset: usize,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct BufferInfo {
+    pub id: BufferId,
+    pub occupied_size: usize,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct ImageDesc {
+    pub kind: gpu::image::Kind,
+    pub levels: gpu::image::Level,
+    pub format: gpu::format::Format,
+    pub usage: gpu::image::Usage,
+    pub heap_id: HeapId,
+    pub heap_offset: usize,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct ImageInfo {
+    pub id: ImageId,
+    pub occupied_size: usize,
+}
+
+
 /// WebGpu Command API
 #[derive(Clone, Deserialize, Serialize)]
 pub enum WebGpuCommand {
@@ -186,6 +235,12 @@ pub enum WebGpuCommand {
         clear_values: Vec<gpu::command::ClearValue>,
     },
     EndRenderpass,
+    CopyImageToBuffer {
+        source_id: ImageId,
+        source_layout: gpu::image::ImageLayout,
+        destination_id: BufferId,
+        regions: Vec<gpu::command::BufferImageCopy>,
+    },
 }
 
 pub type WebGpuCommandChan = WebGpuSender<WebGpuCommand>;
@@ -201,19 +256,12 @@ pub struct CommandPoolInfo {
 #[derive(Deserialize, Serialize)]
 pub enum WebGpuMsg {
     /// Creates a new WebGPU context instance.
-    CreateContext(WebGpuSender<Result<ContextInfo, String>>),
+    CreateContext(Size2D<u32>, WebGpuSender<Result<ContextInfo, String>>),
     /// Create a new device on the adapter.
     OpenAdapter {
         adapter_id: AdapterId,
         queue_families: Vec<(QueueFamilyId, QueueCount)>,
         result: WebGpuSender<GpuInfo>,
-    },
-    /// Build a new swapchain on the device.
-    BuildSwapchain {
-        gpu_id: GpuId,
-        format: gpu::format::Format,
-        size: Size2D<u32>,
-        result: WebGpuSender<SwapchainInfo>,
     },
     CreateCommandPool {
         gpu_id: GpuId,
@@ -228,6 +276,18 @@ pub enum WebGpuMsg {
         signal_semaphores: Vec<SemaphoreId>,
         fence_id: Option<FenceId>,
     },
+    /// Present the specified image on screen.
+    Present {
+        context_id: ContextId,
+        gpu_id: GpuId,
+        buffer_id: BufferId,
+        bytes_per_row: usize,
+        fence_id: FenceId,
+        size: Size2D<u32>
+    },
+    ReadWrImage(ContextId, WebGpuSender<webrender_api::ImageKey>),
+    /// Frees all resources and closes the thread.
+    Exit,
     CreateFence {
         gpu_id: GpuId,
         set: bool,
@@ -243,6 +303,21 @@ pub enum WebGpuMsg {
         mode: gpu::device::WaitFor,
         timeout: u32,
         result: WebGpuSender<bool>,
+    },
+    CreateHeap {
+        gpu_id: GpuId,
+        desc: HeapDesc,
+        result: WebGpuSender<HeapInfo>,
+    },
+    CreateBuffer {
+        gpu_id: GpuId,
+        desc: BufferDesc,
+        result: WebGpuSender<BufferInfo>,
+    },
+    CreateImage {
+        gpu_id: GpuId,
+        desc: ImageDesc,
+        result: WebGpuSender<ImageInfo>,
     },
     CreateFramebuffer {
         gpu_id: GpuId,
@@ -260,10 +335,6 @@ pub enum WebGpuMsg {
         format: gpu::format::Format,
         result: WebGpuSender<RenderTargetViewInfo>,
     },
-    /// Present the specified image on screen.
-    Present(ImageId),
-    /// Frees all resources and closes the thread.
-    Exit,
 }
 
 pub type WebGpuChan = WebGpuSender<WebGpuMsg>;
@@ -274,22 +345,5 @@ pub struct WebGpuPipeline(pub WebGpuChan);
 impl WebGpuPipeline {
     pub fn channel(&self) -> WebGpuChan {
         self.0.clone()
-    }
-}
-
-/// Helper struct to send WebGpuCommands to a specific WebGpuContext.
-#[derive(Clone, Deserialize, HeapSizeOf, Serialize)]
-pub struct WebGpuMsgSender {
-    ctx_id: WebGpuContextId,
-    #[ignore_heap_size_of = "channels are hard"]
-    pub sender: WebGpuChan,
-}
-
-impl WebGpuMsgSender {
-    pub fn new(ctx_id: WebGpuContextId, sender: WebGpuChan) -> Self {
-        WebGpuMsgSender {
-            ctx_id,
-            sender,
-        }
     }
 }

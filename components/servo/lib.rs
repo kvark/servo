@@ -329,7 +329,7 @@ fn create_constellation(user_agent: Cow<'static, str>,
     let (webgl_threads, image_handler) = WebGLThreads::new(gl_factory,
                                                            webrender_api_sender.clone(),
                                                            webvr_compositor.map(|c| c as Box<_>));
-    let webgpu_threads = WebGpuThreads::new();
+    let webgpu_threads = WebGpuThreads::new(webrender_api_sender.clone());
     // Set webrender external image handler for WebGL textures
     webrender.set_external_image_handler(image_handler);
 

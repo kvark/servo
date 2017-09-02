@@ -4,15 +4,18 @@
 
 use canvas_traits::webgpu as w;
 use ::webgpu_thread::WebGpuThread;
+use webrender_api;
 
  /// WebGPU Threading API entry point that lives in the constellation.
 pub struct WebGpuThreads(w::WebGpuSender<w::WebGpuMsg>);
 
 impl WebGpuThreads {
     /// Creates a new WebGpuThreads object
-    pub fn new() -> Self {
+    pub fn new(
+        webrender_api_sender: webrender_api::RenderApiSender,
+    ) -> Self {
         // This implementation creates a single `WebGpuThread` for all the pipelines.
-        WebGpuThreads(WebGpuThread::start())
+        WebGpuThreads(WebGpuThread::start(webrender_api_sender))
     }
 
     /// Gets the WebGpuThread handle for each script pipeline.
