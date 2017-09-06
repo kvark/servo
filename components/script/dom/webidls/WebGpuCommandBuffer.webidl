@@ -49,6 +49,8 @@ interface WebGpuCommandBuffer {
 	void finish();
 
 	void pipelineBarrier(
+		WebGpuPipelineStage srcStages,
+		WebGpuPipelineStage dstStages,
 		sequence<WebGpuBufferBarrier> buffers,
 		sequence<WebGpuImageBarrier> images
 	);

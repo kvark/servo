@@ -7,8 +7,8 @@ typedef unsigned long WebGpuImageAccess;
 typedef unsigned long WebGpuPipelineStage;
 
 enum WebGpuFormat {
-	"R8G8B8A8_UNORM",
-	"R8G8B8A8_SRGB",
+	"B8G8R8A8_UNORM",
+	"B8G8R8A8_SRGB",
 };
 
 enum WebGpuImageLayout {

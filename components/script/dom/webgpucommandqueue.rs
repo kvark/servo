@@ -64,11 +64,14 @@ impl WebGpuCommandQueue {
 }
 
 impl binding::WebGpuCommandQueueMethods for WebGpuCommandQueue {
-    fn CreateCommandPool(&self) -> Root<WebGpuCommandPool> {
+    fn CreateCommandPool(&self,
+        flags: binding::WebGpuCommandPoolFlags,
+    ) -> Root<WebGpuCommandPool> {
         let (sender, receiver) = webgpu_channel().unwrap();
         let msg = WebGpuMsg::CreateCommandPool {
             gpu_id: self.id.0,
             queue_id: self.id.1,
+            flags: gpu::pool::CommandPoolCreateFlags::from_bits(flags as _).unwrap(),
             result: sender,
         };
         self.sender.send(msg).unwrap();

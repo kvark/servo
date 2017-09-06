@@ -7,7 +7,8 @@ use std::cell::Cell;
 use canvas_traits::webgpu::{WebGpuChan, WebGpuCommand, WebGpuMsg,
     gpu, webgpu_channel,
     BufferId, BufferDesc, CommandBufferId, CommandPoolInfo, ContextId,
-    FenceId, GpuId, HeapId, HeapDesc, ImageBarrier, ImageDesc, SubmitEpoch, SubmitInfo, QueueId,
+    FenceId, GpuId, HeapId, HeapDesc, BufferBarrier, ImageBarrier,
+    ImageDesc, SubmitEpoch, SubmitInfo, QueueId,
 };
 use dom::bindings::cell::DOMRefCell;
 use dom::bindings::codegen::Bindings::WebGpuSwapchainBinding as binding;
@@ -167,6 +168,7 @@ impl WebGpuSwapchain {
             let msg = WebGpuMsg::CreateCommandPool {
                 gpu_id: queue.gpu_id(),
                 queue_id: queue.get_id(),
+                flags: gpu::pool::RESET_INDIVIDUAL,
                 result,
             };
             sender.send(msg).unwrap();
@@ -304,10 +306,15 @@ impl binding::WebGpuSwapchainMethods for WebGpuSwapchain {
         };
         let src_layout = gpu::image::ImageLayout::Present;
         let dst_layout = WebGpuDevice::map_image_layout(return_state.layout);
-        let barrier = ImageBarrier {
+        let image_bar = ImageBarrier {
             state_src: (gpu::image::Access::empty(), src_layout),
             state_dst: (gpu::image::TRANSFER_READ, dst_layout),
             target: frame.image.get_id(),
+        };
+        let buffer_bar = BufferBarrier {
+            state_src: gpu::buffer::TRANSFER_WRITE,
+            state_dst: gpu::buffer::Access::empty(),
+            target: frame.staging_buffer_id,
         };
         let region = gpu::command::BufferImageCopy {
             buffer_offset: 0,
@@ -329,12 +336,23 @@ impl binding::WebGpuSwapchainMethods for WebGpuSwapchain {
 
         let chan = &self.command_pool_info.channel;
         chan.send(WebGpuCommand::Begin(frame.command_buffer_id)).unwrap();
-        chan.send(WebGpuCommand::PipelineBarrier(Vec::new(), vec![barrier])).unwrap();
+        chan.send(WebGpuCommand::PipelineBarrier {
+            src_stages: gpu::pso::BOTTOM_OF_PIPE, //TODO
+            dst_stages: gpu::pso::TRANSFER,
+            buffer_bars: Vec::new(),
+            image_bars: vec![image_bar],
+        }).unwrap();
         chan.send(WebGpuCommand::CopyImageToBuffer {
             source_id: frame.image.get_id(),
             source_layout: dst_layout,
             destination_id: frame.staging_buffer_id,
             regions: vec![region],
+        }).unwrap();
+        chan.send(WebGpuCommand::PipelineBarrier {
+            src_stages: gpu::pso::TRANSFER,
+            dst_stages: gpu::pso::HOST,
+            buffer_bars: vec![buffer_bar],
+            image_bars: Vec::new(),
         }).unwrap();
         chan.send(WebGpuCommand::Finish(present_epoch)).unwrap();
 

@@ -183,8 +183,8 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 };
                 result.send(info).unwrap();
             }
-            w::WebGpuMsg::CreateCommandPool { gpu_id, queue_id, result } => {
-                let command_pool = self.create_command_pool(gpu_id, queue_id);
+            w::WebGpuMsg::CreateCommandPool { gpu_id, queue_id, flags, result } => {
+                let command_pool = self.create_command_pool(gpu_id, queue_id, flags);
                 result.send(command_pool).unwrap();
             }
             w::WebGpuMsg::Submit { gpu_id, queue_id, command_buffers, fence_id, .. } => {
@@ -322,12 +322,13 @@ impl<B: gpu::Backend> WebGpuThread<B> {
     fn create_command_pool(&mut self,
         gpu_id: w::GpuId,
         queue_id: w::QueueId,
+        flags: gpu::pool::CommandPoolCreateFlags,
     ) -> w::CommandPoolInfo
     {
         let gpu = &mut self.gpus[gpu_id];
         let queue = gpu.general_queues[queue_id as usize].as_raw();//TODO
         let pool = unsafe {
-            B::CommandPool::from_queue(queue, gpu::pool::CommandPoolCreateFlags::empty())
+            B::CommandPool::from_queue(queue, flags)
         };
 
         let (channel, receiver) = w::webgpu_channel().unwrap();
@@ -409,7 +410,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                     let cmd = PoolCommand::FinishBuffer(id, submit_epoch, submit);
                     channel.send(cmd).unwrap();
                 }
-                w::WebGpuCommand::PipelineBarrier(buffer_bars, image_bars) => {
+                w::WebGpuCommand::PipelineBarrier { src_stages, dst_stages, buffer_bars, image_bars } => {
                     let cb = &mut com_buffers[active_id.unwrap()];
                     let buffer_store = rehub.buffers.read().unwrap();
                     let image_store = rehub.images.read().unwrap();
@@ -435,7 +436,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                     let barriers = buffer_iter
                         .chain(image_iter)
                         .collect::<Vec<_>>();
-                    cb.pipeline_barrier(&barriers);
+                    cb.pipeline_barrier(src_stages, dst_stages, &barriers);
                 }
                 w::WebGpuCommand::BeginRenderpass { renderpass, framebuffer, area, clear_values } => {
                     let cb = &mut com_buffers[active_id.unwrap()];
@@ -498,12 +499,17 @@ impl<B: gpu::Backend> WebGpuThread<B> {
     fn read_wr_image(&mut self, context_id: w::ContextId) -> webrender_api::ImageKey {
         let context = &self.contexts[context_id];
         //TODO: use external image handler
+        //TODO: "If the memory was allocated without the VK_MEMORY_PROPERTY_HOST_COHERENT_BIT set,
+        // then vkInvalidateMappedMemoryRanges must be called after the fence is signaled
+        // in order to ensure the writes are visible to the host,
+        // as described in Host Access to Device Memory Objects"
         match context.latest_frame {
             Some(ref frame) => {
                 let pixels = {
                     let device = &mut self.gpus[frame.gpu_id].device;
                     let fence = &self.rehub.fences.read().unwrap()[frame.fence_id];
                     device.wait_for_fences(&[fence], gpu::device::WaitFor::Any, !0); //TEMP
+                    device.reset_fences(&[fence]);
                     let buffer = &self.rehub.buffers.read().unwrap()[frame.buffer_id];
                     let total_size = frame.bytes_per_row * frame.size.height as usize;
                     let mapping = device.read_mapping(buffer, 0, total_size as _).unwrap();

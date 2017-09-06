@@ -9,6 +9,7 @@ use canvas_traits::webgpu::{
     gpu,
 };
 use dom::bindings::codegen::Bindings::WebGpuCommandBufferBinding as binding;
+use dom::bindings::codegen::Bindings::WebGpuDeviceBinding::WebGpuPipelineStage;
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
@@ -120,10 +121,12 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
     }
 
     fn PipelineBarrier(&self,
-        buffer_bars: Vec<binding::WebGpuBufferBarrier>,
-        image_bars: Vec<binding::WebGpuImageBarrier>,
+        src_stages: WebGpuPipelineStage,
+        dst_stages: WebGpuPipelineStage,
+        buffers: Vec<binding::WebGpuBufferBarrier>,
+        images: Vec<binding::WebGpuImageBarrier>,
     ) {
-        let buffers = buffer_bars
+        let buffer_bars = buffers
             .into_iter()
             .map(|bar| BufferBarrier {
                 state_src: Self::map_buffer_state(bar.stateSrc),
@@ -131,7 +134,7 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
                 target: bar.target.get_id(),
             })
             .collect();
-        let images = image_bars
+        let image_bars = images
             .into_iter()
             .map(|bar| ImageBarrier {
                 state_src: Self::map_image_state(bar.stateSrc),
@@ -140,7 +143,12 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
             })
             .collect();
 
-        let msg = WebGpuCommand::PipelineBarrier(buffers, images);
+        let msg = WebGpuCommand::PipelineBarrier {
+            src_stages: gpu::pso::PipelineStage::from_bits(src_stages as _).unwrap(),
+            dst_stages: gpu::pso::PipelineStage::from_bits(dst_stages as _).unwrap(),
+            buffer_bars,
+            image_bars,
+        };
         self.sender.send(msg).unwrap();
     }
 

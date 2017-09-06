@@ -73,8 +73,8 @@ impl WebGpuDevice {
         use self::binding::WebGpuFormat::*;
         use self::gpu::format::{Format, SurfaceType, ChannelType};
         match format {
-            R8G8B8A8_UNORM => Format(SurfaceType::R8_G8_B8_A8, ChannelType::Unorm),
-            R8G8B8A8_SRGB => Format(SurfaceType::R8_G8_B8_A8, ChannelType::Srgb),
+            B8G8R8A8_UNORM => Format(SurfaceType::B8_G8_R8_A8, ChannelType::Unorm),
+            B8G8R8A8_SRGB => Format(SurfaceType::B8_G8_R8_A8, ChannelType::Srgb),
         }
     }
 

@@ -115,7 +115,7 @@ impl binding::WebGpuRenderingContextMethods for WebGpuRenderingContext {
             self.id,
             queue,
             frame_count,
-            WebGpuFormat::R8G8B8A8_SRGB,
+            WebGpuFormat::B8G8R8A8_SRGB,
             self.canvas.get_size().cast().unwrap(),
         )
     }

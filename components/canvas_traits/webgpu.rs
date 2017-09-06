@@ -227,7 +227,12 @@ pub enum WebGpuCommand {
     FreeCommandBuffers(Vec<CommandBufferId>),
     Begin(CommandBufferId),
     Finish(SubmitEpoch),
-    PipelineBarrier(Vec<BufferBarrier>, Vec<ImageBarrier>),
+    PipelineBarrier {
+        src_stages: gpu::pso::PipelineStage,
+        dst_stages: gpu::pso::PipelineStage,
+        buffer_bars: Vec<BufferBarrier>,
+        image_bars: Vec<ImageBarrier>,
+    },
     BeginRenderpass {
         renderpass: RenderpassId,
         framebuffer: FramebufferId,
@@ -266,6 +271,7 @@ pub enum WebGpuMsg {
     CreateCommandPool {
         gpu_id: GpuId,
         queue_id: QueueId,
+        flags: gpu::pool::CommandPoolCreateFlags,
         result: WebGpuSender<CommandPoolInfo>,
     },
     Submit {
