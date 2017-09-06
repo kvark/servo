@@ -129,23 +129,23 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
         let buffer_bars = buffers
             .into_iter()
             .map(|bar| BufferBarrier {
-                state_src: Self::map_buffer_state(bar.stateSrc),
-                state_dst: Self::map_buffer_state(bar.stateDst),
+                states: Self::map_buffer_state(bar.stateSrc) ..
+                        Self::map_buffer_state(bar.stateDst),
                 target: bar.target.get_id(),
             })
             .collect();
         let image_bars = images
             .into_iter()
             .map(|bar| ImageBarrier {
-                state_src: Self::map_image_state(bar.stateSrc),
-                state_dst: Self::map_image_state(bar.stateDst),
+                states: Self::map_image_state(bar.stateSrc) ..
+                        Self::map_image_state(bar.stateDst),
                 target: bar.target.get_id(),
             })
             .collect();
 
         let msg = WebGpuCommand::PipelineBarrier {
-            src_stages: gpu::pso::PipelineStage::from_bits(src_stages as _).unwrap(),
-            dst_stages: gpu::pso::PipelineStage::from_bits(dst_stages as _).unwrap(),
+            stages: gpu::pso::PipelineStage::from_bits(src_stages as _).unwrap() ..
+                    gpu::pso::PipelineStage::from_bits(dst_stages as _).unwrap(),
             buffer_bars,
             image_bars,
         };

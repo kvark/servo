@@ -307,13 +307,11 @@ impl binding::WebGpuSwapchainMethods for WebGpuSwapchain {
         let src_layout = gpu::image::ImageLayout::Present;
         let dst_layout = WebGpuDevice::map_image_layout(return_state.layout);
         let image_bar = ImageBarrier {
-            state_src: (gpu::image::Access::empty(), src_layout),
-            state_dst: (gpu::image::TRANSFER_READ, dst_layout),
+            states: (gpu::image::Access::empty(), src_layout) .. (gpu::image::TRANSFER_READ, dst_layout),
             target: frame.image.get_id(),
         };
         let buffer_bar = BufferBarrier {
-            state_src: gpu::buffer::TRANSFER_WRITE,
-            state_dst: gpu::buffer::Access::empty(),
+            states: gpu::buffer::TRANSFER_WRITE .. gpu::buffer::Access::empty(),
             target: frame.staging_buffer_id,
         };
         let region = gpu::command::BufferImageCopy {
@@ -327,7 +325,7 @@ impl binding::WebGpuSwapchainMethods for WebGpuSwapchain {
                 y: 0,
                 z: 0,
             },
-            image_extent: gpu::command::Extent {
+            image_extent: gpu::device::Extent {
                 width: self.size.width as _,
                 height: self.size.height as _,
                 depth: 1,
@@ -337,8 +335,7 @@ impl binding::WebGpuSwapchainMethods for WebGpuSwapchain {
         let chan = &self.command_pool_info.channel;
         chan.send(WebGpuCommand::Begin(frame.command_buffer_id)).unwrap();
         chan.send(WebGpuCommand::PipelineBarrier {
-            src_stages: gpu::pso::BOTTOM_OF_PIPE, //TODO
-            dst_stages: gpu::pso::TRANSFER,
+            stages: gpu::pso::BOTTOM_OF_PIPE .. gpu::pso::TRANSFER, //TODO?
             buffer_bars: Vec::new(),
             image_bars: vec![image_bar],
         }).unwrap();
@@ -349,8 +346,7 @@ impl binding::WebGpuSwapchainMethods for WebGpuSwapchain {
             regions: vec![region],
         }).unwrap();
         chan.send(WebGpuCommand::PipelineBarrier {
-            src_stages: gpu::pso::TRANSFER,
-            dst_stages: gpu::pso::HOST,
+            stages: gpu::pso::TRANSFER .. gpu::pso::HOST,
             buffer_bars: vec![buffer_bar],
             image_bars: Vec::new(),
         }).unwrap();

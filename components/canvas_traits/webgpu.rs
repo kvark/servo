@@ -6,6 +6,7 @@ use heapsize::HeapSizeOf;
 use ipc_channel;
 use serde::{Deserialize, Serialize};
 use std::io;
+use std::ops::Range;
 use euclid::Size2D;
 use webrender_api;
 
@@ -118,8 +119,7 @@ pub struct DepthStencilViewInfo {
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct BufferBarrier {
-    pub state_src: gpu::buffer::State,
-    pub state_dst: gpu::buffer::State,
+    pub states: Range<gpu::buffer::State>,
     pub target: BufferId,
 }
 
@@ -131,8 +131,7 @@ impl HeapSizeOf for BufferBarrier {
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct ImageBarrier {
-    pub state_src: gpu::image::State,
-    pub state_dst: gpu::image::State,
+    pub states: Range<gpu::image::State>,
     pub target: ImageId,
 }
 
@@ -152,9 +151,7 @@ pub struct FramebufferDesc {
     pub renderpass: RenderpassId,
     pub colors: Vec<RenderTargetViewId>,
     pub depth_stencil: Option<DepthStencilViewId>,
-    pub width: u32,
-    pub height: u32,
-    pub layers: u32,
+    pub extent: gpu::device::Extent,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -228,8 +225,7 @@ pub enum WebGpuCommand {
     Begin(CommandBufferId),
     Finish(SubmitEpoch),
     PipelineBarrier {
-        src_stages: gpu::pso::PipelineStage,
-        dst_stages: gpu::pso::PipelineStage,
+        stages: Range<gpu::pso::PipelineStage>,
         buffer_bars: Vec<BufferBarrier>,
         image_bars: Vec<ImageBarrier>,
     },

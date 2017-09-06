@@ -410,7 +410,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                     let cmd = PoolCommand::FinishBuffer(id, submit_epoch, submit);
                     channel.send(cmd).unwrap();
                 }
-                w::WebGpuCommand::PipelineBarrier { src_stages, dst_stages, buffer_bars, image_bars } => {
+                w::WebGpuCommand::PipelineBarrier { stages, buffer_bars, image_bars } => {
                     let cb = &mut com_buffers[active_id.unwrap()];
                     let buffer_store = rehub.buffers.read().unwrap();
                     let image_store = rehub.images.read().unwrap();
@@ -418,8 +418,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                     let buffer_iter = buffer_bars
                         .into_iter()
                         .map(|bar| gpu::memory::Barrier::Buffer {
-                            state_src: bar.state_src,
-                            state_dst: bar.state_dst,
+                            states: bar.states,
                             target: &buffer_store[bar.target],
                             range: 0..1, //TODO
                         });
@@ -427,8 +426,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                     let image_iter = image_bars
                         .into_iter()
                         .map(|bar| gpu::memory::Barrier::Image {
-                            state_src: bar.state_src,
-                            state_dst: bar.state_dst,
+                            states: bar.states,
                             target: &image_store[bar.target],
                             range: (0..1, 0..1), //TODO
                         });
@@ -436,7 +434,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                     let barriers = buffer_iter
                         .chain(image_iter)
                         .collect::<Vec<_>>();
-                    cb.pipeline_barrier(src_stages, dst_stages, &barriers);
+                    cb.pipeline_barrier(stages, &barriers);
                 }
                 w::WebGpuCommand::BeginRenderpass { renderpass, framebuffer, area, clear_values } => {
                     let cb = &mut com_buffers[active_id.unwrap()];
@@ -655,9 +653,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
             renderpass,
             &color_attachments,
             &depth_stencil_attachments,
-            desc.width,
-            desc.height,
-            desc.layers,
+            desc.extent,
         );
 
         w::FramebufferInfo {

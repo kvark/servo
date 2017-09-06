@@ -173,12 +173,9 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
             .into_iter()
             .map(|at| gpu::pass::Attachment {
                 format: Self::map_format(at.format),
-                src_layout: Self::map_image_layout(at.srcLayout),
-                dst_layout: Self::map_image_layout(at.dstLayout),
-                load_op: Self::map_load_op(at.loadOp),
-                store_op: Self::map_store_op(at.storeOp),
-                stencil_load_op: Self::map_load_op(at.stencilLoadOp),
-                stencil_store_op: Self::map_store_op(at.stencilStoreOp),
+                layouts: Self::map_image_layout(at.srcLayout) .. Self::map_image_layout(at.dstLayout),
+                ops: gpu::pass::AttachmentOps::new(Self::map_load_op(at.loadOp), Self::map_store_op(at.storeOp)),
+                stencil_ops: gpu::pass::AttachmentOps::new(Self::map_load_op(at.stencilLoadOp), Self::map_store_op(at.stencilStoreOp)),
             })
             .collect();
 
@@ -198,12 +195,12 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         let dependencies = dependency_descs
             .into_iter()
             .map(|dep| gpu::pass::SubpassDependency {
-                src_pass: Self::map_pass_ref(dep.srcPass),
-                dst_pass: Self::map_pass_ref(dep.dstPass),
-                src_stage: gpu::pso::PipelineStage::from_bits(dep.srcStages as _).unwrap(),
-                dst_stage: gpu::pso::PipelineStage::from_bits(dep.dstStages as _).unwrap(),
-                src_access: gpu::image::Access::from_bits(dep.srcAccess as _).unwrap(),
-                dst_access: gpu::image::Access::from_bits(dep.dstAccess as _).unwrap(),
+                passes: Self::map_pass_ref(dep.srcPass) ..
+                        Self::map_pass_ref(dep.dstPass),
+                stages: gpu::pso::PipelineStage::from_bits(dep.srcStages as _).unwrap() ..
+                        gpu::pso::PipelineStage::from_bits(dep.dstStages as _).unwrap(),
+                accesses: gpu::image::Access::from_bits(dep.srcAccess as _).unwrap() ..
+                          gpu::image::Access::from_bits(dep.dstAccess as _).unwrap(),
             })
             .collect();
 
@@ -237,9 +234,11 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
                 renderpass: renderpass.get_id(),
                 colors: colors.into_iter().map(|v| v.get_id()).collect(),
                 depth_stencil: depth_stencil.map(|v| v.get_id()),
-                width: size.width as _,
-                height: size.height as _,
-                layers: size.layers as _,
+                extent: gpu::device::Extent {
+                    width: size.width as _,
+                    height: size.height as _,
+                    depth: size.layers as _,
+                },
             },
             result: sender,
         };
