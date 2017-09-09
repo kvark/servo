@@ -326,12 +326,16 @@ fn create_constellation(user_agent: Cow<'static, str>,
     };
 
     // Initialize WebGL Thread entry point.
-    let (webgl_threads, image_handler) = WebGLThreads::new(gl_factory,
-                                                           webrender_api_sender.clone(),
-                                                           webvr_compositor.map(|c| c as Box<_>));
-    let webgpu_threads = WebGpuThreads::new(webrender_api_sender.clone());
+    let (webgl_threads, _webgl_namespace, _webgl_image_handler) = WebGLThreads::new( //TEMP
+        gl_factory,
+        webrender_api_sender.clone(),
+        webvr_compositor.map(|c| c as Box<_>),
+    );
+    let (webgpu_threads, _webgpu_namespace, webgpu_image_handler) = WebGpuThreads::new(
+        webrender_api_sender.clone(),
+    );
     // Set webrender external image handler for WebGL textures
-    webrender.set_external_image_handler(image_handler);
+    webrender.set_external_image_handler(webgpu_image_handler);
 
     let initial_state = InitialConstellationState {
         compositor_proxy,

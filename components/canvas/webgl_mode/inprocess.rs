@@ -20,14 +20,16 @@ impl WebGLThreads {
     pub fn new(gl_factory: GLContextFactory,
                webrender_api_sender: webrender_api::RenderApiSender,
                webvr_compositor: Option<Box<WebVRRenderHandler>>)
-               -> (WebGLThreads, Box<webrender::ExternalImageHandler>) {
+               -> (WebGLThreads, webrender_api::IdNamespace, Box<webrender::ExternalImageHandler>) {
         // This implementation creates a single `WebGLThread` for all the pipelines.
-        let channel = WebGLThread::start(gl_factory,
-                                         webrender_api_sender,
-                                         webvr_compositor.map(|c| WebVRRenderWrapper(c)),
-                                         PhantomData);
+        let (channel, namespace) = WebGLThread::start(
+            gl_factory,
+            webrender_api_sender,
+            webvr_compositor.map(|c| WebVRRenderWrapper(c)),
+            PhantomData,
+        );
         let external = WebGLExternalImageHandler::new(WebGLExternalImages::new(channel.clone()));
-        (WebGLThreads(channel), Box::new(external))
+        (WebGLThreads(channel), namespace, Box::new(external))
     }
 
     /// Gets the WebGLThread handle for each script pipeline.

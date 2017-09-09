@@ -1982,6 +1982,9 @@ impl FragmentDisplayListBuilding for Fragment {
                     CanvasFragmentSource::WebGL(image_key) => {
                         (image_key, PixelFormat::BGRA8)
                     },
+                    CanvasFragmentSource::WebGpu(image_key) => {
+                        (image_key, PixelFormat::BGRA8)
+                    },
                     CanvasFragmentSource::Image(ref ipc_renderer) => {
                         match *ipc_renderer {
                             Some(ref ipc_renderer) => {

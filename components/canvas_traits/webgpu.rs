@@ -29,7 +29,6 @@ pub struct Key {
     pub epoch: u32,
 }
 
-pub type ContextId = Key;
 pub type AdapterId = u8;
 pub type GpuId = Key;
 pub type QueueFamilyId = u32;
@@ -58,14 +57,16 @@ pub enum WebGpuContextShareMode {
 }
 
 /// Contains the WebGpuCommand sender and information about a WebGpuContext
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct ContextInfo {
-    /// Produced context ID.
-    pub id: ContextId,
+    /// Presenter channel for showing the frames.
+    pub presenter: Presenter,
     /// Vector of available adapters.
     pub adapters: Vec<AdapterInfo>,
     /// Sender instance to send commands to the GPU thread.
     pub sender: WebGpuChan,
+    /// An image key for the currently presenting frame.
+    pub image_key: webrender_api::ImageKey,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -214,6 +215,32 @@ pub struct ImageInfo {
     pub occupied_size: usize,
 }
 
+pub type PresentDone = bool;
+
+#[derive(Deserialize, Serialize, HeapSizeOf)]
+pub struct ReadyFrame {
+    pub gpu_id: GpuId,
+    pub buffer_id: BufferId,
+    pub bytes_per_row: usize,
+    pub fence_id: FenceId,
+    pub size: Size2D<u32>,
+    #[ignore_heap_size_of = "Channels are hard"]
+    pub done_event: Option<WebGpuSender<PresentDone>>,
+}
+
+impl ReadyFrame {
+    pub fn reuse(mut self) -> Self {
+        //println!("frame with buffer id {:?} is reused", self.buffer_id);
+        self.done_event.take().unwrap().send(true).unwrap();
+        self
+    }
+    pub fn consume(mut self, shown: bool) {
+        //println!("frame with buffer id {:?} is consumed with result: {}", self.buffer_id, shown);
+        if let Some(sender) = self.done_event.take() {
+            sender.send(shown).unwrap();
+        }
+    }
+}
 
 /// WebGpu Command API
 #[derive(Clone, Deserialize, Serialize)]
@@ -257,7 +284,11 @@ pub struct CommandPoolInfo {
 #[derive(Deserialize, Serialize)]
 pub enum WebGpuMsg {
     /// Creates a new WebGPU context instance.
-    CreateContext(Size2D<u32>, WebGpuSender<Result<ContextInfo, String>>),
+    CreateContext {
+        size: Size2D<u32>,
+        external_image_id: webrender_api::ExternalImageId,
+        result: WebGpuSender<Result<ContextInfo, String>>,
+    },
     /// Create a new device on the adapter.
     OpenAdapter {
         adapter_id: AdapterId,
@@ -278,16 +309,12 @@ pub enum WebGpuMsg {
         signal_semaphores: Vec<SemaphoreId>,
         fence_id: Option<FenceId>,
     },
-    /// Present the specified image on screen.
     Present {
-        context_id: ContextId,
-        gpu_id: GpuId,
-        buffer_id: BufferId,
-        bytes_per_row: usize,
-        fence_id: FenceId,
-        size: Size2D<u32>
+        image_key: webrender_api::ImageKey,
+        external_image_id: webrender_api::ExternalImageId,
+        size: Size2D<u32>,
+        stride: u32,
     },
-    ReadWrImage(ContextId, WebGpuSender<webrender_api::ImageKey>),
     /// Frees all resources and closes the thread.
     Exit,
     CreateFence {
@@ -347,5 +374,33 @@ pub struct WebGpuPipeline(pub WebGpuChan);
 impl WebGpuPipeline {
     pub fn channel(&self) -> WebGpuChan {
         self.0.clone()
+    }
+}
+
+/// WebGpu presenter command type
+#[derive(Deserialize, Serialize)]
+pub enum WebGpuPresent {
+    Enter,
+    Exit,
+    Show(ReadyFrame),
+}
+
+pub type WebGpuPresentChan = WebGpuSender<(webrender_api::ExternalImageId, WebGpuPresent)>;
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct Presenter {
+    pub id: webrender_api::ExternalImageId,
+    pub channel: WebGpuPresentChan,
+}
+
+impl HeapSizeOf for Presenter {
+    fn heap_size_of_children(&self) -> usize {
+        0
+    }
+}
+
+impl Presenter {
+    pub fn send(&self, present: WebGpuPresent) {
+        self.channel.send((self.id, present)).unwrap()
     }
 }

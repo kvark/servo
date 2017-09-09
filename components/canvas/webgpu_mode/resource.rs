@@ -2,11 +2,12 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex,RwLock};
 use webgpu::gpu;
 use super::LazyVec;
 
 pub struct ResourceHub<B: gpu::Backend> {
+    pub gpus: Mutex<LazyVec<gpu::Gpu<B>>>,
     pub buffers: RwLock<LazyVec<B::Buffer>>,
     pub images: RwLock<LazyVec<B::Image>>,
     pub framebuffers: RwLock<LazyVec<B::FrameBuffer>>,
@@ -19,6 +20,7 @@ pub struct ResourceHub<B: gpu::Backend> {
 impl<B: gpu::Backend> ResourceHub<B> {
     pub fn new() -> Arc<Self> {
         Arc::new(ResourceHub {
+            gpus: Mutex::new(LazyVec::new()),
             buffers: RwLock::new(LazyVec::new()),
             images: RwLock::new(LazyVec::new()),
             framebuffers: RwLock::new(LazyVec::new()),

@@ -41,12 +41,12 @@ pub struct WebGLThread<VR: WebVRRenderHandler + 'static, OB: WebGLThreadObserver
 
 impl<VR: WebVRRenderHandler + 'static, OB: WebGLThreadObserver> WebGLThread<VR, OB> {
     pub fn new(gl_factory: GLContextFactory,
-               webrender_api_sender: webrender_api::RenderApiSender,
+               webrender_api: webrender_api::RenderApi,
                webvr_compositor: Option<VR>,
                observer: OB) -> Self {
         WebGLThread {
             gl_factory,
-            webrender_api: webrender_api_sender.create_api(),
+            webrender_api,
             contexts: HashMap::new(),
             cached_context_info: HashMap::new(),
             bound_context_id: None,
@@ -62,12 +62,14 @@ impl<VR: WebVRRenderHandler + 'static, OB: WebGLThreadObserver> WebGLThread<VR, 
                  webrender_api_sender: webrender_api::RenderApiSender,
                  webvr_compositor: Option<VR>,
                  observer: OB)
-                 -> WebGLSender<WebGLMsg> {
+                 -> (WebGLSender<WebGLMsg>, webrender_api::IdNamespace) {
         let (sender, receiver) = webgl_channel::<WebGLMsg>().unwrap();
         let result = sender.clone();
+        let webrender_api = webrender_api_sender.create_api();
+        let namespace = webrender_api.get_namespace_id();
         thread::Builder::new().name("WebGLThread".to_owned()).spawn(move || {
             let mut renderer = WebGLThread::new(gl_factory,
-                                                webrender_api_sender,
+                                                webrender_api,
                                                 webvr_compositor,
                                                 observer);
             let webgl_chan = WebGLChan(sender);
@@ -80,7 +82,7 @@ impl<VR: WebVRRenderHandler + 'static, OB: WebGLThreadObserver> WebGLThread<VR, 
             }
         }).expect("Thread spawning failed");
 
-        result
+        (result, namespace)
     }
 
     /// Handles a generic WebGLMsg message

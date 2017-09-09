@@ -3,8 +3,13 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use canvas_traits::webgpu as w;
-use ::webgpu_thread::WebGpuThread;
+use webgpu::backend::Backend;
+use webgpu_thread::WebGpuThread;
+use super::handler::FrameHandler;
+use super::resource::ResourceHub;
+
 use webrender_api;
+use webrender::{ExternalImageHandler};
 
  /// WebGPU Threading API entry point that lives in the constellation.
 pub struct WebGpuThreads(w::WebGpuSender<w::WebGpuMsg>);
@@ -13,9 +18,12 @@ impl WebGpuThreads {
     /// Creates a new WebGpuThreads object
     pub fn new(
         webrender_api_sender: webrender_api::RenderApiSender,
-    ) -> Self {
+    ) -> (Self, webrender_api::IdNamespace, Box<ExternalImageHandler>) {
+        let rehub = ResourceHub::new();
+        let (external, sender) = FrameHandler::<Backend>::new(rehub.clone());
+        let (channel, namespace) = WebGpuThread::start(webrender_api_sender, sender, rehub);
         // This implementation creates a single `WebGpuThread` for all the pipelines.
-        WebGpuThreads(WebGpuThread::start(webrender_api_sender))
+        (WebGpuThreads(channel), namespace, Box::new(external))
     }
 
     /// Gets the WebGpuThread handle for each script pipeline.
