@@ -488,6 +488,7 @@ pub mod webgpurenderingcontext;
 pub mod webgpurenderpass;
 pub mod webgpurendertargetview;
 pub mod webgpusemaphore;
+pub mod webgpushadermodule;
 pub mod webgpuswapchain;
 pub mod websocket;
 pub mod window;

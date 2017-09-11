@@ -250,6 +250,10 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 let renderpass = self.create_renderpass(gpu_id, desc);
                 result.send(renderpass).unwrap();
             }
+            w::WebGpuMsg::CreateShaderModule { gpu_id, data, result } => {
+                let module = self.create_shader_module(gpu_id, data);
+                result.send(module).unwrap();
+            }
             w::WebGpuMsg::ViewImageAsRenderTarget { gpu_id, image_id, format, result } => {
                 let rtv = self.view_image_as_render_target(gpu_id, image_id, format);
                 result.send(rtv).unwrap();
@@ -384,7 +388,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 w::WebGpuCommand::AllocateCommandBuffers(count, result) => {
                     let cbufs = pool.allocate(count as _);
 
-                    for cb in cbufs.into_iter() {
+                    for cb in cbufs {
                         let info = w::CommandBufferInfo {
                             id: com_buffers.push(cb),
                         };
@@ -653,7 +657,22 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         }
     }
 
-    fn view_image_as_render_target(&mut self,
+    fn create_shader_module(
+        &mut self,
+        gpu_id: w::GpuId,
+        data: Vec<u8>,
+    ) -> w::ShaderModuleInfo {
+        let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
+
+        let module = gpu.device.create_shader_module(&data).unwrap();
+
+        w::ShaderModuleInfo {
+            id: self.rehub.shaders.write().unwrap().push(module),
+        }
+    }
+
+    fn view_image_as_render_target(
+        &mut self,
         gpu_id: w::GpuId,
         image_id: w::ImageId,
         format: gpu::format::Format,

@@ -8,6 +8,7 @@ use canvas_traits::webgpu::{GpuId, GpuInfo, WebGpuChan, WebGpuMsg,
 use dom::bindings::codegen::Bindings::WebGpuDeviceBinding as binding;
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
+use dom::bindings::str::DOMString;
 use dom::globalscope::GlobalScope;
 use dom::webgpucommandqueue::WebGpuCommandQueue;
 use dom::webgpudepthstencilview::WebGpuDepthStencilView;
@@ -16,7 +17,9 @@ use dom::webgpuframebuffer::WebGpuFramebuffer;
 use dom::webgpuimage::WebGpuImage;
 use dom::webgpurenderpass::WebGpuRenderpass;
 use dom::webgpurendertargetview::WebGpuRenderTargetView;
+use dom::webgpushadermodule::WebGpuShaderModule;
 use dom_struct::dom_struct;
+use glsl_to_spirv;
 
 
 #[dom_struct]
@@ -136,7 +139,8 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         self.sender.send(msg).unwrap();
     }
 
-    fn WaitForFences(&self,
+    fn WaitForFences(
+        &self,
         fences: Vec<Root<WebGpuFence>>,
         wait_mode: binding::WebGpuFenceWait,
         timeout: u32,
@@ -163,12 +167,12 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         receiver.recv().unwrap()
     }
 
-    fn CreateRenderpass(&self,
+    fn CreateRenderpass(
+        &self,
         attachment_descs: Vec<binding::WebGpuAttachmentDesc>,
         subpass_descs: Vec<binding::WebGpuSubpassDesc>,
         dependency_descs: Vec<binding::WebGpuDependency>,
-    ) -> Root<WebGpuRenderpass>
-    {
+    ) -> Root<WebGpuRenderpass> {
         let attachments = attachment_descs
             .into_iter()
             .map(|at| gpu::pass::Attachment {
@@ -220,13 +224,13 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         WebGpuRenderpass::new(&self.global(), info)
     }
 
-    fn CreateFramebuffer(&self,
+    fn CreateFramebuffer(
+        &self,
         renderpass: &WebGpuRenderpass,
         size: &binding::WebGpuFramebufferSize,
         colors: Vec<Root<WebGpuRenderTargetView>>,
         depth_stencil: Option<&WebGpuDepthStencilView>,
-    ) -> Root<WebGpuFramebuffer>
-    {
+    ) -> Root<WebGpuFramebuffer> {
         let (sender, receiver) = webgpu_channel().unwrap();
         let msg = WebGpuMsg::CreateFramebuffer {
             gpu_id: self.id,
@@ -248,11 +252,37 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         WebGpuFramebuffer::new(&self.global(), info)
     }
 
-    fn ViewImageAsRenderTarget(&self,
+    fn CreateShaderModuleFromGLSL(&self,
+        stage: binding::WebGpuShaderStage,
+        code: DOMString,
+    ) -> Root<WebGpuShaderModule> {
+        use std::io::Read;
+
+        let conv_type = match stage {
+            binding::WebGpuShaderStage::Vertex => glsl_to_spirv::ShaderType::Vertex,
+            binding::WebGpuShaderStage::Fragment => glsl_to_spirv::ShaderType::Fragment,
+        };
+        let mut file = glsl_to_spirv::compile(&code, conv_type).unwrap();
+        let mut data = Vec::new();
+        file.read_to_end(&mut data).unwrap();
+
+        let (sender, receiver) = webgpu_channel().unwrap();
+        let msg = WebGpuMsg::CreateShaderModule {
+            gpu_id: self.id,
+            data,
+            result: sender,
+        };
+        self.sender.send(msg).unwrap();
+
+        let module = receiver.recv().unwrap();
+        WebGpuShaderModule::new(&self.global(), module)
+    }
+
+    fn ViewImageAsRenderTarget(
+        &self,
         image: &WebGpuImage,
         format: binding::WebGpuFormat,
-    ) -> Root<WebGpuRenderTargetView>
-    {
+    ) -> Root<WebGpuRenderTargetView> {
         let (sender, receiver) = webgpu_channel().unwrap();
         let msg = WebGpuMsg::ViewImageAsRenderTarget {
             gpu_id: self.id,

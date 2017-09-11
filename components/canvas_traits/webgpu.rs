@@ -46,6 +46,7 @@ pub type FramebufferId = Key;
 pub type RenderpassId = Key;
 pub type RenderTargetViewId = Key;
 pub type DepthStencilViewId = Key;
+pub type ShaderModuleId = Key;
 
 
 #[derive(Clone, Copy, Deserialize, HeapSizeOf, Serialize)]
@@ -215,6 +216,12 @@ pub struct ImageInfo {
     pub occupied_size: usize,
 }
 
+#[derive(Clone, Deserialize, Serialize)]
+pub struct ShaderModuleInfo {
+    pub id: ShaderModuleId,
+}
+
+
 pub type PresentDone = bool;
 
 #[derive(Deserialize, Serialize, HeapSizeOf)]
@@ -357,6 +364,11 @@ pub enum WebGpuMsg {
         gpu_id: GpuId,
         desc: RenderpassDesc,
         result: WebGpuSender<RenderpassInfo>,
+    },
+    CreateShaderModule {
+        gpu_id: GpuId,
+        data: Vec<u8>,
+        result: WebGpuSender<ShaderModuleInfo>,
     },
     ViewImageAsRenderTarget {
         gpu_id: GpuId,

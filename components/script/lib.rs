@@ -46,6 +46,7 @@ extern crate encoding;
 extern crate euclid;
 extern crate fnv;
 extern crate gleam;
+extern crate glsl_to_spirv;
 extern crate half;
 #[macro_use] extern crate heapsize;
 #[macro_use] extern crate heapsize_derive;

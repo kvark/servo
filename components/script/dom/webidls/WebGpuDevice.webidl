@@ -40,6 +40,12 @@ enum WebGpuAttachmentStoreOp {
 	"DontCare",
 };
 
+enum WebGpuShaderStage {
+	"Vertex",
+	"Fragment",
+};
+
+
 dictionary WebGpuAttachmentDesc {
 	required WebGpuFormat format;
 	required WebGpuImageLayout srcLayout;
@@ -71,6 +77,13 @@ dictionary WebGpuFramebufferSize {
 	required unsigned long height;
 	required unsigned long layers;
 };
+
+/*
+dictionary WebGpuGraphicsPipelineDesc {
+	stages: WebGpuGraphicsStageMap;
+	inputAssemblyState: WebGpuInputAssemblyState;
+	rasterizerState: WebGpuRasterizerState;
+};*/
 
 
 interface WebGpuDevice {
@@ -146,6 +159,15 @@ interface WebGpuDevice {
 		sequence<WebGpuRenderTargetView> colors,
 		WebGpuDepthStencilView? depth_stencil
 	);
+
+	WebGpuShaderModule createShaderModuleFromGLSL(
+		WebGpuShaderStage stage,
+		DOMString code
+	);
+
+	//sequence<WebGpuGraphicsPipeline> createGraphicsPipelines(
+	//	sequence<WebGpuGraphicsPipelineDesc> descriptors
+	//);
 
 	WebGpuRenderTargetView viewImageAsRenderTarget(
 		WebGpuImage image,
