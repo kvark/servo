@@ -34,4 +34,7 @@ Servo.app
 # VSCode
 .vscode
 
+# Aux
+vk_layer_settings.txt
+
 /unminified-js
