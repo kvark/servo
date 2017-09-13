@@ -250,9 +250,23 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 let renderpass = self.create_renderpass(gpu_id, desc);
                 result.send(renderpass).unwrap();
             }
+            w::WebGpuMsg::CreatePipelineLayout { gpu_id, result } => {
+                let layout = self.create_pipeline_layout(gpu_id);
+                result.send(layout).unwrap();
+            }
             w::WebGpuMsg::CreateShaderModule { gpu_id, data, result } => {
                 let module = self.create_shader_module(gpu_id, data);
                 result.send(module).unwrap();
+            }
+            w::WebGpuMsg::CreateGraphicsPipelines { gpu_id, descriptors, result } => {
+                let pipelines = self.create_graphics_pipelines(gpu_id, descriptors);
+                let mut pso_store = self.rehub.graphics_pipes.write().unwrap();
+                for pso in pipelines {
+                    let info = w::GraphicsPipelineInfo {
+                        id: pso_store.push(pso.unwrap()),
+                    };
+                    result.send(info).unwrap();
+                }
             }
             w::WebGpuMsg::ViewImageAsRenderTarget { gpu_id, image_id, format, result } => {
                 let rtv = self.view_image_as_render_target(gpu_id, image_id, format);
@@ -657,6 +671,19 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         }
     }
 
+    fn create_pipeline_layout(
+        &mut self,
+        gpu_id: w::GpuId,
+    ) -> w::PipelineLayoutInfo {
+        let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
+
+        let layout = gpu.device.create_pipeline_layout(&[]);
+
+        w::PipelineLayoutInfo {
+            id: self.rehub.pipe_layouts.write().unwrap().push(layout),
+        }
+    }
+
     fn create_shader_module(
         &mut self,
         gpu_id: w::GpuId,
@@ -669,6 +696,44 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         w::ShaderModuleInfo {
             id: self.rehub.shaders.write().unwrap().push(module),
         }
+    }
+
+    fn create_graphics_pipelines(
+        &mut self,
+        gpu_id: w::GpuId,
+        descriptors: Vec<w::GraphicsPipelineDesc>,
+    ) -> Vec<Result<B::GraphicsPipeline, gpu::pso::CreationError>> {
+        let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
+        let shader_store = self.rehub.shaders.read().unwrap();
+        let rp_store = self.rehub.renderpasses.read().unwrap();
+        let layout_store = self.rehub.pipe_layouts.read().unwrap();
+
+        let descs = descriptors
+            .iter()
+            .map(|desc| {
+                let shaders = gpu::pso::GraphicsShaderSet {
+                    vertex: gpu::pso::EntryPoint {
+                        module: &shader_store[desc.shaders.vs.module_id],
+                        entry: &desc.shaders.vs.name,
+                    },
+                    geometry: None,
+                    hull: None,
+                    domain: None,
+                    fragment: desc.shaders.fs.as_ref().map(|s| gpu::pso::EntryPoint {
+                        module: &shader_store[s.module_id],
+                        entry: &s.name,
+                    }),
+                };
+                let layout = &layout_store[desc.layout_id];
+                let subpass = gpu::pass::Subpass {
+                    index: desc.subpass as _,
+                    main_pass: &rp_store[desc.renderpass_id],
+                };
+                (shaders, layout, subpass, &desc.inner)
+            })
+            .collect::<Vec<_>>();
+
+        gpu.device.create_graphics_pipelines(&descs)
     }
 
     fn view_image_as_render_target(

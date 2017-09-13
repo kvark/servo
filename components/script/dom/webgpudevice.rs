@@ -2,9 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use canvas_traits::webgpu::{GpuId, GpuInfo, WebGpuChan, WebGpuMsg,
-    FramebufferDesc, RenderpassDesc, SubpassDesc,
-    webgpu_channel, gpu};
+use canvas_traits::webgpu::{self as w, gpu, webgpu_channel,
+    WebGpuChan, WebGpuMsg};
 use dom::bindings::codegen::Bindings::WebGpuDeviceBinding as binding;
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
@@ -14,7 +13,9 @@ use dom::webgpucommandqueue::WebGpuCommandQueue;
 use dom::webgpudepthstencilview::WebGpuDepthStencilView;
 use dom::webgpufence::WebGpuFence;
 use dom::webgpuframebuffer::WebGpuFramebuffer;
+use dom::webgpugraphicspipeline::WebGpuGraphicsPipeline;
 use dom::webgpuimage::WebGpuImage;
+use dom::webgpupipelinelayout::WebGpuPipelineLayout;
 use dom::webgpurenderpass::WebGpuRenderpass;
 use dom::webgpurendertargetview::WebGpuRenderTargetView;
 use dom::webgpushadermodule::WebGpuShaderModule;
@@ -27,7 +28,7 @@ pub struct WebGpuDevice {
     reflector_: Reflector,
     #[ignore_heap_size_of = "Channels are hard"]
     sender: WebGpuChan,
-    id: GpuId,
+    id: w::GpuId,
     general_queues: Vec<Root<WebGpuCommandQueue>>,
 }
 
@@ -35,7 +36,7 @@ impl WebGpuDevice {
     pub fn new(
         global: &GlobalScope,
         sender: WebGpuChan,
-        gpu: GpuInfo,
+        gpu: w::GpuInfo,
     ) -> Root<Self>
     {
         let gpu_id = gpu.id;
@@ -185,7 +186,7 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
 
         let subpasses = subpass_descs
             .into_iter()
-            .map(|sp| SubpassDesc {
+            .map(|sp| w::SubpassDesc {
                 colors: sp
                     .into_iter()
                     .map(|spa| (
@@ -211,7 +212,7 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         let (sender, receiver) = webgpu_channel().unwrap();
         let msg = WebGpuMsg::CreateRenderpass {
             gpu_id: self.id,
-            desc: RenderpassDesc {
+            desc: w::RenderpassDesc {
                 attachments,
                 subpasses,
                 dependencies,
@@ -234,7 +235,7 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         let (sender, receiver) = webgpu_channel().unwrap();
         let msg = WebGpuMsg::CreateFramebuffer {
             gpu_id: self.id,
-            desc: FramebufferDesc {
+            desc: w::FramebufferDesc {
                 renderpass: renderpass.get_id(),
                 colors: colors.into_iter().map(|v| v.get_id()).collect(),
                 depth_stencil: depth_stencil.map(|v| v.get_id()),
@@ -252,15 +253,31 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         WebGpuFramebuffer::new(&self.global(), info)
     }
 
-    fn CreateShaderModuleFromGLSL(&self,
-        stage: binding::WebGpuShaderStage,
+    fn CreatePipelineLayout(
+        &self,
+        _sets: Vec<binding::WebGpuDescriptorSetLayout>,
+    ) -> Root<WebGpuPipelineLayout> {
+        let (sender, receiver) = webgpu_channel().unwrap();
+        let msg = WebGpuMsg::CreatePipelineLayout {
+            gpu_id: self.id,
+            result: sender,
+        };
+        self.sender.send(msg).unwrap();
+
+        let layout = receiver.recv().unwrap();
+        WebGpuPipelineLayout::new(&self.global(), layout)
+    }
+
+    fn CreateShaderModuleFromGLSL(
+        &self,
+        ty: binding::WebGpuShaderType,
         code: DOMString,
     ) -> Root<WebGpuShaderModule> {
         use std::io::Read;
 
-        let conv_type = match stage {
-            binding::WebGpuShaderStage::Vertex => glsl_to_spirv::ShaderType::Vertex,
-            binding::WebGpuShaderStage::Fragment => glsl_to_spirv::ShaderType::Fragment,
+        let conv_type = match ty {
+            binding::WebGpuShaderType::Vertex => glsl_to_spirv::ShaderType::Vertex,
+            binding::WebGpuShaderType::Fragment => glsl_to_spirv::ShaderType::Fragment,
         };
         let mut file = glsl_to_spirv::compile(&code, conv_type).unwrap();
         let mut data = Vec::new();
@@ -276,6 +293,112 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
 
         let module = receiver.recv().unwrap();
         WebGpuShaderModule::new(&self.global(), module)
+    }
+
+    fn CreateGraphicsPipelines(
+        &self,
+        descs: Vec<binding::WebGpuGraphicsPipelineDesc>,
+    ) -> Vec<Root<WebGpuGraphicsPipeline>> {
+        let map_entry_point = |stage: &binding::WebGpuShaderStage| w::EntryPoint {
+            module_id: stage.shader_module.get_id(),
+            name: stage.entry_point.to_string(),
+        };
+        let map_input_assembler = |ia: binding::WebGpuInputAssemblyState| gpu::pso::InputAssemblerDesc {
+            primitive: match ia.topology {
+                binding::WebGpuPrimitiveTopology::PointList => gpu::Primitive::PointList,
+                binding::WebGpuPrimitiveTopology::LineList => gpu::Primitive::LineList,
+                binding::WebGpuPrimitiveTopology::LineStrip => gpu::Primitive::LineStrip,
+                binding::WebGpuPrimitiveTopology::TriangleList => gpu::Primitive::TriangleList,
+                binding::WebGpuPrimitiveTopology::TriangleStrip => gpu::Primitive::TriangleStrip,
+            },
+            primitive_restart: gpu::pso::PrimitiveRestart::Disabled, //TODO
+        };
+        let map_rasterizer = |r: binding::WebGpuRasterizerState| gpu::pso::Rasterizer {
+            polgyon_mode: match r.polygonMode {
+                binding::WebGpuPolygonMode::Fill => gpu::state::RasterMethod::Fill,
+            },
+            cull_mode: gpu::state::CullFace::Nothing,
+            front_face: match r.frontFace {
+                binding::WebGpuFrontFace::Cw => gpu::state::FrontFace::Clockwise,
+                binding::WebGpuFrontFace::Ccw => gpu::state::FrontFace::CounterClockwise,
+            },
+            depth_clamping: false,
+            depth_bias: None,
+            conservative: false,
+        };
+        let map_factor = |factor: binding::WebGpuBlendFactor| match factor {
+            binding::WebGpuBlendFactor::Zero => gpu::state::Factor::Zero,
+            binding::WebGpuBlendFactor::One => gpu::state::Factor::One,
+            binding::WebGpuBlendFactor::SrcAlpha => gpu::state::Factor::ZeroPlus(gpu::state::BlendValue::SourceAlpha),
+            binding::WebGpuBlendFactor::OneMinusSrcAlpha => gpu::state::Factor::OneMinus(gpu::state::BlendValue::SourceAlpha),
+        };
+        let map_channel = |chan: binding::WebGpuBlendChannel| {
+            match chan {
+                binding::WebGpuBlendChannel {
+                    eq: binding::WebGpuBlendEquation::Add,
+                    src: binding::WebGpuBlendFactor::One,
+                    dst: binding::WebGpuBlendFactor::Zero,
+                } => None,
+                _ => Some(gpu::state::BlendChannel {
+                    equation: match chan.eq {
+                        binding::WebGpuBlendEquation::Add => gpu::state::Equation::Add,
+                        binding::WebGpuBlendEquation::Sub => gpu::state::Equation::Sub,
+                        binding::WebGpuBlendEquation::RevSub => gpu::state::Equation::RevSub,
+                        binding::WebGpuBlendEquation::Min => gpu::state::Equation::Min,
+                        binding::WebGpuBlendEquation::Max => gpu::state::Equation::Max,
+                    },
+                    source: map_factor(chan.src),
+                    destination: map_factor(chan.dst),
+                })
+            }
+        };
+        let map_blender = |blend: binding::WebGpuBlendState| gpu::pso::BlendDesc {
+            alpha_coverage: blend.alphaToCoverage,
+            logic_op: None, //TODO
+            targets: blend.targets.into_iter().map(|target| gpu::pso::ColorInfo {
+                mask: gpu::state::ColorMask::from_bits(target.mask as _).unwrap(),
+                color: map_channel(target.color),
+                alpha: map_channel(target.alpha),
+            }).collect(),
+        };
+
+        let descriptors = descs
+            .into_iter()
+            .flat_map(|desc| Some(w::GraphicsPipelineDesc {
+                shaders: w::GraphicsShaderSet {
+                    vs: match desc.shaders.get("vs") {
+                        Some(ref entry) => map_entry_point(entry),
+                        None => return None,
+                    },
+                    fs: desc.shaders.get("fs").map(&map_entry_point),
+                },
+                layout_id: desc.layout.get_id(),
+                renderpass_id: desc.renderpass.get_id(),
+                subpass: desc.subpass,
+                inner: gpu::pso::GraphicsPipelineDesc {
+                    rasterizer: map_rasterizer(desc.rasterizerState),
+                    vertex_buffers: Vec::new(), //TODO
+                    attributes: Vec::new(), //TODO
+                    input_assembler: map_input_assembler(desc.inputAssemblyState),
+                    blender: map_blender(desc.blendState),
+                    depth_stencil: None, //TODO
+                },
+            }))
+            .collect::<Vec<_>>();
+
+        let count = descriptors.len();
+        let (sender, receiver) = webgpu_channel().unwrap();
+        let msg = WebGpuMsg::CreateGraphicsPipelines {
+            gpu_id: self.id,
+            descriptors,
+            result: sender,
+        };
+        self.sender.send(msg).unwrap();
+
+        (0..count).map(|_| {
+            let info = receiver.recv().unwrap();
+            WebGpuGraphicsPipeline::new(&self.global(), info)
+        }).collect()
     }
 
     fn ViewImageAsRenderTarget(

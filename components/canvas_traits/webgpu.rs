@@ -46,7 +46,9 @@ pub type FramebufferId = Key;
 pub type RenderpassId = Key;
 pub type RenderTargetViewId = Key;
 pub type DepthStencilViewId = Key;
+pub type PipelineLayoutId = Key;
 pub type ShaderModuleId = Key;
+pub type GraphicsPipelineId = Key;
 
 
 #[derive(Clone, Copy, Deserialize, HeapSizeOf, Serialize)]
@@ -221,6 +223,37 @@ pub struct ShaderModuleInfo {
     pub id: ShaderModuleId,
 }
 
+#[derive(Clone, Deserialize, Serialize)]
+pub struct PipelineLayoutInfo {
+    pub id: PipelineLayoutId,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct GraphicsPipelineInfo {
+    pub id: GraphicsPipelineId,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct EntryPoint {
+    pub module_id: ShaderModuleId,
+    pub name: String,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct GraphicsShaderSet {
+    pub vs: EntryPoint,
+    pub fs: Option<EntryPoint>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct GraphicsPipelineDesc {
+    pub shaders: GraphicsShaderSet,
+    pub layout_id: PipelineLayoutId,
+    pub renderpass_id: RenderpassId,
+    pub subpass: u32,
+    pub inner: gpu::pso::GraphicsPipelineDesc,
+}
+
 
 pub type PresentDone = bool;
 
@@ -365,10 +398,19 @@ pub enum WebGpuMsg {
         desc: RenderpassDesc,
         result: WebGpuSender<RenderpassInfo>,
     },
+    CreatePipelineLayout {
+        gpu_id: GpuId,
+        result: WebGpuSender<PipelineLayoutInfo>,
+    },
     CreateShaderModule {
         gpu_id: GpuId,
         data: Vec<u8>,
         result: WebGpuSender<ShaderModuleInfo>,
+    },
+    CreateGraphicsPipelines {
+        gpu_id: GpuId,
+        descriptors: Vec<GraphicsPipelineDesc>,
+        result: WebGpuSender<GraphicsPipelineInfo>,
     },
     ViewImageAsRenderTarget {
         gpu_id: GpuId,

@@ -40,9 +40,42 @@ enum WebGpuAttachmentStoreOp {
 	"DontCare",
 };
 
-enum WebGpuShaderStage {
+enum WebGpuShaderType {
 	"Vertex",
 	"Fragment",
+};
+
+enum WebGpuPrimitiveTopology {
+	"PointList",
+	"LineList",
+	"LineStrip",
+	"TriangleList",
+	"TriangleStrip",
+};
+
+enum WebGpuPolygonMode {
+	"Fill",
+};
+
+enum WebGpuFrontFace {
+	"Cw",
+	"Ccw",
+};
+
+enum WebGpuBlendEquation {
+	"Add",
+	"Sub",
+	"RevSub",
+	"Min",
+	"Max",
+};
+
+enum WebGpuBlendFactor {
+	"Zero",
+	"One",
+	"SrcAlpha",
+	"OneMinusSrcAlpha",
+	//TODO
 };
 
 
@@ -78,12 +111,52 @@ dictionary WebGpuFramebufferSize {
 	required unsigned long layers;
 };
 
-/*
+
+dictionary WebGpuDescriptorSetLayout {
+	//TODO
+};
+
+dictionary WebGpuShaderStage {
+	required WebGpuShaderModule shader_module; //Note: "module" is a keyword
+	required DOMString entry_point;
+};
+
+dictionary WebGpuInputAssemblyState {
+	required WebGpuPrimitiveTopology topology;
+};
+
+dictionary WebGpuRasterizerState {
+	WebGpuPolygonMode polygonMode = "Fill";
+	WebGpuFrontFace frontFace = "Ccw";
+};
+
+dictionary WebGpuBlendChannel {
+	WebGpuBlendEquation eq = "Add";
+	WebGpuBlendFactor src = "One";
+	WebGpuBlendFactor dst = "Zero";
+};
+
+dictionary WebGpuColorTarget {
+	unsigned long mask = 0xF;
+	required WebGpuBlendChannel color;
+	required WebGpuBlendChannel alpha;
+};
+
+dictionary WebGpuBlendState {
+	boolean alphaToCoverage = false;
+	//TODO: logicOp
+	required sequence<WebGpuColorTarget> targets;
+};
+
 dictionary WebGpuGraphicsPipelineDesc {
-	stages: WebGpuGraphicsStageMap;
-	inputAssemblyState: WebGpuInputAssemblyState;
-	rasterizerState: WebGpuRasterizerState;
-};*/
+	required record<DOMString, WebGpuShaderStage> shaders; // `WebGpuShaderType`
+	required WebGpuInputAssemblyState inputAssemblyState;
+	required WebGpuRasterizerState rasterizerState;
+	required WebGpuBlendState blendState;
+	required WebGpuPipelineLayout layout;
+	required WebGpuRenderpass renderpass;
+	unsigned long subpass = 0;
+};
 
 
 interface WebGpuDevice {
@@ -128,7 +201,7 @@ interface WebGpuDevice {
 	const WebGpuPipelineStage PIPELINE_STAGE_HULL_SHADER				= 0x10;
 	const WebGpuPipelineStage PIPELINE_STAGE_DOMAIN_SHADER				= 0x20;
 	const WebGpuPipelineStage PIPELINE_STAGE_GEOMETRY_SHADER			= 0x40;
-	const WebGpuPipelineStage PIPELINE_STAGE_PIXEL_SHADER				= 0x80;
+	const WebGpuPipelineStage PIPELINE_STAGE_FRAGMENT_SHADER			= 0x80;
 	const WebGpuPipelineStage PIPELINE_STAGE_EARLY_FRAGMENT_TESTS		= 0x100;
 	const WebGpuPipelineStage PIPELINE_STAGE_LATE_FRAGMENT_TESTS		= 0x200;
 	const WebGpuPipelineStage PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT	= 0x400;
@@ -160,14 +233,18 @@ interface WebGpuDevice {
 		WebGpuDepthStencilView? depth_stencil
 	);
 
+	WebGpuPipelineLayout createPipelineLayout(
+		sequence<WebGpuDescriptorSetLayout> sets
+	);
+
 	WebGpuShaderModule createShaderModuleFromGLSL(
-		WebGpuShaderStage stage,
+		WebGpuShaderType stage,
 		DOMString code
 	);
 
-	//sequence<WebGpuGraphicsPipeline> createGraphicsPipelines(
-	//	sequence<WebGpuGraphicsPipelineDesc> descriptors
-	//);
+	sequence<WebGpuGraphicsPipeline> createGraphicsPipelines(
+		sequence<WebGpuGraphicsPipelineDesc> descriptors
+	);
 
 	WebGpuRenderTargetView viewImageAsRenderTarget(
 		WebGpuImage image,
