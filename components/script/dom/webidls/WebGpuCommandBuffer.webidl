@@ -2,6 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+typedef unsigned long WebGpuVertexCount;
+typedef unsigned long WebGpuIndexCount;
+typedef unsigned long WebGpuInstanceCount;
+
 dictionary WebGpuBufferState {
 	required WebGpuBufferAccess access;
 };
@@ -26,10 +30,16 @@ dictionary WebGpuImageBarrier {
 };
 
 dictionary WebGpuRectangle {
-	required unsigned long x;
-	required unsigned long y;
-	required unsigned long width;
-	required unsigned long height;
+	required unsigned short x;
+	required unsigned short y;
+	required unsigned short width;
+	required unsigned short height;
+};
+
+dictionary WebGpuViewport {
+	required WebGpuRectangle rect;
+	required float near;
+	required float far;
 };
 
 enum WebGpuClearValueKind {
@@ -63,4 +73,17 @@ interface WebGpuCommandBuffer {
 	);
 
 	void endRenderpass();
+
+	void bindGraphicsPipeline(WebGpuGraphicsPipeline pipeline);
+
+	void setScissors(sequence<WebGpuRectangle> rectangles);
+
+	void setViewports(sequence<WebGpuViewport> viewports);
+
+	void draw(
+		WebGpuVertexCount start_vertex,
+		WebGpuVertexCount vertex_count,
+		WebGpuInstanceCount start_instance,
+		WebGpuInstanceCount instance_count
+	);
 };

@@ -24,4 +24,8 @@ impl WebGpuGraphicsPipeline {
         };
         reflect_dom_object(obj, global, binding::Wrap)
     }
+
+    pub fn get_id(&self) -> GraphicsPipelineId {
+        self.id
+    }
 }

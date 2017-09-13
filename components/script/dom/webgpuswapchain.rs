@@ -89,7 +89,7 @@ impl WebGpuSwapchain {
         // as it's making the send calls internally, as opposed to
         // receiving an `*Info` struct having all the inputs
 
-        presenter.send(WebGpuPresent::Enter);
+        presenter.send(WebGpuPresent::Enter(queue.gpu_id()));
 
         // rough upper bound for the image size
         let bytes_pp = 4usize;
@@ -358,7 +358,6 @@ impl binding::WebGpuSwapchainMethods for WebGpuSwapchain {
         *frame.presenting.borrow_mut() = Some(receiver);
 
         let ready_frame = ReadyFrame {
-            gpu_id: self.parent.gpu_id,
             buffer_id: frame.staging_buffer_id,
             bytes_per_row: self.bytes_per_row,
             fence_id: frame.fence_id,

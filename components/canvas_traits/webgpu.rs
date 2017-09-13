@@ -259,7 +259,6 @@ pub type PresentDone = bool;
 
 #[derive(Deserialize, Serialize, HeapSizeOf)]
 pub struct ReadyFrame {
-    pub gpu_id: GpuId,
     pub buffer_id: BufferId,
     pub bytes_per_row: usize,
     pub fence_id: FenceId,
@@ -309,6 +308,10 @@ pub enum WebGpuCommand {
         destination_id: BufferId,
         regions: Vec<gpu::command::BufferImageCopy>,
     },
+    BindGraphicsPipeline(GraphicsPipelineId),
+    SetScissors(Vec<gpu::target::Rect>),
+    SetViewports(Vec<gpu::Viewport>),
+    Draw(Range<gpu::VertexCount>, Range<gpu::InstanceCount>),
 }
 
 pub type WebGpuCommandChan = WebGpuSender<WebGpuCommand>;
@@ -434,7 +437,7 @@ impl WebGpuPipeline {
 /// WebGpu presenter command type
 #[derive(Deserialize, Serialize)]
 pub enum WebGpuPresent {
-    Enter,
+    Enter(GpuId),
     Exit,
     Show(ReadyFrame),
 }

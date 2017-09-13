@@ -479,6 +479,23 @@ impl<B: gpu::Backend> WebGpuThread<B> {
 
                     cb.copy_image_to_buffer(source, source_layout, destination, &regions);
                 }
+                w::WebGpuCommand::BindGraphicsPipeline(pso_id) => {
+                    let cb = &mut com_buffers[active_id.unwrap()];
+                    let pso = &rehub.graphics_pipes.read().unwrap()[pso_id];
+                    cb.bind_graphics_pipeline(pso);
+                }
+                w::WebGpuCommand::SetScissors(rects) => {
+                    let cb = &mut com_buffers[active_id.unwrap()];
+                    cb.set_scissors(&rects);
+                }
+                w::WebGpuCommand::SetViewports(viewports) => {
+                    let cb = &mut com_buffers[active_id.unwrap()];
+                    cb.set_viewports(&viewports);
+                }
+                w::WebGpuCommand::Draw(vertices, instances) => {
+                    let cb = &mut com_buffers[active_id.unwrap()];
+                    cb.draw(vertices, instances);
+                }
             }
         }
     }

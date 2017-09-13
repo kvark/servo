@@ -15,6 +15,7 @@ use dom::bindings::reflector::{Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
 use dom::webgpudevice::WebGpuDevice;
 use dom::webgpuframebuffer::WebGpuFramebuffer;
+use dom::webgpugraphicspipeline::WebGpuGraphicsPipeline;
 use dom::webgpurenderpass::WebGpuRenderpass;
 use dom_struct::dom_struct;
 use std::cell::Cell;
@@ -72,10 +73,10 @@ impl WebGpuCommandBuffer {
 
     fn map_rect(rect: &binding::WebGpuRectangle) -> gpu::target::Rect {
         gpu::target::Rect {
-            x: rect.x as _,
-            y: rect.y as _,
-            w: rect.width as _,
-            h: rect.height as _,
+            x: rect.x,
+            y: rect.y,
+            w: rect.width,
+            h: rect.height,
         }
     }
 
@@ -120,7 +121,8 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
         self.sender.send(msg).unwrap();
     }
 
-    fn PipelineBarrier(&self,
+    fn PipelineBarrier(
+        &self,
         src_stages: WebGpuPipelineStage,
         dst_stages: WebGpuPipelineStage,
         buffers: Vec<binding::WebGpuBufferBarrier>,
@@ -153,7 +155,8 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
     }
 
 
-    fn BeginRenderpass(&self,
+    fn BeginRenderpass(
+        &self,
         renderpass: &WebGpuRenderpass,
         framebuffer: &WebGpuFramebuffer,
         rect: &binding::WebGpuRectangle,
@@ -175,6 +178,42 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
 
     fn EndRenderpass(&self) {
         let msg = WebGpuCommand::EndRenderpass;
+        self.sender.send(msg).unwrap();
+    }
+
+    fn BindGraphicsPipeline(&self, pso: &WebGpuGraphicsPipeline) {
+        let msg = WebGpuCommand::BindGraphicsPipeline(pso.get_id());
+        self.sender.send(msg).unwrap();
+    }
+
+    fn SetScissors(&self, rectangles: Vec<binding::WebGpuRectangle>) {
+        let rects = rectangles
+            .iter()
+            .map(Self::map_rect)
+            .collect();
+
+        let msg = WebGpuCommand::SetScissors(rects);
+        self.sender.send(msg).unwrap();
+    }
+
+    fn SetViewports(&self, viewports: Vec<binding::WebGpuViewport>) {
+        let ports = viewports
+            .into_iter()
+            .map(|vp| gpu::Viewport::from_rect(Self::map_rect(&vp.rect), *vp.near, *vp.far))
+            .collect();
+
+        let msg = WebGpuCommand::SetViewports(ports);
+        self.sender.send(msg).unwrap();
+    }
+
+    fn Draw(&self,
+        start_vertex: u32, vertex_count: u32,
+        start_instance: u32, instance_count: u32,
+    ) {
+        let msg = WebGpuCommand::Draw(
+            start_vertex .. start_vertex+vertex_count,
+            start_instance .. start_instance+instance_count,
+        );
         self.sender.send(msg).unwrap();
     }
 }

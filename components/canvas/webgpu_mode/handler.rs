@@ -1,18 +1,40 @@
 use std::slice;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
 use webrender_api as wrapi;
 use webrender::{ExternalImage, ExternalImageHandler, ExternalImageSource};
 
+use super::lazyvec::LazyVec;
 use super::resource::ResourceHub;
 use canvas_traits::webgpu as w;
 use webgpu::gpu::{self, Device};
 
 
 struct FrameQueue<B: gpu::Backend> {
-    next: Option<w::ReadyFrame>,
+    gpu_id: w::GpuId,
+    others: VecDeque<w::ReadyFrame>,
+    ready: Option<w::ReadyFrame>,
     locked: Option<(w::ReadyFrame, B::Mapping)>,
+}
+
+impl<B: gpu::Backend> FrameQueue<B> {
+    fn collapse(&mut self, device: &mut B::Device, fence_store: &LazyVec<B::Fence>) {
+        loop {
+            let fence = match self.others.front() {
+                Some(frame) => &fence_store[frame.fence_id],
+                None => return,
+            };
+            if !device.wait_for_fences(&[fence], gpu::device::WaitFor::Any, 0) {
+                return
+            }
+            device.reset_fences(&[fence]);
+            if let Some(ready) = self.ready.take() {
+                ready.consume(false);
+            }
+            self.ready = self.others.pop_front();
+        }
+    }
 }
 
 pub struct FrameHandler<B: gpu::Backend> {
@@ -32,12 +54,15 @@ impl<B: gpu::Backend> FrameHandler<B> {
         (handler, sender)
     }
 
-    fn update(&mut self) {
+    fn update(&mut self, fence_store: &LazyVec<B::Fence>) {
+        //TODO: communicate if the queue has been processed
         while let Ok((id, present)) = self.receiver.try_recv() {
             match present {
-                w::WebGpuPresent::Enter => {
+                w::WebGpuPresent::Enter(gpu_id) => {
                     self.queues.insert(id, FrameQueue {
-                        next: None,
+                        gpu_id,
+                        others: VecDeque::new(),
+                        ready: None,
                         locked: None,
                     });
                 }
@@ -49,10 +74,9 @@ impl<B: gpu::Backend> FrameHandler<B> {
                         Some(queue) => {
                             //println!("handler: received frame with buffer id {:?}, replacing old: {}",
                             //    frame.buffer_id, queue.next.is_some());
-                            if let Some(old_frame) = queue.next.take() {
-                                old_frame.consume(false);
-                            }
-                            queue.next = Some(frame);
+                            let device = &mut self.rehub.gpus.lock().unwrap()[queue.gpu_id].device;
+                            queue.others.push_back(frame);
+                            queue.collapse(device, fence_store);
                         }
                         None => {
                             warn!("There is no frame to show for {:?}", id);
@@ -69,7 +93,9 @@ impl<B: gpu::Backend> ExternalImageHandler for FrameHandler<B> {
     fn lock(&mut self, id: wrapi::ExternalImageId, channel_index: u8) -> ExternalImage {
         //println!("entering lock for {:?}", id);
         assert_eq!(channel_index, 0);
-        self.update();
+        let rehub = Arc::clone(&self.rehub);
+        let fence_store = rehub.fences.read().unwrap();
+        self.update(&*fence_store);
 
         let result = ExternalImage { //TODO
             u0: 0.0,
@@ -87,11 +113,23 @@ impl<B: gpu::Backend> ExternalImageHandler for FrameHandler<B> {
             }
         };
 
-        let frame = match queue.next.take() {
+        let device = &mut self.rehub.gpus.lock().unwrap()[queue.gpu_id].device;
+        queue.collapse(device, &*fence_store);
+
+        let frame = match queue.ready.take() {
             Some(frame) => frame,
-            None => {
-                warn!("There is no frame to lock for {:?}", id);
-                return result;
+            None => match queue.others.pop_front() {
+                Some(frame) => {
+                    // force wait for a frame
+                    let fence = &fence_store[frame.fence_id];
+                    device.wait_for_fences(&[fence], gpu::device::WaitFor::Any, !0);
+                    device.reset_fences(&[fence]);
+                    frame
+                }
+                None => {
+                    warn!("There is no frame to lock for {:?}", id);
+                    return result;
+                }
             }
         };
 
@@ -99,10 +137,6 @@ impl<B: gpu::Backend> ExternalImageHandler for FrameHandler<B> {
 
         let total_size = frame.bytes_per_row * frame.size.height as usize;
         let (ptr, mapping) = {
-            let device = &mut self.rehub.gpus.lock().unwrap()[frame.gpu_id].device;
-            let fence = &self.rehub.fences.read().unwrap()[frame.fence_id];
-            device.wait_for_fences(&[fence], gpu::device::WaitFor::Any, !0); //TEMP
-            device.reset_fences(&[fence]);
             let buffer = &self.rehub.buffers.read().unwrap()[frame.buffer_id];
             device.read_mapping_raw(buffer, 0 .. total_size as _).unwrap()
         };
@@ -121,7 +155,9 @@ impl<B: gpu::Backend> ExternalImageHandler for FrameHandler<B> {
     fn unlock(&mut self, id: wrapi::ExternalImageId, channel_index: u8) {
         //println!("entering unlock for {:?}", id);
         assert_eq!(channel_index, 0);
-        self.update();
+        let rehub = Arc::clone(&self.rehub);
+        let fence_store = rehub.fences.read().unwrap();
+        self.update(&*fence_store);
 
         let queue = match self.queues.get_mut(&id) {
             Some(queue) => queue,
@@ -141,12 +177,12 @@ impl<B: gpu::Backend> ExternalImageHandler for FrameHandler<B> {
 
         //println!("handler: unlocking frame with buffer id {:?}", frame.buffer_id);
 
-        //TODO: let the parent know a frame is free to be reused?
-        let device = &mut self.rehub.gpus.lock().unwrap()[frame.gpu_id].device;
+        let device = &mut self.rehub.gpus.lock().unwrap()[queue.gpu_id].device;
         device.unmap_mapping_raw(mapping);
+        queue.collapse(device, &*fence_store);
 
-        if queue.next.is_none() {
-            queue.next = Some(frame.reuse());
+        if queue.ready.is_none() {
+            queue.ready = Some(frame.reuse());
         } else {
             frame.consume(true);
         }
