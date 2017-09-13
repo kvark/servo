@@ -96,6 +96,7 @@ pub struct AdapterInfo {
 pub struct GpuInfo {
     pub id: GpuId,
     pub limits: gpu::Limits,
+    pub heap_types: Vec<gpu::HeapType>,
     pub general: Vec<QueueId>,
 }
 
@@ -178,7 +179,7 @@ pub struct RenderpassDesc {
 #[derive(Clone, Deserialize, Serialize)]
 pub struct HeapDesc {
     pub size: usize,
-    pub properties: gpu::memory::HeapProperties,
+    pub ty: gpu::HeapType,
     pub resources: gpu::device::ResourceHeapType,
 }
 

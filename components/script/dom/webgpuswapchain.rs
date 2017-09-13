@@ -102,7 +102,7 @@ impl WebGpuSwapchain {
                 gpu_id: queue.gpu_id(),
                 desc: HeapDesc {
                     size: count * bytes_per_image,
-                    properties: gpu::memory::CPU_VISIBLE,
+                    ty: queue.find_heap_type(gpu::memory::CPU_VISIBLE).unwrap(),
                     resources: gpu::device::ResourceHeapType::Buffers,
                 },
                 result,
@@ -117,7 +117,7 @@ impl WebGpuSwapchain {
                 gpu_id: queue.gpu_id(),
                 desc: HeapDesc {
                     size: count * bytes_per_image,
-                    properties: gpu::memory::DEVICE_LOCAL,
+                    ty: queue.find_heap_type(gpu::memory::DEVICE_LOCAL).unwrap(),
                     resources: gpu::device::ResourceHeapType::Images,
                 },
                 result,

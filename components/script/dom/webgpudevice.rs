@@ -9,7 +9,6 @@ use dom::bindings::js::Root;
 use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
 use dom::bindings::str::DOMString;
 use dom::globalscope::GlobalScope;
-use dom::webgpucommandqueue::WebGpuCommandQueue;
 use dom::webgpudepthstencilview::WebGpuDepthStencilView;
 use dom::webgpufence::WebGpuFence;
 use dom::webgpuframebuffer::WebGpuFramebuffer;
@@ -29,29 +28,23 @@ pub struct WebGpuDevice {
     #[ignore_heap_size_of = "Channels are hard"]
     sender: WebGpuChan,
     id: w::GpuId,
-    general_queues: Vec<Root<WebGpuCommandQueue>>,
+    #[ignore_heap_size_of = "This is not the heap you are looking for"]
+    heap_types: Vec<gpu::HeapType>,
 }
 
 impl WebGpuDevice {
     pub fn new(
         global: &GlobalScope,
         sender: WebGpuChan,
-        gpu: w::GpuInfo,
+        id: w::GpuId,
+        heap_types: Vec<gpu::HeapType>,
     ) -> Root<Self>
     {
-        let gpu_id = gpu.id;
-        let limits = gpu.limits;
-        let general_queues = gpu.general
-            .into_iter()
-            .map(|id| {
-                WebGpuCommandQueue::new(global, sender.clone(), gpu_id, id, limits)
-            })
-            .collect();
         let obj = box WebGpuDevice {
             reflector_: Reflector::new(),
             sender,
-            id: gpu_id,
-            general_queues,
+            id,
+            heap_types,
         };
         reflect_dom_object(obj, global, binding::Wrap)
     }
@@ -110,10 +103,6 @@ impl WebGpuDevice {
 }
 
 impl binding::WebGpuDeviceMethods for WebGpuDevice {
-    fn GeneralQueue(&self) -> Root<WebGpuCommandQueue> {
-        self.general_queues[0].clone()
-    }
-
     fn CreateFence(&self, set: bool) -> Root<WebGpuFence> {
         let (sender, receiver) = webgpu_channel().unwrap();
         let msg = WebGpuMsg::CreateFence {

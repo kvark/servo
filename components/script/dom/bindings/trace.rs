@@ -37,6 +37,7 @@ use canvas_traits::webgl::{WebGLChan, WebGLContextShareMode, WebGLError, WebGLPi
 use canvas_traits::webgl::{WebGLReceiver, WebGLSender, WebGLShaderId, WebGLTextureId, WebGLVertexArrayId};
 use canvas_traits::webgpu::{WebGpuPipeline, WebGpuContextShareMode,
     CommandBufferInfo, CommandPoolInfo, Key, Presenter, QueueFamilyInfo, SubmitInfo};
+use canvas_traits::webgpu::gpu::HeapType;
 use cssparser::RGBA;
 use devtools_traits::{CSSError, TimelineMarkerType, WorkerId};
 use dom::abstractworker::SharedRt;
@@ -412,6 +413,7 @@ unsafe_no_jsmanaged_fields!(WebGLVertexArrayId);
 unsafe_no_jsmanaged_fields!(WebGpuPipeline, WebGpuContextShareMode,
     CommandBufferInfo, CommandPoolInfo, Key, Presenter, QueueFamilyInfo, SubmitInfo);
 unsafe_no_jsmanaged_fields!(LimitsWrapper, Frame, WebGpuParent);
+unsafe_no_jsmanaged_fields!(HeapType);
 unsafe_no_jsmanaged_fields!(MediaList);
 unsafe_no_jsmanaged_fields!(WebVRGamepadHand);
 unsafe_no_jsmanaged_fields!(ScriptToConstellationChan);

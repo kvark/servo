@@ -31,6 +31,8 @@ pub struct WebGpuCommandQueue {
     sender: WebGpuChan,
     id: (GpuId, QueueId),
     limits: LimitsWrapper,
+    #[ignore_heap_size_of = "This is not the heap you are looking for"]
+    heap_types: Vec<gpu::HeapType>,
 }
 
 impl WebGpuCommandQueue {
@@ -40,12 +42,14 @@ impl WebGpuCommandQueue {
         gpu_id: GpuId,
         id: QueueId,
         limits: gpu::Limits,
+        heap_types: Vec<gpu::HeapType>,
     ) -> Root<Self> {
         let obj = box WebGpuCommandQueue {
             reflector_: Reflector::new(),
             sender,
             id: (gpu_id, id),
             limits: LimitsWrapper(limits),
+            heap_types,
         };
         reflect_dom_object(obj, global, binding::Wrap)
     }
@@ -60,6 +64,16 @@ impl WebGpuCommandQueue {
 
     pub fn get_limits(&self) -> &gpu::Limits {
         &self.limits.0
+    }
+
+    pub fn find_heap_type(
+        &self,
+        properties: gpu::memory::HeapProperties,
+    ) -> Option<gpu::HeapType> {
+        self.heap_types
+            .iter()
+            .find(|ht| ht.properties.contains(properties))
+            .cloned()
     }
 }
 

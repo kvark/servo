@@ -5,6 +5,7 @@
 typedef unsigned long WebGpuQueueFlags;
 typedef unsigned short WebGpuQueueCount;
 typedef unsigned long WebGpuQueueFamilyId;
+typedef WebGpuCommandQueue _DummyCommandQueue;
 
 dictionary WebGpuQueueFamilyInfo {
     required WebGpuQueueFlags flags;
@@ -17,11 +18,22 @@ dictionary WebGpuRequestedQueues {
     required WebGpuQueueCount count;
 };
 
+dictionary WebGpuHeapType {
+    required WebGpuHeapTypeId id;
+    required WebGpuHeapProperty properties;
+};
+
+dictionary WebGpuGpu {
+    required WebGpuDevice device;
+    required sequence<WebGpuCommandQueue> generalQueues;
+    required sequence<WebGpuHeapType> heapTypes;
+};
+
 interface WebGpuAdapter {
     const WebGpuQueueFlags QUEUE_GENERAL = 0x1;
     const WebGpuQueueFlags QUEUE_COMPUTE  = 0x2;
     const WebGpuQueueFlags QUEUE_TRANSFER = 0x4;
 
     sequence<WebGpuQueueFamilyInfo> getQueueFamilies();
-    WebGpuDevice open(sequence<WebGpuRequestedQueues> queues);
+    WebGpuGpu open(sequence<WebGpuRequestedQueues> queues);
 };

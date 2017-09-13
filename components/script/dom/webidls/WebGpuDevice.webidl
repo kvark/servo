@@ -5,6 +5,8 @@
 typedef unsigned long WebGpuBufferAccess;
 typedef unsigned long WebGpuImageAccess;
 typedef unsigned long WebGpuPipelineStage;
+typedef unsigned long WebGpuHeapProperty;
+typedef unsigned short WebGpuHeapTypeId;
 
 enum WebGpuFormat {
 	"B8G8R8A8_UNORM",
@@ -210,7 +212,12 @@ interface WebGpuDevice {
 	const WebGpuPipelineStage PIPELINE_STAGE_BOTTOM_OF_PIPE				= 0x2000;
 	const WebGpuPipelineStage PIPELINE_STAGE_HOST						= 0x4000;
 
-	readonly attribute WebGpuCommandQueue generalQueue; //TODO: FrozenArray<>
+	const WebGpuHeapProperty HEAP_PROPERTY_DEVICE_LOCAL					= 0x01;
+	const WebGpuHeapProperty HEAP_PROPERTY_COHERENT						= 0x02;
+	const WebGpuHeapProperty HEAP_PROPERTY_CPU_VISIBLE					= 0x04;
+	const WebGpuHeapProperty HEAP_PROPERTY_CPU_CACHED					= 0x08;
+	const WebGpuHeapProperty HEAP_PROPERTY_WRITE_COMBINED				= 0x10;
+
 
 	WebGpuFence createFence(boolean set);
 	void resetFences(sequence<WebGpuFence> fences);

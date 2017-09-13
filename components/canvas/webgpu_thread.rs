@@ -159,6 +159,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 result.send(info).unwrap();
             }
             w::WebGpuMsg::OpenAdapter { adapter_id, queue_families, result } => {
+                use std::mem;
                 let adapter = &mut self.adapters[adapter_id as usize];
                 let all_families = adapter.get_queue_families();
                 let families = queue_families
@@ -168,10 +169,11 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                         (family, type_, count as u32)
                     })
                     .collect::<Vec<_>>();
-                let gpu = adapter.open(&families);
+                let mut gpu = adapter.open(&families);
                 let general_queues = (0 .. gpu.general_queues.len() as w::QueueId).collect();
                 let info = w::GpuInfo {
                     limits: gpu.device.get_limits().clone(),
+                    heap_types: mem::replace(&mut gpu.heap_types, Vec::new()),
                     id: self.rehub.gpus.lock().unwrap().push(gpu),
                     general: general_queues,
                 };
@@ -554,12 +556,8 @@ impl<B: gpu::Backend> WebGpuThread<B> {
     ) -> w::HeapInfo {
         let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
 
-        let heap_type = gpu.heap_types
-            .iter()
-            .find(|ht| ht.properties.contains(desc.properties))
-            .unwrap();
         let raw = gpu.device.create_heap(
-            heap_type,
+            &desc.ty,
             desc.resources,
             desc.size as _,
         ).unwrap();
