@@ -421,6 +421,11 @@ pub enum WebGpuMsg {
         format: gpu::format::Format,
         result: WebGpuSender<RenderTargetViewInfo>,
     },
+    UploadBufferData {
+        gpu_id: GpuId,
+        buffer_id: BufferId,
+        data: Vec<u8>, //TODO?
+    },
 }
 
 pub type WebGpuChan = WebGpuSender<WebGpuMsg>;

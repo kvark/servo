@@ -274,6 +274,13 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 let rtv = self.view_image_as_render_target(gpu_id, image_id, format);
                 result.send(rtv).unwrap();
             }
+            w::WebGpuMsg::UploadBufferData { gpu_id, buffer_id, data } => {
+                let device = &mut self.rehub.gpus.lock().unwrap()[gpu_id].device;
+                let buffer = &self.rehub.buffers.read().unwrap()[buffer_id];
+                device.write_mapping::<u8>(buffer, 0 .. data.len() as u64)
+                    .unwrap()
+                    .copy_from_slice(&data);
+            }
         }
 
         false

@@ -21,7 +21,19 @@ use dom::webgpurenderpass::WebGpuRenderpass;
 use dom::webgpurendertargetview::WebGpuRenderTargetView;
 use dom::webgpushadermodule::WebGpuShaderModule;
 use dom_struct::dom_struct;
+use heapsize::HeapSizeOf;
+use js::jsapi::{JSContext, JSObject};
 use glsl_to_spirv;
+
+
+pub struct LimitsWrapper(pub gpu::Limits);
+impl HeapSizeOf for LimitsWrapper {
+    fn heap_size_of_children(&self) -> usize { 0 }
+}
+pub struct HeapTypeWrapper(pub gpu::HeapType);
+impl HeapSizeOf for HeapTypeWrapper {
+    fn heap_size_of_children(&self) -> usize { 0 }
+}
 
 
 #[dom_struct]
@@ -30,8 +42,8 @@ pub struct WebGpuDevice {
     #[ignore_heap_size_of = "Channels are hard"]
     sender: WebGpuChan,
     id: w::GpuId,
-    #[ignore_heap_size_of = "This is not the heap you are looking for"]
-    heap_types: Vec<gpu::HeapType>,
+    limits: LimitsWrapper,
+    heap_types: Vec<HeapTypeWrapper>,
 }
 
 impl WebGpuDevice {
@@ -39,14 +51,19 @@ impl WebGpuDevice {
         global: &GlobalScope,
         sender: WebGpuChan,
         id: w::GpuId,
-        heap_types: Vec<gpu::HeapType>,
+        limits: gpu::Limits,
+        heap_types: &[gpu::HeapType],
     ) -> Root<Self>
     {
         let obj = box WebGpuDevice {
             reflector_: Reflector::new(),
             sender,
             id,
-            heap_types,
+            limits: LimitsWrapper(limits),
+            heap_types: heap_types
+                .iter()
+                .map(|ht| HeapTypeWrapper(ht.clone()))
+                .collect(),
         };
         reflect_dom_object(obj, global, binding::Wrap)
     }
@@ -97,6 +114,13 @@ impl WebGpuDevice {
 }
 
 impl binding::WebGpuDeviceMethods for WebGpuDevice {
+    fn GetLimits(&self) -> binding::WebGpuDeviceLimits {
+        binding::WebGpuDeviceLimits {
+            minBufferCopyOffsetAlignment: self.limits.0.min_buffer_copy_offset_alignment as _,
+            minBufferCopyPitchAlignment: self.limits.0.min_buffer_copy_pitch_alignment as _,
+        }
+    }
+
     fn CreateFence(&self, set: bool) -> Root<WebGpuFence> {
         let (sender, receiver) = webgpu_channel().unwrap();
         let msg = WebGpuMsg::CreateFence {
@@ -164,7 +188,8 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
                 size: size as _,
                 ty: self.heap_types
                     .iter()
-                    .find(|ht| ht.id == heap_type_id as _)
+                    .find(|ht| ht.0.id == heap_type_id as _)
+                    .map(|ht| &ht.0)
                     .unwrap()
                     .clone(),
                 resources: map_enum!(resource_type; self::binding::WebGpuResourceType =>
@@ -449,5 +474,27 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
 
         let info = receiver.recv().unwrap();
         WebGpuRenderTargetView::new(&self.global(), info)
+    }
+
+    #[allow(unsafe_code)]
+    unsafe fn UploadBufferData(&self, cx: *mut JSContext, buffer: &WebGpuBuffer, data: *mut JSObject) -> () {
+        typedarray!(in(cx) let array_buffer: ArrayBuffer = data);
+        typedarray!(in(cx) let array_buffer_view: ArrayBufferView = data);
+        let data_vec = match array_buffer {
+            Ok(mut data) => data.as_slice().to_vec(),
+            Err(_) => match array_buffer_view {
+                Ok(mut v) => v.as_slice().to_vec(),
+                Err(_) => panic!("Unsupported data for UploadBufferData")
+            }
+        };
+
+        let msg = WebGpuMsg::UploadBufferData {
+            gpu_id: self.id,
+            buffer_id: buffer.get_id(),
+            data: data_vec,
+        };
+        self.sender.send(msg).unwrap();
+
+        ()
     }
 }

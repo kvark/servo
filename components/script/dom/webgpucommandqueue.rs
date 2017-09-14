@@ -2,7 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use heapsize::HeapSizeOf;
 use canvas_traits::webgpu::{GpuId, QueueId, WebGpuChan, WebGpuMsg,
     gpu, webgpu_channel};
 use dom::bindings::codegen::Bindings::WebGpuCommandQueueBinding as binding;
@@ -11,18 +10,11 @@ use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
 use dom::webgpucommandbuffer::WebGpuCommandBuffer;
 use dom::webgpucommandpool::WebGpuCommandPool;
+use dom::webgpudevice::{HeapTypeWrapper, LimitsWrapper};
 use dom::webgpusemaphore::WebGpuSemaphore;
 use dom::webgpufence::WebGpuFence;
 use dom_struct::dom_struct;
 
-
-pub struct LimitsWrapper(gpu::Limits);
-
-impl HeapSizeOf for LimitsWrapper {
-    fn heap_size_of_children(&self) -> usize {
-        0
-    }
-}
 
 #[dom_struct]
 pub struct WebGpuCommandQueue {
@@ -31,8 +23,7 @@ pub struct WebGpuCommandQueue {
     sender: WebGpuChan,
     id: (GpuId, QueueId),
     limits: LimitsWrapper,
-    #[ignore_heap_size_of = "This is not the heap you are looking for"]
-    heap_types: Vec<gpu::HeapType>,
+    heap_types: Vec<HeapTypeWrapper>,
 }
 
 impl WebGpuCommandQueue {
@@ -42,14 +33,17 @@ impl WebGpuCommandQueue {
         gpu_id: GpuId,
         id: QueueId,
         limits: gpu::Limits,
-        heap_types: Vec<gpu::HeapType>,
+        heap_types: &[gpu::HeapType],
     ) -> Root<Self> {
         let obj = box WebGpuCommandQueue {
             reflector_: Reflector::new(),
             sender,
             id: (gpu_id, id),
             limits: LimitsWrapper(limits),
-            heap_types,
+            heap_types: heap_types
+                .iter()
+                .map(|ht| HeapTypeWrapper(ht.clone()))
+                .collect(),
         };
         reflect_dom_object(obj, global, binding::Wrap)
     }
@@ -72,8 +66,8 @@ impl WebGpuCommandQueue {
     ) -> Option<gpu::HeapType> {
         self.heap_types
             .iter()
-            .find(|ht| ht.properties.contains(properties))
-            .cloned()
+            .find(|ht| ht.0.properties.contains(properties))
+            .map(|ht| ht.0.clone())
     }
 }
 

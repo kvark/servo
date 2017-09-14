@@ -89,6 +89,11 @@ enum WebGpuResourceType {
 };
 
 
+dictionary WebGpuDeviceLimits {
+	required unsigned long minBufferCopyOffsetAlignment;
+	required unsigned long minBufferCopyPitchAlignment;
+};
+
 dictionary WebGpuAttachmentDesc {
 	required WebGpuFormat format;
 	required WebGpuImageLayout srcLayout;
@@ -237,6 +242,8 @@ interface WebGpuDevice {
 	const WebGpuHeapProperty HEAP_PROPERTY_WRITE_COMBINED				= 0x10;
 
 
+	WebGpuDeviceLimits getLimits();
+
 	WebGpuFence createFence(boolean set);
 	void resetFences(sequence<WebGpuFence> fences);
 	boolean waitForFences(
@@ -289,4 +296,6 @@ interface WebGpuDevice {
 		WebGpuImage image,
 		WebGpuFormat format
 	);
+
+	void uploadBufferData(WebGpuBuffer buffer, object data);
 };

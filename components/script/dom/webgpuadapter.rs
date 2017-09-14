@@ -70,7 +70,7 @@ impl binding::WebGpuAdapterMethods for WebGpuAdapter {
         let gpu = receiver.recv().unwrap();
         let gpu_id = gpu.id;
         let limits = gpu.limits;
-        let heap_types = gpu.heap_types;
+        let heap_types = &gpu.heap_types;
         let global = &self.global();
         let sender = self.sender.clone();
 
@@ -78,7 +78,7 @@ impl binding::WebGpuAdapterMethods for WebGpuAdapter {
             generalQueues: gpu.general
                 .into_iter()
                 .map(|id| {
-                    WebGpuCommandQueue::new(global, sender.clone(), gpu_id, id, limits, heap_types.clone())
+                    WebGpuCommandQueue::new(global, sender.clone(), gpu_id, id, limits, heap_types)
                 })
                 .collect(),
             heapTypes: heap_types
@@ -88,7 +88,7 @@ impl binding::WebGpuAdapterMethods for WebGpuAdapter {
                     properties: ht.properties.bits() as _,
                 })
                 .collect(),
-            device: WebGpuDevice::new(global, sender, gpu_id, heap_types),
+            device: WebGpuDevice::new(global, sender, gpu_id, limits, heap_types),
         }
     }
 }

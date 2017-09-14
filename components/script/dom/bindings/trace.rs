@@ -37,7 +37,6 @@ use canvas_traits::webgl::{WebGLChan, WebGLContextShareMode, WebGLError, WebGLPi
 use canvas_traits::webgl::{WebGLReceiver, WebGLSender, WebGLShaderId, WebGLTextureId, WebGLVertexArrayId};
 use canvas_traits::webgpu::{WebGpuPipeline, WebGpuContextShareMode,
     CommandBufferInfo, CommandPoolInfo, Key, Presenter, QueueFamilyInfo, SubmitInfo};
-use canvas_traits::webgpu::gpu::HeapType;
 use cssparser::RGBA;
 use devtools_traits::{CSSError, TimelineMarkerType, WorkerId};
 use dom::abstractworker::SharedRt;
@@ -46,7 +45,7 @@ use dom::bindings::js::{JS, Root};
 use dom::bindings::refcounted::{Trusted, TrustedPromise};
 use dom::bindings::reflector::{DomObject, Reflector};
 use dom::bindings::str::{DOMString, USVString};
-use dom::webgpucommandqueue::{LimitsWrapper};
+use dom::webgpudevice::{HeapTypeWrapper, LimitsWrapper};
 use dom::webgpuswapchain::{Frame, WebGpuParent};
 use dom::bindings::utils::WindowProxyHandler;
 use dom::document::PendingRestyle;
@@ -412,8 +411,7 @@ unsafe_no_jsmanaged_fields!(WebGLTextureId);
 unsafe_no_jsmanaged_fields!(WebGLVertexArrayId);
 unsafe_no_jsmanaged_fields!(WebGpuPipeline, WebGpuContextShareMode,
     CommandBufferInfo, CommandPoolInfo, Key, Presenter, QueueFamilyInfo, SubmitInfo);
-unsafe_no_jsmanaged_fields!(LimitsWrapper, Frame, WebGpuParent);
-unsafe_no_jsmanaged_fields!(HeapType);
+unsafe_no_jsmanaged_fields!(HeapTypeWrapper, LimitsWrapper, Frame, WebGpuParent);
 unsafe_no_jsmanaged_fields!(MediaList);
 unsafe_no_jsmanaged_fields!(WebVRGamepadHand);
 unsafe_no_jsmanaged_fields!(ScriptToConstellationChan);
