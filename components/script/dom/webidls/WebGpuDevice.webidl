@@ -1,7 +1,8 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
- 
+
+typedef unsigned long WebGpuBufferUsage;
 typedef unsigned long WebGpuBufferAccess;
 typedef unsigned long WebGpuImageAccess;
 typedef unsigned long WebGpuPipelineStage;
@@ -78,6 +79,13 @@ enum WebGpuBlendFactor {
 	"SrcAlpha",
 	"OneMinusSrcAlpha",
 	//TODO
+};
+
+enum WebGpuResourceType {
+	"Any",
+	"Buffers",
+	"Images",
+	"Targets",
 };
 
 
@@ -162,6 +170,14 @@ dictionary WebGpuGraphicsPipelineDesc {
 
 
 interface WebGpuDevice {
+	// buffer usage flags
+	const WebGpuBufferUsage	BUFFER_USAGE_TRANSFER_SRC 	= 0x1;
+	const WebGpuBufferUsage	BUFFER_USAGE_TRANSFER_DST 	= 0x2;
+	const WebGpuBufferUsage	BUFFER_USAGE_CONSTANT 		= 0x4;
+	const WebGpuBufferUsage	BUFFER_USAGE_INDEX 			= 0x8;
+	const WebGpuBufferUsage	BUFFER_USAGE_VERTEX 		= 0x10;
+	const WebGpuBufferUsage	BUFFER_USAGE_INDIRECT 		= 0x20;
+
 	/* Vulkan original:
 	const WebGpuAccess ACCESS_INDIRECT_COMMAND_READ			= 0x0001;
 	const WebGpuAccess ACCESS_INDEX_BUFFER_READ				= 0x0002;
@@ -182,19 +198,21 @@ interface WebGpuDevice {
 	const WebGpuAccess ACCESS_MEMORY_WRITE					= 0x10000;
 	*/
 	// buffer access flags
-	const WebGpuBufferAccess	ACCESS_INDEX_BUFFER_READ      = 0x1;
-	const WebGpuBufferAccess	ACCESS_VERTEX_BUFFER_READ     = 0x2;
-	const WebGpuBufferAccess	ACCESS_CONSTANT_BUFFER_READ   = 0x4;
-	const WebGpuBufferAccess	ACCESS_INDIRECT_COMMAND_READ  = 0x8;
+	const WebGpuBufferAccess	BUFFER_ACCESS_TRANSFER_READ			= 0x01;
+	const WebGpuBufferAccess	BUFFER_ACCESS_TRANSFER_WRITE		= 0x02;
+	const WebGpuBufferAccess	BUFFER_ACCESS_INDEX_BUFFER_READ		= 0x10;
+	const WebGpuBufferAccess	BUFFER_ACCESS_VERTEX_BUFFER_READ	= 0x20;
+	const WebGpuBufferAccess	BUFFER_ACCESS_CONSTANT_BUFFER_READ	= 0x40;
+	const WebGpuBufferAccess	BUFFER_ACCESS_INDIRECT_COMMAND_READ	= 0x80;
 	// image access flags
-	const WebGpuImageAccess		ACCESS_COLOR_ATTACHMENT_READ  = 0x1;
-	const WebGpuImageAccess 	ACCESS_COLOR_ATTACHMENT_WRITE = 0x2;
-	const WebGpuImageAccess 	ACCESS_TRANSFER_READ          = 0x4;
-	const WebGpuImageAccess 	ACCESS_TRANSFER_WRITE         = 0x8;
-	const WebGpuImageAccess 	ACCESS_SHADER_READ            = 0x10;
-	const WebGpuImageAccess 	ACCESS_RENDER_TARGET_CLEAR    = 0x20;
-	const WebGpuImageAccess 	ACCESS_RESOLVE_SRC            = 0x100;
-	const WebGpuImageAccess 	ACCESS_RESOLVE_DST            = 0x200;
+	const WebGpuImageAccess		IMAGE_ACCESS_COLOR_ATTACHMENT_READ  = 0x1;
+	const WebGpuImageAccess 	IMAGE_ACCESS_COLOR_ATTACHMENT_WRITE = 0x2;
+	const WebGpuImageAccess 	IMAGE_ACCESS_TRANSFER_READ          = 0x4;
+	const WebGpuImageAccess 	IMAGE_ACCESS_TRANSFER_WRITE         = 0x8;
+	const WebGpuImageAccess 	IMAGE_ACCESS_SHADER_READ            = 0x10;
+	const WebGpuImageAccess 	IMAGE_ACCESS_RENDER_TARGET_CLEAR    = 0x20;
+	const WebGpuImageAccess 	IMAGE_ACCESS_RESOLVE_SRC            = 0x100;
+	const WebGpuImageAccess 	IMAGE_ACCESS_RESOLVE_DST            = 0x200;
 
 	const WebGpuPipelineStage PIPELINE_STAGE_TOP_OF_PIPE				= 0x1;
 	const WebGpuPipelineStage PIPELINE_STAGE_DRAW_INDIRECT				= 0x2;
@@ -225,6 +243,20 @@ interface WebGpuDevice {
 		sequence<WebGpuFence> fences,
 		WebGpuFenceWait mode,
 		unsigned long timeout
+	);
+
+	WebGpuHeap createHeap(
+		WebGpuHeapTypeId heapTypeId,
+		WebGpuResourceType resourceType,
+		unsigned long size
+	);
+
+	WebGpuBuffer createBuffer(
+		unsigned long size,
+		unsigned long stride,
+		WebGpuBufferUsage usage,
+		WebGpuHeap heap,
+		unsigned long heap_offset
 	);
 
 	WebGpuRenderpass createRenderpass(

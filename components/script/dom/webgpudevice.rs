@@ -9,10 +9,12 @@ use dom::bindings::js::Root;
 use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
 use dom::bindings::str::DOMString;
 use dom::globalscope::GlobalScope;
+use dom::webgpubuffer::WebGpuBuffer;
 use dom::webgpudepthstencilview::WebGpuDepthStencilView;
 use dom::webgpufence::WebGpuFence;
 use dom::webgpuframebuffer::WebGpuFramebuffer;
 use dom::webgpugraphicspipeline::WebGpuGraphicsPipeline;
+use dom::webgpuheap::WebGpuHeap;
 use dom::webgpuimage::WebGpuImage;
 use dom::webgpupipelinelayout::WebGpuPipelineLayout;
 use dom::webgpurenderpass::WebGpuRenderpass;
@@ -50,20 +52,12 @@ impl WebGpuDevice {
     }
 
     pub fn map_image_layout(layout: binding::WebGpuImageLayout) -> gpu::image::ImageLayout {
-        use self::binding::WebGpuImageLayout::*;
-        use self::gpu::image::ImageLayout as Il;
-        match layout {
-            General => Il::General,
-            ColorAttachmentOptimal => Il::ColorAttachmentOptimal,
-            DepthStencilAttachmentOptimal => Il::DepthStencilAttachmentOptimal,
-            DepthStencilReadOnlyOptimal => Il::DepthStencilReadOnlyOptimal,
-            ShaderReadOnlyOptimal => Il::ShaderReadOnlyOptimal,
-            TransferSrcOptimal => Il::TransferSrcOptimal,
-            TransferDstOptimal => Il::TransferDstOptimal,
-            Undefined => Il::Undefined,
-            Preinitialized => Il::Preinitialized,
-            Present => Il::Present,
-        }
+        map_enum!(layout; self::binding::WebGpuImageLayout => self::gpu::image::ImageLayout {
+            General, ColorAttachmentOptimal, DepthStencilAttachmentOptimal,
+            DepthStencilReadOnlyOptimal, ShaderReadOnlyOptimal,
+            TransferSrcOptimal, TransferDstOptimal,
+            Undefined, Preinitialized, Present
+        })
     }
 
     pub fn map_format(format: binding::WebGpuFormat) -> gpu::format::Format {
@@ -155,6 +149,60 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         self.sender.send(msg).unwrap();
 
         receiver.recv().unwrap()
+    }
+
+    fn CreateHeap(
+        &self,
+        heap_type_id: binding::WebGpuHeapTypeId,
+        resource_type: binding::WebGpuResourceType,
+        size: u32,
+    ) -> Root<WebGpuHeap> {
+        let (sender, receiver) = webgpu_channel().unwrap();
+        let msg = WebGpuMsg::CreateHeap {
+            gpu_id: self.id,
+            desc: w::HeapDesc {
+                size: size as _,
+                ty: self.heap_types
+                    .iter()
+                    .find(|ht| ht.id == heap_type_id as _)
+                    .unwrap()
+                    .clone(),
+                resources: map_enum!(resource_type; self::binding::WebGpuResourceType =>
+                    self::gpu::device::ResourceHeapType {Any, Buffers, Images, Targets}
+                ),
+            },
+            result: sender,
+        };
+        self.sender.send(msg).unwrap();
+
+        let info = receiver.recv().unwrap();
+        WebGpuHeap::new(&self.global(), info)
+    }
+
+    fn CreateBuffer(
+        &self,
+        size: u32,
+        stride: u32,
+        usage: binding::WebGpuBufferUsage,
+        heap: &WebGpuHeap,
+        heap_offset: u32,
+    ) -> Root<WebGpuBuffer> {
+        let (sender, receiver) = webgpu_channel().unwrap();
+        let msg = WebGpuMsg::CreateBuffer {
+            gpu_id: self.id,
+            desc: w::BufferDesc {
+                size: size as _,
+                stride: stride as _,
+                usage: gpu::buffer::Usage::from_bits(usage as _).unwrap(),
+                heap_id: heap.get_id(),
+                heap_offset: heap_offset as _,
+            },
+            result: sender,
+        };
+        self.sender.send(msg).unwrap();
+
+        let info = receiver.recv().unwrap();
+        WebGpuBuffer::new(&self.global(), info)
     }
 
     fn CreateRenderpass(
@@ -264,10 +312,9 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
     ) -> Root<WebGpuShaderModule> {
         use std::io::Read;
 
-        let conv_type = match ty {
-            binding::WebGpuShaderType::Vertex => glsl_to_spirv::ShaderType::Vertex,
-            binding::WebGpuShaderType::Fragment => glsl_to_spirv::ShaderType::Fragment,
-        };
+        let conv_type = map_enum!(ty; self::binding::WebGpuShaderType =>
+            glsl_to_spirv::ShaderType {Vertex, Fragment}
+        );
         let mut file = glsl_to_spirv::compile(&code, conv_type).unwrap();
         let mut data = Vec::new();
         file.read_to_end(&mut data).unwrap();
@@ -329,13 +376,9 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
                     dst: binding::WebGpuBlendFactor::Zero,
                 } => None,
                 _ => Some(gpu::state::BlendChannel {
-                    equation: match chan.eq {
-                        binding::WebGpuBlendEquation::Add => gpu::state::Equation::Add,
-                        binding::WebGpuBlendEquation::Sub => gpu::state::Equation::Sub,
-                        binding::WebGpuBlendEquation::RevSub => gpu::state::Equation::RevSub,
-                        binding::WebGpuBlendEquation::Min => gpu::state::Equation::Min,
-                        binding::WebGpuBlendEquation::Max => gpu::state::Equation::Max,
-                    },
+                    equation: map_enum!(chan.eq; self::binding::WebGpuBlendEquation =>
+                        self::gpu::state::Equation {Add, Sub, RevSub, Min, Max}
+                    ),
                     source: map_factor(chan.src),
                     destination: map_factor(chan.dst),
                 })

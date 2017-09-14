@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use canvas_traits::webgpu::BufferId;
+use canvas_traits::webgpu::{BufferId, BufferInfo};
 use dom::bindings::codegen::Bindings::WebGpuBufferBinding as binding;
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{Reflector, reflect_dom_object};
@@ -17,11 +17,10 @@ pub struct WebGpuBuffer {
 }
 
 impl WebGpuBuffer {
-    #[allow(unrooted_must_root)] //TEMP
-    pub fn _new(global: &GlobalScope, id: BufferId) -> Root<Self> {
+    pub fn new(global: &GlobalScope, info: BufferInfo) -> Root<Self> {
         let obj = box WebGpuBuffer {
             reflector_: Reflector::new(),
-            id,
+            id: info.id,
         };
         reflect_dom_object(obj, global, binding::Wrap)
     }

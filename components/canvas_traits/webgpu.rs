@@ -12,7 +12,6 @@ use webrender_api;
 
 pub use webgpu_component::gpu;
 
-
 pub type WebGpuSender<T> = ipc_channel::ipc::IpcSender<T>;
 pub type WebGpuReceiver<T> = ipc_channel::ipc::IpcReceiver<T>;
 

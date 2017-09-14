@@ -572,3 +572,18 @@ macro_rules! rooted_vec {
         let mut $name = $crate::dom::bindings::trace::RootedVec::from_iter(&mut root, $iter);
     }
 }
+
+#[macro_export]
+macro_rules! map_enum {
+    ($value:expr ; $from:path => $to:path {$($variant:ident),*}) => (
+        {
+            use $from as _from;
+            use $to as _to;
+            match $value {
+                $(
+                    _from::$variant => _to::$variant,
+                )*
+            }
+        }
+    )
+}
