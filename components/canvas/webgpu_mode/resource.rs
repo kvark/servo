@@ -16,6 +16,7 @@ pub struct ResourceHub<B: gpu::Backend> {
     pub dsvs: RwLock<LazyVec<B::DepthStencilView>>,
     pub fences: RwLock<LazyVec<B::Fence>>,
     pub shaders: RwLock<LazyVec<B::ShaderModule>>,
+    pub set_layouts: RwLock<LazyVec<B::DescriptorSetLayout>>,
     pub pipe_layouts: RwLock<LazyVec<B::PipelineLayout>>,
     pub graphics_pipes: RwLock<LazyVec<B::GraphicsPipeline>>,
 }
@@ -32,6 +33,7 @@ impl<B: gpu::Backend> ResourceHub<B> {
             dsvs: RwLock::new(LazyVec::new()),
             fences: RwLock::new(LazyVec::new()),
             shaders: RwLock::new(LazyVec::new()),
+            set_layouts: RwLock::new(LazyVec::new()),
             pipe_layouts: RwLock::new(LazyVec::new()),
             graphics_pipes: RwLock::new(LazyVec::new()),
         })

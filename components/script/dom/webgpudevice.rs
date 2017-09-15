@@ -11,6 +11,7 @@ use dom::bindings::str::DOMString;
 use dom::globalscope::GlobalScope;
 use dom::webgpubuffer::WebGpuBuffer;
 use dom::webgpudepthstencilview::WebGpuDepthStencilView;
+use dom::webgpudescriptorsetlayout::WebGpuDescriptorSetLayout;
 use dom::webgpufence::WebGpuFence;
 use dom::webgpuframebuffer::WebGpuFramebuffer;
 use dom::webgpugraphicspipeline::WebGpuGraphicsPipeline;
@@ -344,13 +345,46 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         WebGpuFramebuffer::new(&self.global(), info)
     }
 
+    fn CreateDescriptorSetLayout(
+        &self,
+        bindings: Vec<binding::WebGpuDescriptorSetLayoutBinding>,
+    ) -> Root<WebGpuDescriptorSetLayout> {
+        let (sender, receiver) = webgpu_channel().unwrap();
+        let msg = WebGpuMsg::CreateDescriptorSetLayout {
+            gpu_id: self.id,
+            bindings: bindings
+                .into_iter()
+                .map(|b| gpu::pso::DescriptorSetLayoutBinding {
+                    binding: b.binding as _,
+                    ty: map_enum!(b.type_;
+                        self::binding::WebGpuDescriptorType => self::gpu::pso::DescriptorType {
+                            Sampler, SampledImage, StorageImage, UniformTexelBuffer, StorageTexelBuffer,
+                            ConstantBuffer, StorageBuffer, InputAttachment
+                        }
+                    ),
+                    count: b.count as _,
+                    stage_flags: gpu::pso::ShaderStageFlags::from_bits(b.stages as _).unwrap(),
+                })
+                .collect(),
+            result: sender,
+        };
+        self.sender.send(msg).unwrap();
+
+        let layout = receiver.recv().unwrap();
+        WebGpuDescriptorSetLayout::new(&self.global(), layout)
+    }
+
     fn CreatePipelineLayout(
         &self,
-        _sets: Vec<binding::WebGpuDescriptorSetLayout>,
+        set_layouts: Vec<Root<WebGpuDescriptorSetLayout>>,
     ) -> Root<WebGpuPipelineLayout> {
         let (sender, receiver) = webgpu_channel().unwrap();
         let msg = WebGpuMsg::CreatePipelineLayout {
             gpu_id: self.id,
+            set_layout_ids: set_layouts
+                .into_iter()
+                .map(|sl| sl.get_id())
+                .collect(),
             result: sender,
         };
         self.sender.send(msg).unwrap();
@@ -389,7 +423,7 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         &self,
         descs: Vec<binding::WebGpuGraphicsPipelineDesc>,
     ) -> Vec<Root<WebGpuGraphicsPipeline>> {
-        let map_entry_point = |stage: &binding::WebGpuShaderStage| w::EntryPoint {
+        let map_entry_point = |stage: &binding::WebGpuShaderRef| w::EntryPoint {
             module_id: stage.shader_module.get_id(),
             name: stage.entry_point.to_string(),
         };

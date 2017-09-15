@@ -145,6 +145,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
     where
         B::Device: Send,
         B::CommandQueue: Send,
+        B::DescriptorSetLayout: Send + Sync,
     {
         match msg {
             w::WebGpuMsg::CreateContext { size, external_image_id, result } => {
@@ -252,8 +253,12 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 let renderpass = self.create_renderpass(gpu_id, desc);
                 result.send(renderpass).unwrap();
             }
-            w::WebGpuMsg::CreatePipelineLayout { gpu_id, result } => {
-                let layout = self.create_pipeline_layout(gpu_id);
+            w::WebGpuMsg::CreateDescriptorSetLayout { gpu_id, bindings, result } => {
+                let layout = self.create_descriptor_set_layout(gpu_id, bindings);
+                result.send(layout).unwrap();
+            }
+            w::WebGpuMsg::CreatePipelineLayout { gpu_id, set_layout_ids, result } => {
+                let layout = self.create_pipeline_layout(gpu_id, set_layout_ids);
                 result.send(layout).unwrap();
             }
             w::WebGpuMsg::CreateShaderModule { gpu_id, data, result } => {
@@ -359,6 +364,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
     where
         B::Device: Send,
         B::CommandQueue: Send,
+        B::DescriptorSetLayout: Send + Sync,
     {
         let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
         let queue = gpu.general_queues[queue_id as usize].as_raw();//TODO
@@ -700,13 +706,32 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         }
     }
 
+    fn create_descriptor_set_layout(
+        &mut self,
+        gpu_id: w::GpuId,
+        bindings: Vec<gpu::pso::DescriptorSetLayoutBinding>,
+    ) -> w::DescriptorSetLayoutInfo {
+        let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
+        let layout = gpu.device.create_descriptor_set_layout(&bindings);
+
+        w::DescriptorSetLayoutInfo {
+            id: self.rehub.set_layouts.write().unwrap().push(layout)
+        }
+    }
+
     fn create_pipeline_layout(
         &mut self,
         gpu_id: w::GpuId,
+        set_layout_ids: Vec<w::DescriptorSetLayoutId>,
     ) -> w::PipelineLayoutInfo {
         let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
+        let set_layout_store = self.rehub.set_layouts.read().unwrap();
 
-        let layout = gpu.device.create_pipeline_layout(&[]);
+        let set_layouts = set_layout_ids
+            .into_iter()
+            .map(|id| &set_layout_store[id])
+            .collect::<Vec<_>>();
+        let layout = gpu.device.create_pipeline_layout(&set_layouts);
 
         w::PipelineLayoutInfo {
             id: self.rehub.pipe_layouts.write().unwrap().push(layout),

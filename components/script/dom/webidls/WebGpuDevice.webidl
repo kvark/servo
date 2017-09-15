@@ -9,6 +9,8 @@ typedef unsigned long WebGpuImageAccess;
 typedef unsigned long WebGpuPipelineStage;
 typedef unsigned long WebGpuHeapProperty;
 typedef unsigned short WebGpuHeapTypeId;
+typedef unsigned long WebGpuDescriptorBinding;
+typedef unsigned long WebGpuShaderStage;
 
 enum WebGpuFormat {
 	"R8G8B8A8_UNORM",
@@ -91,6 +93,17 @@ enum WebGpuResourceType {
 	"Targets",
 };
 
+enum WebGpuDescriptorType {
+	"Sampler",
+	"SampledImage",
+	"StorageImage",
+	"UniformTexelBuffer",
+	"StorageTexelBuffer",
+	"ConstantBuffer",
+	"StorageBuffer",
+	"InputAttachment",
+};
+
 
 dictionary WebGpuDeviceLimits {
 	required unsigned long minBufferCopyOffsetAlignment;
@@ -129,12 +142,7 @@ dictionary WebGpuFramebufferSize {
 	required unsigned long layers;
 };
 
-
-dictionary WebGpuDescriptorSetLayout {
-	//TODO
-};
-
-dictionary WebGpuShaderStage {
+dictionary WebGpuShaderRef {
 	required WebGpuShaderModule shader_module; //Note: "module" is a keyword
 	required DOMString entry_point;
 };
@@ -166,8 +174,15 @@ dictionary WebGpuBlendState {
 	required sequence<WebGpuColorTarget> targets;
 };
 
+dictionary WebGpuDescriptorSetLayoutBinding {
+	required WebGpuDescriptorBinding binding;
+	required WebGpuDescriptorType type;
+	required unsigned long count;
+	WebGpuShaderStage stages = 0xFF;
+};
+
 dictionary WebGpuGraphicsPipelineDesc {
-	required record<DOMString, WebGpuShaderStage> shaders; // `WebGpuShaderType`
+	required record<DOMString, WebGpuShaderRef> shaders; // `WebGpuShaderType`
 	required WebGpuInputAssemblyState inputAssemblyState;
 	required WebGpuRasterizerState rasterizerState;
 	required WebGpuBlendState blendState;
@@ -257,6 +272,15 @@ interface WebGpuDevice {
 	const WebGpuPipelineStage PIPELINE_STAGE_BOTTOM_OF_PIPE				= 0x2000;
 	const WebGpuPipelineStage PIPELINE_STAGE_HOST						= 0x4000;
 
+	const WebGpuShaderStage SHADER_STAGE_VERTEX   = 0x01;
+	const WebGpuShaderStage SHADER_STAGE_HULL     = 0x02;
+	const WebGpuShaderStage SHADER_STAGE_DOMAIN   = 0x04;
+	const WebGpuShaderStage SHADER_STAGE_GEOMETRY = 0x08;
+	const WebGpuShaderStage SHADER_STAGE_FRAGMENT = 0x10;
+	const WebGpuShaderStage SHADER_STAGE_COMPUTE  = 0x20;
+	const WebGpuShaderStage SHADER_STAGE_GRAPHICS = 0x1F;
+	const WebGpuShaderStage SHADER_STAGE_ALL      = 0x3F;
+
 	const WebGpuHeapProperty HEAP_PROPERTY_DEVICE_LOCAL					= 0x01;
 	const WebGpuHeapProperty HEAP_PROPERTY_COHERENT						= 0x02;
 	const WebGpuHeapProperty HEAP_PROPERTY_CPU_VISIBLE					= 0x04;
@@ -303,6 +327,10 @@ interface WebGpuDevice {
 		WebGpuFramebufferSize size,
 		sequence<WebGpuRenderTargetView> colors,
 		WebGpuDepthStencilView? depth_stencil
+	);
+
+	WebGpuDescriptorSetLayout createDescriptorSetLayout(
+		sequence<WebGpuDescriptorSetLayoutBinding> bindings
 	);
 
 	WebGpuPipelineLayout createPipelineLayout(

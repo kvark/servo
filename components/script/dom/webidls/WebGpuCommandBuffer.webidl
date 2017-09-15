@@ -6,6 +6,13 @@ typedef unsigned long WebGpuVertexCount;
 typedef unsigned long WebGpuIndexCount;
 typedef unsigned long WebGpuInstanceCount;
 
+enum WebGpuClearValueKind {
+	"ColorUint",
+	"ColorInt",
+	"ColorFloat",
+	"DepthStencil",
+};
+
 dictionary WebGpuBufferState {
 	required WebGpuBufferAccess access;
 };
@@ -42,13 +49,6 @@ dictionary WebGpuViewport {
 	required float far;
 };
 
-enum WebGpuClearValueKind {
-	"ColorUint",
-	"ColorInt",
-	"ColorFloat",
-	"DepthStencil",
-};
-
 dictionary WebGpuClearValue {
 	required WebGpuClearValueKind kind;
 	required sequence<float> data;
@@ -75,6 +75,7 @@ dictionary WebGpuBufferImageCopy {
 	required WebGpuImageOffset imageOffset;
 	required WebGpuImageExtent imageExtent;
 };
+
 
 interface WebGpuCommandBuffer {
 	void begin();

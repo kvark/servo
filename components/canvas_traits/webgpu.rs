@@ -45,6 +45,7 @@ pub type FramebufferId = Key;
 pub type RenderpassId = Key;
 pub type RenderTargetViewId = Key;
 pub type DepthStencilViewId = Key;
+pub type DescriptorSetLayoutId = Key;
 pub type PipelineLayoutId = Key;
 pub type ShaderModuleId = Key;
 pub type GraphicsPipelineId = Key;
@@ -221,6 +222,11 @@ pub struct ImageInfo {
 #[derive(Clone, Deserialize, Serialize)]
 pub struct ShaderModuleInfo {
     pub id: ShaderModuleId,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct DescriptorSetLayoutInfo {
+    pub id: DescriptorSetLayoutId,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -407,8 +413,14 @@ pub enum WebGpuMsg {
         desc: RenderpassDesc,
         result: WebGpuSender<RenderpassInfo>,
     },
+    CreateDescriptorSetLayout {
+        gpu_id: GpuId,
+        bindings: Vec<gpu::pso::DescriptorSetLayoutBinding>,
+        result: WebGpuSender<DescriptorSetLayoutInfo>,
+    },
     CreatePipelineLayout {
         gpu_id: GpuId,
+        set_layout_ids: Vec<DescriptorSetLayoutId>,
         result: WebGpuSender<PipelineLayoutInfo>,
     },
     CreateShaderModule {
