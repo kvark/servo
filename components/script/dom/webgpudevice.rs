@@ -81,6 +81,8 @@ impl WebGpuDevice {
         use self::binding::WebGpuFormat::*;
         use self::gpu::format::{Format, SurfaceType, ChannelType};
         match format {
+            R8G8B8A8_UNORM => Format(SurfaceType::R8_G8_B8_A8, ChannelType::Unorm),
+            R8G8B8A8_SRGB => Format(SurfaceType::R8_G8_B8_A8, ChannelType::Srgb),
             B8G8R8A8_UNORM => Format(SurfaceType::B8_G8_R8_A8, ChannelType::Unorm),
             B8G8R8A8_SRGB => Format(SurfaceType::B8_G8_R8_A8, ChannelType::Srgb),
         }
@@ -206,9 +208,7 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
 
     fn CreateBuffer(
         &self,
-        size: u32,
-        stride: u32,
-        usage: binding::WebGpuBufferUsage,
+        desc: &binding::WebGpuBufferDesc,
         heap: &WebGpuHeap,
         heap_offset: u32,
     ) -> Root<WebGpuBuffer> {
@@ -216,9 +216,9 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         let msg = WebGpuMsg::CreateBuffer {
             gpu_id: self.id,
             desc: w::BufferDesc {
-                size: size as _,
-                stride: stride as _,
-                usage: gpu::buffer::Usage::from_bits(usage as _).unwrap(),
+                size: desc.size as _,
+                stride: desc.stride as _,
+                usage: gpu::buffer::Usage::from_bits(desc.usage as _).unwrap(),
                 heap_id: heap.get_id(),
                 heap_offset: heap_offset as _,
             },
@@ -228,6 +228,35 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
 
         let info = receiver.recv().unwrap();
         WebGpuBuffer::new(&self.global(), info)
+    }
+
+    fn CreateImage(
+        &self,
+        desc: &binding::WebGpuImageDesc,
+        heap: &WebGpuHeap,
+        heap_offset: u32,
+    ) -> Root<WebGpuImage> {
+        let (sender, receiver) = webgpu_channel().unwrap();
+        let msg = WebGpuMsg::CreateImage {
+            gpu_id: self.id,
+            desc: w::ImageDesc {
+                kind: gpu::image::Kind::D2(
+                    desc.width as _,
+                    desc.height as _,
+                    gpu::image::AaMode::Single,
+                ),
+                levels: 1,
+                format: Self::map_format(desc.format),
+                usage: gpu::image::Usage::from_bits(desc.usage as _).unwrap(),
+                heap_id: heap.get_id(),
+                heap_offset: heap_offset as _,
+            },
+            result: sender,
+        };
+        self.sender.send(msg).unwrap();
+
+        let info = receiver.recv().unwrap();
+        WebGpuImage::new(&self.global(), info)
     }
 
     fn CreateRenderpass(

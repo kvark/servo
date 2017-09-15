@@ -145,7 +145,7 @@ impl WebGpuSwapchain {
         };
 
         let frames = (0..count).map(|i| {
-            let image_id = {
+            let image_info = {
                 let (result, receiver) = webgpu_channel().unwrap();
                 let msg = WebGpuMsg::CreateImage {
                     gpu_id: queue.gpu_id(),
@@ -166,7 +166,7 @@ impl WebGpuSwapchain {
                 sender.send(msg).unwrap();
                 let info = receiver.recv().unwrap();
                 assert!(info.occupied_size <= bytes_per_image);
-                info.id
+                info
             };
             let staging_buffer_id = {
                 let (result, receiver) = webgpu_channel().unwrap();
@@ -198,7 +198,7 @@ impl WebGpuSwapchain {
                 receiver.recv().unwrap()
             };
             Frame {
-                image: WebGpuImage::new(global, image_id),
+                image: WebGpuImage::new(global, image_info),
                 staging_buffer_id,
                 command_buffer_id,
                 fence_id,
@@ -329,7 +329,7 @@ impl binding::WebGpuSwapchainMethods for WebGpuSwapchain {
         chan.send(WebGpuCommand::CopyImageToBuffer {
             source_id: frame.image.get_id(),
             source_layout: dst_layout,
-            destination_id: frame.staging_buffer_id,
+            dest_id: frame.staging_buffer_id,
             regions: vec![region],
         }).unwrap();
         chan.send(WebGpuCommand::PipelineBarrier {

@@ -302,10 +302,16 @@ pub enum WebGpuCommand {
         clear_values: Vec<gpu::command::ClearValue>,
     },
     EndRenderpass,
+    CopyBufferToImage {
+        source_id: BufferId,
+        dest_id: ImageId,
+        dest_layout: gpu::image::ImageLayout,
+        regions: Vec<gpu::command::BufferImageCopy>,
+    },
     CopyImageToBuffer {
         source_id: ImageId,
         source_layout: gpu::image::ImageLayout,
-        destination_id: BufferId,
+        dest_id: BufferId,
         regions: Vec<gpu::command::BufferImageCopy>,
     },
     BindGraphicsPipeline(GraphicsPipelineId),

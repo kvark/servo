@@ -9,13 +9,15 @@ use canvas_traits::webgpu::{
     gpu,
 };
 use dom::bindings::codegen::Bindings::WebGpuCommandBufferBinding as binding;
-use dom::bindings::codegen::Bindings::WebGpuDeviceBinding::WebGpuPipelineStage;
+use dom::bindings::codegen::Bindings::WebGpuDeviceBinding::{WebGpuImageLayout, WebGpuPipelineStage};
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
+use dom::webgpubuffer::WebGpuBuffer;
 use dom::webgpudevice::WebGpuDevice;
 use dom::webgpuframebuffer::WebGpuFramebuffer;
 use dom::webgpugraphicspipeline::WebGpuGraphicsPipeline;
+use dom::webgpuimage::WebGpuImage;
 use dom::webgpurenderpass::WebGpuRenderpass;
 use dom_struct::dom_struct;
 use std::cell::Cell;
@@ -104,6 +106,26 @@ impl WebGpuCommandBuffer {
             }
         }
     }
+
+    fn map_buffer_image_copy(copy: binding::WebGpuBufferImageCopy) -> gpu::command::BufferImageCopy {
+        gpu::command::BufferImageCopy {
+            buffer_offset: copy.bufferOffset as _,
+            buffer_row_pitch: copy.bufferRowPitch as _,
+            buffer_slice_pitch: copy.bufferSlicePitch as _,
+            image_aspect: gpu::image::ASPECT_COLOR, //TODO
+            image_subresource: (0, 0..1), //TODO
+            image_offset: gpu::command::Offset {
+                x: copy.imageOffset.x as _,
+                y: copy.imageOffset.y as _,
+                z: copy.imageOffset.z as _,
+            },
+            image_extent: gpu::device::Extent {
+                width: copy.imageExtent.width,
+                height: copy.imageExtent.height,
+                depth: copy.imageExtent.depth,
+            },
+        }
+    }
 }
 
 impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
@@ -154,6 +176,43 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
         self.sender.send(msg).unwrap();
     }
 
+    fn CopyBufferToImage(
+        &self,
+        source: &WebGpuBuffer,
+        dest: &WebGpuImage,
+        dest_layout: WebGpuImageLayout,
+        regions: Vec<binding::WebGpuBufferImageCopy>,
+    ) {
+        let msg = WebGpuCommand::CopyBufferToImage {
+            source_id: source.get_id(),
+            dest_id: dest.get_id(),
+            dest_layout: WebGpuDevice::map_image_layout(dest_layout),
+            regions: regions
+                .into_iter()
+                .map(Self::map_buffer_image_copy)
+                .collect(),
+        };
+        self.sender.send(msg).unwrap();
+    }
+
+    fn CopyImageToBuffer(
+        &self,
+        source: &WebGpuImage,
+        source_layout: WebGpuImageLayout,
+        dest: &WebGpuBuffer,
+        regions: Vec<binding::WebGpuBufferImageCopy>,
+    ) {
+        let msg = WebGpuCommand::CopyImageToBuffer {
+            source_id: source.get_id(),
+            source_layout: WebGpuDevice::map_image_layout(source_layout),
+            dest_id: dest.get_id(),
+            regions: regions
+                .into_iter()
+                .map(Self::map_buffer_image_copy)
+                .collect(),
+        };
+        self.sender.send(msg).unwrap();
+    }
 
     fn BeginRenderpass(
         &self,

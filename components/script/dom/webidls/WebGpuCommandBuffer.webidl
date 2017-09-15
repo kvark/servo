@@ -54,6 +54,28 @@ dictionary WebGpuClearValue {
 	required sequence<float> data;
 };
 
+dictionary WebGpuImageOffset {
+	unsigned long x = 0;
+	unsigned long y = 0;
+	unsigned long z = 0;
+};
+
+dictionary WebGpuImageExtent {
+	required unsigned long width;
+	required unsigned long height;
+	unsigned long depth = 1;
+};
+
+dictionary WebGpuBufferImageCopy {
+	required unsigned long bufferOffset;
+	required unsigned long bufferRowPitch;
+	required unsigned long bufferSlicePitch;
+	//required WebGpuImageAspect imageAspect,
+	//TODO: image::SubresourceLayers,
+	required WebGpuImageOffset imageOffset;
+	required WebGpuImageExtent imageExtent;
+};
+
 interface WebGpuCommandBuffer {
 	void begin();
 	void finish();
@@ -63,6 +85,20 @@ interface WebGpuCommandBuffer {
 		WebGpuPipelineStage dstStages,
 		sequence<WebGpuBufferBarrier> buffers,
 		sequence<WebGpuImageBarrier> images
+	);
+
+	void copyBufferToImage(
+		WebGpuBuffer src,
+		WebGpuImage dst,
+		WebGpuImageLayout dstLayout,
+		sequence<WebGpuBufferImageCopy> regions
+	);
+
+	void copyImageToBuffer(
+		WebGpuImage src,
+		WebGpuImageLayout srcLayout,
+		WebGpuBuffer dst,
+		sequence<WebGpuBufferImageCopy> regions
 	);
 
 	void beginRenderpass(

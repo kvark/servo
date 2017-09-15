@@ -4,12 +4,15 @@
 
 typedef unsigned long WebGpuBufferUsage;
 typedef unsigned long WebGpuBufferAccess;
+typedef unsigned long WebGpuImageUsage;
 typedef unsigned long WebGpuImageAccess;
 typedef unsigned long WebGpuPipelineStage;
 typedef unsigned long WebGpuHeapProperty;
 typedef unsigned short WebGpuHeapTypeId;
 
 enum WebGpuFormat {
+	"R8G8B8A8_UNORM",
+	"R8G8B8A8_SRGB",
 	"B8G8R8A8_UNORM",
 	"B8G8R8A8_SRGB",
 };
@@ -173,6 +176,19 @@ dictionary WebGpuGraphicsPipelineDesc {
 	unsigned long subpass = 0;
 };
 
+dictionary WebGpuBufferDesc {
+	required unsigned long size;
+	required unsigned long stride;
+	required WebGpuBufferUsage usage;
+};
+
+dictionary WebGpuImageDesc {
+	required unsigned long width;
+	required unsigned long height;
+	required WebGpuFormat format;
+	required WebGpuImageUsage usage;
+};
+
 
 interface WebGpuDevice {
 	// buffer usage flags
@@ -182,6 +198,12 @@ interface WebGpuDevice {
 	const WebGpuBufferUsage	BUFFER_USAGE_INDEX 			= 0x8;
 	const WebGpuBufferUsage	BUFFER_USAGE_VERTEX 		= 0x10;
 	const WebGpuBufferUsage	BUFFER_USAGE_INDIRECT 		= 0x20;
+
+	const WebGpuImageUsage IMAGE_USAGE_TRANSFER_SRC				= 0x01;
+	const WebGpuImageUsage IMAGE_USAGE_TRANSFER_DST				= 0x02;
+	const WebGpuImageUsage IMAGE_USAGE_COLOR_ATTACHMENT			= 0x04;
+	const WebGpuImageUsage IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT	= 0x08;
+	const WebGpuImageUsage IMAGE_USAGE_SAMPLED					= 0x10;
 
 	/* Vulkan original:
 	const WebGpuAccess ACCESS_INDIRECT_COMMAND_READ			= 0x0001;
@@ -259,9 +281,13 @@ interface WebGpuDevice {
 	);
 
 	WebGpuBuffer createBuffer(
-		unsigned long size,
-		unsigned long stride,
-		WebGpuBufferUsage usage,
+		WebGpuBufferDesc desc,
+		WebGpuHeap heap,
+		unsigned long heap_offset
+	);
+
+	WebGpuImage createImage(
+		WebGpuImageDesc desc,
 		WebGpuHeap heap,
 		unsigned long heap_offset
 	);

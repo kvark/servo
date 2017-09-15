@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use canvas_traits::webgpu::ImageId;
+use canvas_traits::webgpu::{ImageId, ImageInfo};
 use dom::bindings::codegen::Bindings::WebGpuImageBinding as binding;
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{Reflector, reflect_dom_object};
@@ -17,10 +17,10 @@ pub struct WebGpuImage {
 }
 
 impl WebGpuImage {
-    pub fn new(global: &GlobalScope, id: ImageId) -> Root<Self> {
+    pub fn new(global: &GlobalScope, info: ImageInfo) -> Root<Self> {
         let obj = box WebGpuImage {
             reflector_: Reflector::new(),
-            id,
+            id: info.id,
         };
         reflect_dom_object(obj, global, binding::Wrap)
     }

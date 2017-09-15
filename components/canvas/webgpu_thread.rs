@@ -481,10 +481,17 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                     let cb = &mut com_buffers[active_id.unwrap()];
                     cb.end_renderpass();
                 }
-                w::WebGpuCommand::CopyImageToBuffer { source_id, source_layout, destination_id, regions } => {
+                w::WebGpuCommand::CopyBufferToImage { source_id, dest_id, dest_layout, regions } => {
+                    let cb = &mut com_buffers[active_id.unwrap()];
+                    let source = &rehub.buffers.read().unwrap()[source_id];
+                    let destination = &rehub.images.read().unwrap()[dest_id];
+
+                    cb.copy_buffer_to_image(source, destination, dest_layout, &regions);
+                }
+                w::WebGpuCommand::CopyImageToBuffer { source_id, source_layout, dest_id, regions } => {
                     let cb = &mut com_buffers[active_id.unwrap()];
                     let source = &rehub.images.read().unwrap()[source_id];
-                    let destination = &rehub.buffers.read().unwrap()[destination_id];
+                    let destination = &rehub.buffers.read().unwrap()[dest_id];
 
                     cb.copy_image_to_buffer(source, source_layout, destination, &regions);
                 }
