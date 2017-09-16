@@ -47,6 +47,8 @@ pub type RenderTargetViewId = Key;
 pub type DepthStencilViewId = Key;
 pub type DescriptorSetLayoutId = Key;
 pub type PipelineLayoutId = Key;
+pub type DescriptorPoolId = Key;
+pub type DescriptorSetId = Key;
 pub type ShaderModuleId = Key;
 pub type GraphicsPipelineId = Key;
 
@@ -232,6 +234,16 @@ pub struct DescriptorSetLayoutInfo {
 #[derive(Clone, Deserialize, Serialize)]
 pub struct PipelineLayoutInfo {
     pub id: PipelineLayoutId,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct DescriptorPoolInfo {
+    pub id: DescriptorPoolId,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct DescriptorSetInfo {
+    pub id: DescriptorSetId,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -422,6 +434,17 @@ pub enum WebGpuMsg {
         gpu_id: GpuId,
         set_layout_ids: Vec<DescriptorSetLayoutId>,
         result: WebGpuSender<PipelineLayoutInfo>,
+    },
+    CreateDescriptorPool {
+        gpu_id: GpuId,
+        max_sets: usize,
+        ranges: Vec<gpu::pso::DescriptorRangeDesc>,
+        result: WebGpuSender<DescriptorPoolInfo>,
+    },
+    AllocateDescriptorSets {
+        pool_id: DescriptorPoolId,
+        set_layout_ids: Vec<DescriptorSetLayoutId>,
+        result: WebGpuSender<DescriptorSetInfo>,
     },
     CreateShaderModule {
         gpu_id: GpuId,

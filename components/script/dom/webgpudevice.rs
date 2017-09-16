@@ -11,6 +11,7 @@ use dom::bindings::str::DOMString;
 use dom::globalscope::GlobalScope;
 use dom::webgpubuffer::WebGpuBuffer;
 use dom::webgpudepthstencilview::WebGpuDepthStencilView;
+use dom::webgpudescriptorpool::WebGpuDescriptorPool;
 use dom::webgpudescriptorsetlayout::WebGpuDescriptorSetLayout;
 use dom::webgpufence::WebGpuFence;
 use dom::webgpuframebuffer::WebGpuFramebuffer;
@@ -113,6 +114,13 @@ impl WebGpuDevice {
             Some(id) => gpu::pass::SubpassRef::Pass(id as _),
             None => gpu::pass::SubpassRef::External,
         }
+    }
+
+    fn map_descriptor_type(ty: binding::WebGpuDescriptorType) -> gpu::pso::DescriptorType {
+        map_enum!(ty; self::binding::WebGpuDescriptorType => self::gpu::pso::DescriptorType {
+            Sampler, SampledImage, StorageImage, UniformTexelBuffer, StorageTexelBuffer,
+            ConstantBuffer, StorageBuffer, InputAttachment
+        })
     }
 }
 
@@ -350,18 +358,14 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         bindings: Vec<binding::WebGpuDescriptorSetLayoutBinding>,
     ) -> Root<WebGpuDescriptorSetLayout> {
         let (sender, receiver) = webgpu_channel().unwrap();
+
         let msg = WebGpuMsg::CreateDescriptorSetLayout {
             gpu_id: self.id,
             bindings: bindings
                 .into_iter()
                 .map(|b| gpu::pso::DescriptorSetLayoutBinding {
                     binding: b.binding as _,
-                    ty: map_enum!(b.type_;
-                        self::binding::WebGpuDescriptorType => self::gpu::pso::DescriptorType {
-                            Sampler, SampledImage, StorageImage, UniformTexelBuffer, StorageTexelBuffer,
-                            ConstantBuffer, StorageBuffer, InputAttachment
-                        }
-                    ),
+                    ty: Self::map_descriptor_type(b.type_),
                     count: b.count as _,
                     stage_flags: gpu::pso::ShaderStageFlags::from_bits(b.stages as _).unwrap(),
                 })
@@ -379,6 +383,7 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         set_layouts: Vec<Root<WebGpuDescriptorSetLayout>>,
     ) -> Root<WebGpuPipelineLayout> {
         let (sender, receiver) = webgpu_channel().unwrap();
+
         let msg = WebGpuMsg::CreatePipelineLayout {
             gpu_id: self.id,
             set_layout_ids: set_layouts
@@ -391,6 +396,31 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
 
         let layout = receiver.recv().unwrap();
         WebGpuPipelineLayout::new(&self.global(), layout)
+    }
+
+    fn CreateDescriptorPool(
+        &self,
+        max_sets: u32,
+        ranges: Vec<binding::WebGpuDescriptorRange>,
+    ) -> Root<WebGpuDescriptorPool> {
+        let (sender, receiver) = webgpu_channel().unwrap();
+
+        let msg = WebGpuMsg::CreateDescriptorPool {
+            gpu_id: self.id,
+            max_sets: max_sets as _,
+            ranges: ranges
+                .into_iter()
+                .map(|r| gpu::pso::DescriptorRangeDesc {
+                    ty: Self::map_descriptor_type(r.type_),
+                    count: r.count as _,
+                })
+                .collect(),
+            result: sender,
+        };
+        self.sender.send(msg).unwrap();
+
+        let pool = receiver.recv().unwrap();
+        WebGpuDescriptorPool::new(&self.global(), self.sender.clone(), pool)
     }
 
     fn CreateShaderModuleFromGLSL(

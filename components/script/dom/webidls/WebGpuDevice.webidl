@@ -191,6 +191,11 @@ dictionary WebGpuGraphicsPipelineDesc {
 	unsigned long subpass = 0;
 };
 
+dictionary WebGpuDescriptorRange {
+	required WebGpuDescriptorType type;
+	required unsigned long count;
+};
+
 dictionary WebGpuBufferDesc {
 	required unsigned long size;
 	required unsigned long stride;
@@ -335,6 +340,11 @@ interface WebGpuDevice {
 
 	WebGpuPipelineLayout createPipelineLayout(
 		sequence<WebGpuDescriptorSetLayout> sets
+	);
+
+	WebGpuDescriptorPool createDescriptorPool(
+		unsigned long maxSets,
+		sequence<WebGpuDescriptorRange> ranges
 	);
 
 	WebGpuShaderModule createShaderModuleFromGLSL(

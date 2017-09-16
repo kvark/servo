@@ -1161,7 +1161,7 @@ dependencies = [
 [[package]]
 name = "gfx_backend_vulkan"
 version = "0.1.0"
-source = "git+https://github.com/gfx-rs/gfx?branch=ll#17d2a78b612ce073486159654d90f01cb5386e7a"
+source = "git+https://github.com/gfx-rs/gfx?branch=ll#e44e99a85b30d01c46aa8da5c1917c7371c1daf0"
 dependencies = [
  "ash 0.18.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "gfx_core 0.10.0 (git+https://github.com/gfx-rs/gfx?branch=ll)",
@@ -1176,7 +1176,7 @@ dependencies = [
 [[package]]
 name = "gfx_core"
 version = "0.10.0"
-source = "git+https://github.com/gfx-rs/gfx?branch=ll#17d2a78b612ce073486159654d90f01cb5386e7a"
+source = "git+https://github.com/gfx-rs/gfx?branch=ll#e44e99a85b30d01c46aa8da5c1917c7371c1daf0"
 dependencies = [
  "bitflags 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "draw_state 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",

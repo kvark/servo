@@ -5,7 +5,7 @@
 use canvas_traits::webgpu as w;
 use webgpu::backend;
 use webgpu::gpu::{self,
-    Adapter, Device, Instance, QueueFamily,
+    Adapter, DescriptorPool, Device, Instance, QueueFamily,
     RawCommandBuffer, RawCommandPool, RawCommandQueue,
 };
 
@@ -146,6 +146,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         B::Device: Send,
         B::CommandQueue: Send,
         B::DescriptorSetLayout: Send + Sync,
+        B::DescriptorPool: Send + Sync,
     {
         match msg {
             w::WebGpuMsg::CreateContext { size, external_image_id, result } => {
@@ -261,6 +262,20 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 let layout = self.create_pipeline_layout(gpu_id, set_layout_ids);
                 result.send(layout).unwrap();
             }
+            w::WebGpuMsg::CreateDescriptorPool { gpu_id, max_sets, ranges, result } => {
+                let pool = self.create_descriptor_pool(gpu_id, max_sets, ranges);
+                result.send(pool).unwrap();
+            }
+            w::WebGpuMsg::AllocateDescriptorSets { pool_id, set_layout_ids, result } => {
+                let sets = self.allocate_descriptor_sets(pool_id, set_layout_ids);
+                let set_store = &mut self.rehub.descriptors.write().unwrap();
+                for set in sets {
+                    let info = w::DescriptorSetInfo {
+                        id: set_store.push(set),
+                    };
+                    result.send(info).unwrap();
+                }
+            }
             w::WebGpuMsg::CreateShaderModule { gpu_id, data, result } => {
                 let module = self.create_shader_module(gpu_id, data);
                 result.send(module).unwrap();
@@ -365,6 +380,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         B::Device: Send,
         B::CommandQueue: Send,
         B::DescriptorSetLayout: Send + Sync,
+        B::DescriptorPool: Send + Sync,
     {
         let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
         let queue = gpu.general_queues[queue_id as usize].as_raw();//TODO
@@ -736,6 +752,37 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         w::PipelineLayoutInfo {
             id: self.rehub.pipe_layouts.write().unwrap().push(layout),
         }
+    }
+
+    fn create_descriptor_pool(
+        &mut self,
+        gpu_id: w::GpuId,
+        max_sets: usize,
+        ranges: Vec<gpu::pso::DescriptorRangeDesc>,
+    ) -> w::DescriptorPoolInfo {
+        let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
+
+        let pool = gpu.device.create_descriptor_pool(max_sets, &ranges);
+
+        w::DescriptorPoolInfo {
+            id: self.rehub.pools.lock().unwrap().push(pool),
+        }
+    }
+
+    fn allocate_descriptor_sets(
+        &mut self,
+        pool_id: w::DescriptorPoolId,
+        set_layout_ids: Vec<w::DescriptorSetLayoutId>,
+    ) -> Vec<B::DescriptorSet> {
+        let pool = &mut self.rehub.pools.lock().unwrap()[pool_id];
+        let set_layout_store = self.rehub.set_layouts.read().unwrap();
+
+        let set_layouts = set_layout_ids
+            .into_iter()
+            .map(|id| &set_layout_store[id])
+            .collect::<Vec<_>>();
+
+        pool.allocate_sets(&set_layouts)
     }
 
     fn create_shader_module(

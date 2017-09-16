@@ -479,6 +479,8 @@ pub mod webgpucommandbuffer;
 pub mod webgpucommandpool;
 pub mod webgpucommandqueue;
 pub mod webgpudepthstencilview;
+pub mod webgpudescriptorpool;
+pub mod webgpudescriptorset;
 pub mod webgpudescriptorsetlayout;
 pub mod webgpudevice;
 pub mod webgpufence;

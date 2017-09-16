@@ -18,6 +18,8 @@ pub struct ResourceHub<B: gpu::Backend> {
     pub shaders: RwLock<LazyVec<B::ShaderModule>>,
     pub set_layouts: RwLock<LazyVec<B::DescriptorSetLayout>>,
     pub pipe_layouts: RwLock<LazyVec<B::PipelineLayout>>,
+    pub pools: Mutex<LazyVec<B::DescriptorPool>>,
+    pub descriptors: RwLock<LazyVec<B::DescriptorSet>>,
     pub graphics_pipes: RwLock<LazyVec<B::GraphicsPipeline>>,
 }
 
@@ -35,6 +37,8 @@ impl<B: gpu::Backend> ResourceHub<B> {
             shaders: RwLock::new(LazyVec::new()),
             set_layouts: RwLock::new(LazyVec::new()),
             pipe_layouts: RwLock::new(LazyVec::new()),
+            pools: Mutex::new(LazyVec::new()),
+            descriptors: RwLock::new(LazyVec::new()),
             graphics_pipes: RwLock::new(LazyVec::new()),
         })
     }
