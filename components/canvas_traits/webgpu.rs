@@ -45,6 +45,7 @@ pub type FramebufferId = Key;
 pub type RenderpassId = Key;
 pub type RenderTargetViewId = Key;
 pub type DepthStencilViewId = Key;
+pub type ShaderResourceViewId = Key;
 pub type DescriptorSetLayoutId = Key;
 pub type PipelineLayoutId = Key;
 pub type DescriptorPoolId = Key;
@@ -122,6 +123,11 @@ pub struct RenderTargetViewInfo {
 #[derive(Clone, Deserialize, Serialize, HeapSizeOf)]
 pub struct DepthStencilViewInfo {
     pub id: DepthStencilViewId,
+}
+
+#[derive(Clone, Deserialize, Serialize, HeapSizeOf)]
+pub struct ShaderResourceViewInfo {
+    pub id: ShaderResourceViewId,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -461,6 +467,12 @@ pub enum WebGpuMsg {
         image_id: ImageId,
         format: gpu::format::Format,
         result: WebGpuSender<RenderTargetViewInfo>,
+    },
+    ViewImageAsShaderResource {
+        gpu_id: GpuId,
+        image_id: ImageId,
+        format: gpu::format::Format,
+        result: WebGpuSender<ShaderResourceViewInfo>,
     },
     UploadBufferData {
         gpu_id: GpuId,

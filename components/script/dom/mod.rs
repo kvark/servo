@@ -494,6 +494,7 @@ pub mod webgpurenderpass;
 pub mod webgpurendertargetview;
 pub mod webgpusemaphore;
 pub mod webgpushadermodule;
+pub mod webgpushaderresourceview;
 pub mod webgpuswapchain;
 pub mod websocket;
 pub mod window;

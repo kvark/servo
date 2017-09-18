@@ -294,6 +294,10 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 let rtv = self.view_image_as_render_target(gpu_id, image_id, format);
                 result.send(rtv).unwrap();
             }
+            w::WebGpuMsg::ViewImageAsShaderResource { gpu_id, image_id, format, result } => {
+                let rtv = self.view_image_as_shader_resource(gpu_id, image_id, format);
+                result.send(rtv).unwrap();
+            }
             w::WebGpuMsg::UploadBufferData { gpu_id, buffer_id, data } => {
                 let device = &mut self.rehub.gpus.lock().unwrap()[gpu_id].device;
                 let buffer = &self.rehub.buffers.read().unwrap()[buffer_id];
@@ -851,6 +855,22 @@ impl<B: gpu::Backend> WebGpuThread<B> {
 
         w::RenderTargetViewInfo {
             id: self.rehub.rtvs.write().unwrap().push(view),
+        }
+    }
+
+    fn view_image_as_shader_resource(
+        &mut self,
+        gpu_id: w::GpuId,
+        image_id: w::ImageId,
+        format: gpu::format::Format,
+    ) -> w::ShaderResourceViewInfo {
+        let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
+        let image = &self.rehub.images.read().unwrap()[image_id];
+
+        let view = gpu.device.view_image_as_shader_resource(image, format).unwrap();
+
+        w::ShaderResourceViewInfo {
+            id: self.rehub.srvs.write().unwrap().push(view),
         }
     }
 }

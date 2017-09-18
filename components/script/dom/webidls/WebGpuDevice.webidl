@@ -361,5 +361,10 @@ interface WebGpuDevice {
 		WebGpuFormat format
 	);
 
+	WebGpuShaderResourceView viewImageAsShaderResource(
+		WebGpuImage image,
+		WebGpuFormat format
+	);
+
 	void uploadBufferData(WebGpuBuffer buffer, object data);
 };

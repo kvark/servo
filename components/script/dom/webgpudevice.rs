@@ -22,6 +22,7 @@ use dom::webgpupipelinelayout::WebGpuPipelineLayout;
 use dom::webgpurenderpass::WebGpuRenderpass;
 use dom::webgpurendertargetview::WebGpuRenderTargetView;
 use dom::webgpushadermodule::WebGpuShaderModule;
+use dom::webgpushaderresourceview::WebGpuShaderResourceView;
 use dom_struct::dom_struct;
 use heapsize::HeapSizeOf;
 use js::jsapi::{JSContext, JSObject};
@@ -567,6 +568,24 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
 
         let info = receiver.recv().unwrap();
         WebGpuRenderTargetView::new(&self.global(), info)
+    }
+
+    fn ViewImageAsShaderResource(
+        &self,
+        image: &WebGpuImage,
+        format: binding::WebGpuFormat,
+    ) -> Root<WebGpuShaderResourceView> {
+        let (sender, receiver) = webgpu_channel().unwrap();
+        let msg = WebGpuMsg::ViewImageAsShaderResource {
+            gpu_id: self.id,
+            image_id: image.get_id(),
+            format: Self::map_format(format),
+            result: sender,
+        };
+        self.sender.send(msg).unwrap();
+
+        let info = receiver.recv().unwrap();
+        WebGpuShaderResourceView::new(&self.global(), info)
     }
 
     #[allow(unsafe_code)]
