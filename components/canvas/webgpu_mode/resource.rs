@@ -22,6 +22,7 @@ pub struct ResourceHub<B: gpu::Backend> {
     pub pools: Mutex<LazyVec<B::DescriptorPool>>,
     pub descriptors: RwLock<LazyVec<B::DescriptorSet>>,
     pub graphics_pipes: RwLock<LazyVec<B::GraphicsPipeline>>,
+    pub samplers: RwLock<LazyVec<B::Sampler>>,
 }
 
 impl<B: gpu::Backend> ResourceHub<B> {
@@ -42,6 +43,7 @@ impl<B: gpu::Backend> ResourceHub<B> {
             pools: Mutex::new(LazyVec::new()),
             descriptors: RwLock::new(LazyVec::new()),
             graphics_pipes: RwLock::new(LazyVec::new()),
+            samplers: RwLock::new(LazyVec::new()),
         })
     }
 }

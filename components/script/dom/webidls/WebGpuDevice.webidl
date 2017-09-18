@@ -104,6 +104,20 @@ enum WebGpuDescriptorType {
 	"InputAttachment",
 };
 
+enum WebGpuFilterMode {
+	"Scale",
+	"Mipmap",
+	"Bilinear",
+	"Trilinear",
+};
+
+enum WebGpuWrapMode {
+	"Tile",
+	"Mirror",
+	"Clamp",
+	"Border",
+};
+
 
 dictionary WebGpuDeviceLimits {
 	required unsigned long minBufferCopyOffsetAlignment;
@@ -207,6 +221,11 @@ dictionary WebGpuImageDesc {
 	required unsigned long height;
 	required WebGpuFormat format;
 	required WebGpuImageUsage usage;
+};
+
+dictionary WebGpuSamplerDesc {
+	WebGpuFilterMode filter = "Trilinear";
+	required WebGpuWrapMode wrap;
 };
 
 
@@ -355,6 +374,8 @@ interface WebGpuDevice {
 	sequence<WebGpuGraphicsPipeline> createGraphicsPipelines(
 		sequence<WebGpuGraphicsPipelineDesc> descriptors
 	);
+
+	WebGpuSampler createSampler(WebGpuSamplerDesc desc);
 
 	WebGpuRenderTargetView viewImageAsRenderTarget(
 		WebGpuImage image,

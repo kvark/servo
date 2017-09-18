@@ -290,6 +290,10 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                     result.send(info).unwrap();
                 }
             }
+            w::WebGpuMsg::CreateSampler { gpu_id, desc, result } => {
+                let sampler = self.create_sampler(gpu_id, desc);
+                result.send(sampler).unwrap();
+            }
             w::WebGpuMsg::ViewImageAsRenderTarget { gpu_id, image_id, format, result } => {
                 let rtv = self.view_image_as_render_target(gpu_id, image_id, format);
                 result.send(rtv).unwrap();
@@ -841,17 +845,31 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         gpu.device.create_graphics_pipelines(&descs)
     }
 
+    fn create_sampler(
+        &mut self,
+        gpu_id: w::GpuId,
+        desc: gpu::image::SamplerInfo,
+    ) -> w::SamplerInfo {
+        let device = &mut self.rehub.gpus.lock().unwrap()[gpu_id].device;
+
+        let sampler = device.create_sampler(desc);
+
+        w::SamplerInfo {
+            id: self.rehub.samplers.write().unwrap().push(sampler),
+        }
+    }
+
     fn view_image_as_render_target(
         &mut self,
         gpu_id: w::GpuId,
         image_id: w::ImageId,
         format: gpu::format::Format,
     ) -> w::RenderTargetViewInfo {
-        let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
+        let device = &mut self.rehub.gpus.lock().unwrap()[gpu_id].device;
         let image = &self.rehub.images.read().unwrap()[image_id];
         let range = ((0..1), (0..1));
 
-        let view = gpu.device.view_image_as_render_target(image, format, range).unwrap();
+        let view = device.view_image_as_render_target(image, format, range).unwrap();
 
         w::RenderTargetViewInfo {
             id: self.rehub.rtvs.write().unwrap().push(view),
@@ -864,10 +882,10 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         image_id: w::ImageId,
         format: gpu::format::Format,
     ) -> w::ShaderResourceViewInfo {
-        let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
+        let device = &mut self.rehub.gpus.lock().unwrap()[gpu_id].device;
         let image = &self.rehub.images.read().unwrap()[image_id];
 
-        let view = gpu.device.view_image_as_shader_resource(image, format).unwrap();
+        let view = device.view_image_as_shader_resource(image, format).unwrap();
 
         w::ShaderResourceViewInfo {
             id: self.rehub.srvs.write().unwrap().push(view),

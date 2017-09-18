@@ -21,6 +21,7 @@ use dom::webgpuimage::WebGpuImage;
 use dom::webgpupipelinelayout::WebGpuPipelineLayout;
 use dom::webgpurenderpass::WebGpuRenderpass;
 use dom::webgpurendertargetview::WebGpuRenderTargetView;
+use dom::webgpusampler::WebGpuSampler;
 use dom::webgpushadermodule::WebGpuShaderModule;
 use dom::webgpushaderresourceview::WebGpuShaderResourceView;
 use dom_struct::dom_struct;
@@ -550,6 +551,33 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
             let info = receiver.recv().unwrap();
             WebGpuGraphicsPipeline::new(&self.global(), info)
         }).collect()
+    }
+
+    fn CreateSampler(
+        &self,
+        desc: &binding::WebGpuSamplerDesc,
+    ) -> Root<WebGpuSampler> {
+        let (sender, receiver) = webgpu_channel().unwrap();
+        let msg = WebGpuMsg::CreateSampler {
+            gpu_id: self.id,
+            desc: gpu::image::SamplerInfo::new(
+                map_enum!(desc.filter;
+                    self::binding::WebGpuFilterMode => self::gpu::image::FilterMethod {
+                        Scale, Mipmap, Bilinear, Trilinear
+                    }
+                ),
+                map_enum!(desc.wrap;
+                    self::binding::WebGpuWrapMode => self::gpu::image::WrapMode {
+                        Tile, Mirror, Clamp, Border
+                    }
+                ),
+            ),
+            result: sender,
+        };
+        self.sender.send(msg).unwrap();
+
+        let info = receiver.recv().unwrap();
+        WebGpuSampler::new(&self.global(), info)
     }
 
     fn ViewImageAsRenderTarget(

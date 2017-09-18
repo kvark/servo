@@ -492,6 +492,7 @@ pub mod webgpupipelinelayout;
 pub mod webgpurenderingcontext;
 pub mod webgpurenderpass;
 pub mod webgpurendertargetview;
+pub mod webgpusampler;
 pub mod webgpusemaphore;
 pub mod webgpushadermodule;
 pub mod webgpushaderresourceview;

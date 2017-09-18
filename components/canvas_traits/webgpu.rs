@@ -52,6 +52,7 @@ pub type DescriptorPoolId = Key;
 pub type DescriptorSetId = Key;
 pub type ShaderModuleId = Key;
 pub type GraphicsPipelineId = Key;
+pub type SamplerId = Key;
 
 
 #[derive(Clone, Copy, Deserialize, HeapSizeOf, Serialize)]
@@ -258,6 +259,11 @@ pub struct GraphicsPipelineInfo {
 }
 
 #[derive(Clone, Deserialize, Serialize)]
+pub struct SamplerInfo {
+    pub id: SamplerId,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
 pub struct EntryPoint {
     pub module_id: ShaderModuleId,
     pub name: String,
@@ -461,6 +467,11 @@ pub enum WebGpuMsg {
         gpu_id: GpuId,
         descriptors: Vec<GraphicsPipelineDesc>,
         result: WebGpuSender<GraphicsPipelineInfo>,
+    },
+    CreateSampler {
+        gpu_id: GpuId,
+        desc: gpu::image::SamplerInfo,
+        result: WebGpuSender<SamplerInfo>,
     },
     ViewImageAsRenderTarget {
         gpu_id: GpuId,
