@@ -11,6 +11,7 @@ typedef unsigned long WebGpuHeapProperty;
 typedef unsigned short WebGpuHeapTypeId;
 typedef unsigned long WebGpuDescriptorBinding;
 typedef unsigned long WebGpuShaderStage;
+typedef WebGpuDescriptor WebGpuDescriptor_;
 
 enum WebGpuFormat {
 	"R8G8B8A8_UNORM",
@@ -228,6 +229,19 @@ dictionary WebGpuSamplerDesc {
 	required WebGpuWrapMode wrap;
 };
 
+dictionary WebGpuDescriptorWrite {
+	required WebGpuDescriptor target;
+	WebGpuImageLayout layout = "Undefined";
+};
+
+dictionary WebGpuDescriptorSetWrite {
+	required WebGpuDescriptorSet set;
+	required WebGpuDescriptorBinding binding;
+	required unsigned long arrayOffset;
+	required WebGpuDescriptorType type;
+	required sequence<WebGpuDescriptorWrite> descriptors;
+};
+
 
 interface WebGpuDevice {
 	// buffer usage flags
@@ -244,41 +258,22 @@ interface WebGpuDevice {
 	const WebGpuImageUsage IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT	= 0x08;
 	const WebGpuImageUsage IMAGE_USAGE_SAMPLED					= 0x10;
 
-	/* Vulkan original:
-	const WebGpuAccess ACCESS_INDIRECT_COMMAND_READ			= 0x0001;
-	const WebGpuAccess ACCESS_INDEX_BUFFER_READ				= 0x0002;
-	const WebGpuAccess ACCESS_VERTEX_ATTRIBUTE_READ			= 0x0004;
-	const WebGpuAccess ACCESS_UNIFORM_READ					= 0x0008;
-	const WebGpuAccess ACCESS_INPUT_ATTACHMENT_READ			= 0x0010;
-	const WebGpuAccess ACCESS_SHADER_READ					= 0x0020;
-	const WebGpuAccess ACCESS_SHADER_WRITE					= 0x0040;
-	const WebGpuAccess ACCESS_COLOR_ATTACHMENT_READ			= 0x0080;
-	const WebGpuAccess ACCESS_COLOR_ATTACHMENT_WRITE		= 0x0100;
-	const WebGpuAccess ACCESS_DEPTH_STENCILATTACHMENT_READ	= 0x0200;
-	const WebGpuAccess ACCESS_DEPTH_STENCILATTACHMENT_WRITE	= 0x0400;
-	const WebGpuAccess ACCESS_TRANSFER_READ					= 0x0800;
-	const WebGpuAccess ACCESS_TRANSFER_WRITE				= 0x1000;
-	const WebGpuAccess ACCESS_HOST_READ						= 0x2000;
-	const WebGpuAccess ACCESS_HOST_WRITE					= 0x4000;
-	const WebGpuAccess ACCESS_MEMORY_READ					= 0x8000;
-	const WebGpuAccess ACCESS_MEMORY_WRITE					= 0x10000;
-	*/
 	// buffer access flags
-	const WebGpuBufferAccess	BUFFER_ACCESS_TRANSFER_READ			= 0x01;
-	const WebGpuBufferAccess	BUFFER_ACCESS_TRANSFER_WRITE		= 0x02;
-	const WebGpuBufferAccess	BUFFER_ACCESS_INDEX_BUFFER_READ		= 0x10;
-	const WebGpuBufferAccess	BUFFER_ACCESS_VERTEX_BUFFER_READ	= 0x20;
-	const WebGpuBufferAccess	BUFFER_ACCESS_CONSTANT_BUFFER_READ	= 0x40;
-	const WebGpuBufferAccess	BUFFER_ACCESS_INDIRECT_COMMAND_READ	= 0x80;
+	const WebGpuBufferAccess BUFFER_ACCESS_TRANSFER_READ			= 0x01;
+	const WebGpuBufferAccess BUFFER_ACCESS_TRANSFER_WRITE			= 0x02;
+	const WebGpuBufferAccess BUFFER_ACCESS_INDEX_BUFFER_READ		= 0x10;
+	const WebGpuBufferAccess BUFFER_ACCESS_VERTEX_BUFFER_READ		= 0x20;
+	const WebGpuBufferAccess BUFFER_ACCESS_CONSTANT_BUFFER_READ		= 0x40;
+	const WebGpuBufferAccess BUFFER_ACCESS_INDIRECT_COMMAND_READ	= 0x80;
 	// image access flags
-	const WebGpuImageAccess		IMAGE_ACCESS_COLOR_ATTACHMENT_READ  = 0x1;
-	const WebGpuImageAccess 	IMAGE_ACCESS_COLOR_ATTACHMENT_WRITE = 0x2;
-	const WebGpuImageAccess 	IMAGE_ACCESS_TRANSFER_READ          = 0x4;
-	const WebGpuImageAccess 	IMAGE_ACCESS_TRANSFER_WRITE         = 0x8;
-	const WebGpuImageAccess 	IMAGE_ACCESS_SHADER_READ            = 0x10;
-	const WebGpuImageAccess 	IMAGE_ACCESS_RENDER_TARGET_CLEAR    = 0x20;
-	const WebGpuImageAccess 	IMAGE_ACCESS_RESOLVE_SRC            = 0x100;
-	const WebGpuImageAccess 	IMAGE_ACCESS_RESOLVE_DST            = 0x200;
+	const WebGpuImageAccess IMAGE_ACCESS_COLOR_ATTACHMENT_READ  = 0x1;
+	const WebGpuImageAccess IMAGE_ACCESS_COLOR_ATTACHMENT_WRITE = 0x2;
+	const WebGpuImageAccess IMAGE_ACCESS_TRANSFER_READ          = 0x4;
+	const WebGpuImageAccess IMAGE_ACCESS_TRANSFER_WRITE         = 0x8;
+	const WebGpuImageAccess IMAGE_ACCESS_SHADER_READ            = 0x10;
+	const WebGpuImageAccess IMAGE_ACCESS_RENDER_TARGET_CLEAR    = 0x20;
+	const WebGpuImageAccess IMAGE_ACCESS_RESOLVE_SRC            = 0x100;
+	const WebGpuImageAccess IMAGE_ACCESS_RESOLVE_DST            = 0x200;
 
 	const WebGpuPipelineStage PIPELINE_STAGE_TOP_OF_PIPE				= 0x1;
 	const WebGpuPipelineStage PIPELINE_STAGE_DRAW_INDIRECT				= 0x2;
@@ -388,4 +383,6 @@ interface WebGpuDevice {
 	);
 
 	void uploadBufferData(WebGpuBuffer buffer, object data);
+
+	void updateDescriptorSets(sequence<WebGpuDescriptorSetWrite> writes);
 };

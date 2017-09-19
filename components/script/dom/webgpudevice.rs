@@ -617,7 +617,7 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
     }
 
     #[allow(unsafe_code)]
-    unsafe fn UploadBufferData(&self, cx: *mut JSContext, buffer: &WebGpuBuffer, data: *mut JSObject) -> () {
+    unsafe fn UploadBufferData(&self, cx: *mut JSContext, buffer: &WebGpuBuffer, data: *mut JSObject) {
         typedarray!(in(cx) let array_buffer: ArrayBuffer = data);
         typedarray!(in(cx) let array_buffer_view: ArrayBufferView = data);
         let data_vec = match array_buffer {
@@ -634,7 +634,28 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
             data: data_vec,
         };
         self.sender.send(msg).unwrap();
+    }
 
-        ()
+    fn UpdateDescriptorSets(&self, writes: Vec<binding::WebGpuDescriptorSetWrite>) {
+        let msg = WebGpuMsg::UpdateDescriptorSets {
+            gpu_id: self.id,
+            writes: writes
+                .into_iter()
+                .map(|w| w::DescriptorSetWrite {
+                    set: w.set.get_id(),
+                    binding: w.binding as _,
+                    array_offset: w.arrayOffset as _,
+                    ty: Self::map_descriptor_type(w.type_),
+                    descriptors: w.descriptors
+                        .into_iter()
+                        .map(|desc| (
+                            desc.target.get_id(),
+                            Self::map_image_layout(desc.layout),
+                        ))
+                        .collect(),
+                })
+                .collect(),
+        };
+        self.sender.send(msg).unwrap();
     }
 }

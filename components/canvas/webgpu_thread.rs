@@ -309,6 +309,9 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                     .unwrap()
                     .copy_from_slice(&data);
             }
+            w::WebGpuMsg::UpdateDescriptorSets { gpu_id, writes } => {
+                self.update_descriptor_sets(gpu_id, writes);
+            }
         }
 
         false
@@ -890,5 +893,45 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         w::ShaderResourceViewInfo {
             id: self.rehub.srvs.write().unwrap().push(view),
         }
+    }
+
+    fn update_descriptor_sets(
+        &mut self,
+        gpu_id: w::GpuId,
+        set_writes: Vec<w::DescriptorSetWrite>,
+    ) {
+        let device = &mut self.rehub.gpus.lock().unwrap()[gpu_id].device;
+        let descriptor_store = self.rehub.descriptors.read().unwrap();
+        let sampler_store = self.rehub.samplers.read().unwrap();
+        let srv_store = self.rehub.srvs.read().unwrap();
+
+        let mut writes = Vec::new();
+        for w in set_writes {
+            let write = match w.ty {
+                gpu::pso::DescriptorType::Sampler => {
+                    let objects = w.descriptors
+                        .into_iter()
+                        .map(|(id, _)| &sampler_store[id])
+                        .collect();
+                    gpu::pso::DescriptorWrite::Sampler(objects)
+                }
+                gpu::pso::DescriptorType::SampledImage => {
+                    let objects = w.descriptors
+                        .into_iter()
+                        .map(|(id, layout)| (&srv_store[id], layout))
+                        .collect();
+                    gpu::pso::DescriptorWrite::SampledImage(objects)
+                }
+                _ => { unimplemented!() } //TODO
+            };
+            writes.push(gpu::pso::DescriptorSetWrite {
+                set: &descriptor_store[w.set],
+                binding: w.binding,
+                array_offset: w.array_offset,
+                write,
+            });
+        }
+
+        device.update_descriptor_sets(&writes);
     }
 }

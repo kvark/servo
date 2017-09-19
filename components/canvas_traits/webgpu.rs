@@ -284,6 +284,15 @@ pub struct GraphicsPipelineDesc {
     pub inner: gpu::pso::GraphicsPipelineDesc,
 }
 
+#[derive(Deserialize, Serialize)]
+pub struct DescriptorSetWrite {
+    pub set: DescriptorSetId,
+    pub binding: usize,
+    pub array_offset: usize,
+    pub ty: gpu::pso::DescriptorType,
+    pub descriptors: Vec<(Key, gpu::image::ImageLayout)>, //careful!
+}
+
 
 pub type PresentDone = bool;
 
@@ -489,6 +498,10 @@ pub enum WebGpuMsg {
         gpu_id: GpuId,
         buffer_id: BufferId,
         data: Vec<u8>, //TODO?
+    },
+    UpdateDescriptorSets {
+        gpu_id: GpuId,
+        writes: Vec<DescriptorSetWrite>,
     },
 }
 
