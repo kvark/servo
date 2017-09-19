@@ -11,20 +11,34 @@ use canvas_traits::webgpu as w;
 use webgpu::gpu::{self, Device};
 
 
-struct FrameQueue<B: gpu::Backend> {
+struct FrameQueue {
     gpu_id: w::GpuId,
     others: VecDeque<w::ReadyFrame>,
     ready: Option<w::ReadyFrame>,
-    locked: Option<(w::ReadyFrame, B::Mapping)>,
+    locked: Option<w::ReadyFrame>,
 }
 
-impl<B: gpu::Backend> FrameQueue<B> {
-    fn collapse(&mut self, device: &mut B::Device, fence_store: &LazyVec<B::Fence>) {
+impl FrameQueue {
+    fn collapse<B: gpu::Backend>(
+        &mut self,
+        device: &mut B::Device,
+        fence_store: &LazyVec<B::Fence>)
+    {
         loop {
-            let fence = match self.others.front() {
-                Some(frame) => &fence_store[frame.fence_id],
+            let fence = match self.others.front_mut() {
+                Some(frame) => {
+                    if let Some(ref receiver) = frame.wait_event {
+                        if receiver.try_recv().is_err() {
+                            return
+                        }
+                    }
+                    frame.wait_event = None;
+                    &fence_store[frame.fence_id]
+                }
                 None => return,
             };
+
+            debug!("frame queue checking for {:?} ", self.others.front().unwrap().fence_id);
             if !device.wait_for_fences(&[fence], gpu::device::WaitFor::Any, 0) {
                 return
             }
@@ -39,7 +53,7 @@ impl<B: gpu::Backend> FrameQueue<B> {
 
 pub struct FrameHandler<B: gpu::Backend> {
     receiver: w::WebGpuReceiver<(wrapi::ExternalImageId, w::WebGpuPresent)>,
-    queues: HashMap<wrapi::ExternalImageId, FrameQueue<B>>, //TODO: faster collection?
+    queues: HashMap<wrapi::ExternalImageId, FrameQueue>, //TODO: faster collection?
     rehub: Arc<ResourceHub<B>>,
 }
 
@@ -76,7 +90,7 @@ impl<B: gpu::Backend> FrameHandler<B> {
                             //    frame.buffer_id, queue.next.is_some());
                             let device = &mut self.rehub.gpus.lock().unwrap()[queue.gpu_id].device;
                             queue.others.push_back(frame);
-                            queue.collapse(device, fence_store);
+                            queue.collapse::<B>(device, fence_store);
                         }
                         None => {
                             warn!("There is no frame to show for {:?}", id);
@@ -114,14 +128,18 @@ impl<B: gpu::Backend> ExternalImageHandler for FrameHandler<B> {
         };
 
         let device = &mut self.rehub.gpus.lock().unwrap()[queue.gpu_id].device;
-        queue.collapse(device, &*fence_store);
+        queue.collapse::<B>(device, &*fence_store);
 
         let frame = match queue.ready.take() {
             Some(frame) => frame,
             None => match queue.others.pop_front() {
-                Some(frame) => {
+                Some(mut frame) => {
                     // force wait for a frame
+                    if let Some(receiver) = frame.wait_event.take() {
+                        let _ = receiver.recv();
+                    }
                     let fence = &fence_store[frame.fence_id];
+                    debug!("frame queue waiting for {:?} ", frame.fence_id);
                     device.wait_for_fences(&[fence], gpu::device::WaitFor::Any, !0);
                     device.reset_fences(&[fence]);
                     frame
@@ -136,13 +154,13 @@ impl<B: gpu::Backend> ExternalImageHandler for FrameHandler<B> {
         //println!("handler: locking frame with buffer id {:?}", frame.buffer_id);
 
         let total_size = frame.bytes_per_row * frame.size.height as usize;
-        let (ptr, mapping) = {
+        let ptr = {
             let buffer = &self.rehub.buffers.read().unwrap()[frame.buffer_id];
-            device.read_mapping_raw(buffer, 0 .. total_size as _).unwrap()
+            device.acquire_mapping_raw(buffer, Some(0 .. total_size as u64)).unwrap()
         };
 
         debug_assert!(queue.locked.is_none());
-        queue.locked = Some((frame, mapping));
+        queue.locked = Some(frame);
 
         ExternalImage {
             source: ExternalImageSource::RawData(unsafe {
@@ -167,7 +185,7 @@ impl<B: gpu::Backend> ExternalImageHandler for FrameHandler<B> {
             }
         };
 
-        let (frame, mapping) = match queue.locked.take() {
+        let frame = match queue.locked.take() {
             Some(frame) => frame,
             None => {
                 warn!("There is no frame to unlock for {:?}", id);
@@ -178,8 +196,9 @@ impl<B: gpu::Backend> ExternalImageHandler for FrameHandler<B> {
         //println!("handler: unlocking frame with buffer id {:?}", frame.buffer_id);
 
         let device = &mut self.rehub.gpus.lock().unwrap()[queue.gpu_id].device;
-        device.unmap_mapping_raw(mapping);
-        queue.collapse(device, &*fence_store);
+        let buffer = &self.rehub.buffers.read().unwrap()[frame.buffer_id];
+        device.release_mapping_raw(buffer, None);
+        queue.collapse::<B>(device, &*fence_store);
 
         if queue.ready.is_none() {
             queue.ready = Some(frame.reuse());

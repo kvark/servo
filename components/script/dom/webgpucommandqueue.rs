@@ -104,6 +104,7 @@ impl binding::WebGpuCommandQueueMethods for WebGpuCommandQueue {
             wait_semaphores: Vec::new(), //TODO
             signal_semaphores: Vec::new(), //TODO
             fence_id: fence.map(|f| f.get_id()),
+            feedback: None,
         };
         self.sender.send(msg).unwrap();
     }

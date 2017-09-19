@@ -295,6 +295,7 @@ pub struct DescriptorSetWrite {
 
 
 pub type PresentDone = bool;
+pub type SubmitStart = ();
 
 #[derive(Deserialize, Serialize, HeapSizeOf)]
 pub struct ReadyFrame {
@@ -304,6 +305,8 @@ pub struct ReadyFrame {
     pub size: Size2D<u32>,
     #[ignore_heap_size_of = "Channels are hard"]
     pub done_event: Option<WebGpuSender<PresentDone>>,
+    #[ignore_heap_size_of = "Channels are hard"]
+    pub wait_event: Option<WebGpuReceiver<SubmitStart>>,
 }
 
 impl ReadyFrame {
@@ -396,6 +399,7 @@ pub enum WebGpuMsg {
         wait_semaphores: Vec<SemaphoreId>,
         signal_semaphores: Vec<SemaphoreId>,
         fence_id: Option<FenceId>,
+        feedback: Option<WebGpuSender<SubmitStart>>,
     },
     Present {
         image_key: webrender_api::ImageKey,

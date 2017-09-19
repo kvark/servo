@@ -339,6 +339,7 @@ impl binding::WebGpuSwapchainMethods for WebGpuSwapchain {
         }).unwrap();
         chan.send(WebGpuCommand::Finish(present_epoch)).unwrap();
 
+        let (feedback_sender, feedback_receiver) = webgpu_channel().unwrap();
         let msg_submit = WebGpuMsg::Submit {
             gpu_id: self.parent.gpu_id,
             queue_id: self.parent.queue_id,
@@ -350,6 +351,7 @@ impl binding::WebGpuSwapchainMethods for WebGpuSwapchain {
             wait_semaphores: Vec::new(),
             signal_semaphores: Vec::new(),
             fence_id: Some(frame.fence_id),
+            feedback: Some(feedback_sender),
         };
         self.sender.send(msg_submit).unwrap();
 
@@ -363,6 +365,7 @@ impl binding::WebGpuSwapchainMethods for WebGpuSwapchain {
             fence_id: frame.fence_id,
             size: self.size,
             done_event: Some(sender),
+            wait_event: Some(feedback_receiver),
         };
 
         self.parent.presenter.send(WebGpuPresent::Show(ready_frame));

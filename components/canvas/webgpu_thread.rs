@@ -185,8 +185,11 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 let command_pool = self.create_command_pool(gpu_id, queue_id, flags);
                 result.send(command_pool).unwrap();
             }
-            w::WebGpuMsg::Submit { gpu_id, queue_id, command_buffers, fence_id, .. } => {
+            w::WebGpuMsg::Submit { gpu_id, queue_id, command_buffers, fence_id, feedback, .. } => {
                 self.submit(gpu_id, queue_id, command_buffers, fence_id);
+                if let Some(sender) = feedback {
+                    sender.send(()).unwrap();
+                }
             }
             w::WebGpuMsg::Present { image_key, external_image_id, size, stride } => {
                 let desc = wrapi::ImageDescriptor {
@@ -212,9 +215,11 @@ impl<B: gpu::Backend> WebGpuThread<B> {
             }
             w::WebGpuMsg::CreateFence { gpu_id, set, result } => {
                 let fence = self.create_fence(gpu_id, set);
+                debug!("created fence {:?} with set {}", fence, set);
                 result.send(fence).unwrap();
             }
             w::WebGpuMsg::ResetFences { gpu_id, fence_ids } => {
+                debug!("resetting {:?}", fence_ids);
                 let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
                 let store = self.rehub.fences.read().unwrap();
                 let fences_raw = fence_ids
@@ -224,6 +229,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 gpu.device.reset_fences(&fences_raw);
             }
             w::WebGpuMsg::WaitForFences { gpu_id, fence_ids, mode, timeout, result } => {
+                debug!("waiting for {:?} with timeout {}", fence_ids, timeout);
                 let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
                 let store = self.rehub.fences.read().unwrap();
                 let fences_raw = fence_ids
@@ -305,9 +311,10 @@ impl<B: gpu::Backend> WebGpuThread<B> {
             w::WebGpuMsg::UploadBufferData { gpu_id, buffer_id, data } => {
                 let device = &mut self.rehub.gpus.lock().unwrap()[gpu_id].device;
                 let buffer = &self.rehub.buffers.read().unwrap()[buffer_id];
-                device.write_mapping::<u8>(buffer, 0 .. data.len() as u64)
-                    .unwrap()
-                    .copy_from_slice(&data);
+                let mut writer = device.acquire_mapping_writer::<u8>(buffer, 0 .. data.len() as u64)
+                    .unwrap();
+                writer.copy_from_slice(&data);
+                device.release_mapping_writer(writer);
             }
             w::WebGpuMsg::UpdateDescriptorSets { gpu_id, writes } => {
                 self.update_descriptor_sets(gpu_id, writes);
