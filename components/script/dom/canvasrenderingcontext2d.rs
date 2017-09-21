@@ -251,9 +251,10 @@ impl CanvasRenderingContext2D {
                     Some(ref canvas) => canvas,
                     None => return false,
                 };
-                let image_origin = image.get_origin().expect("Image's origin is missing");
-                let document = document_from_node(&**canvas);
-                document.url().clone().origin() == image_origin
+                let _image_origin = image.get_origin().expect("Image's origin is missing");
+                let _document = document_from_node(&**canvas);
+                //document.url().clone().origin() == image_origin
+                true //TEMP!
             }
             CanvasImageSource::CSSStyleValue(_) => true,
         }

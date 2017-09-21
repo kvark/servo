@@ -312,7 +312,9 @@ pub struct ReadyFrame {
 impl ReadyFrame {
     pub fn reuse(mut self) -> Self {
         //println!("frame with buffer id {:?} is reused", self.buffer_id);
-        self.done_event.take().unwrap().send(true).unwrap();
+        if let Some(sender) = self.done_event.take() {
+            sender.send(true).unwrap();
+        }
         self
     }
     pub fn consume(mut self, shown: bool) {
