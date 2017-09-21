@@ -451,6 +451,37 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         WebGpuShaderModule::new(&self.global(), module)
     }
 
+    fn CreateShaderModuleFromHLSL(
+        &self,
+        ty: binding::WebGpuShaderType,
+        code: DOMString,
+    ) -> Root<WebGpuShaderModule> {
+        #[cfg(windows)]
+        {
+            let stage = match ty {
+                binding::WebGpuShaderType::Vertex => gpu::pso::Stage::Vertex,
+                binding::WebGpuShaderType::Fragment => gpu::pso::Stage::Fragment,
+            };
+
+            let (sender, receiver) = webgpu_channel().unwrap();
+            let msg = WebGpuMsg::CreateShaderModuleHLSL {
+                gpu_id: self.id,
+                stage,
+                data: code.as_bytes().to_vec(),
+                result: sender,
+            };
+
+            self.sender.send(msg).unwrap();
+            let module = receiver.recv().unwrap();
+            WebGpuShaderModule::new(&self.global(), module)
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (ty, code);
+            unimplemented!()
+        }
+    }
+
     fn CreateGraphicsPipelines(
         &self,
         descs: Vec<binding::WebGpuGraphicsPipelineDesc>,

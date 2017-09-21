@@ -89,7 +89,6 @@ impl<B: gpu::Backend> CommandPoolHandle<B> {
 struct Heap<B: gpu::Backend> {
     raw: B::Heap,
     size: usize,
-    resources: gpu::device::ResourceHeapType,
 }
 
 pub struct WebGpuThread<B: gpu::Backend> {
@@ -137,17 +136,33 @@ impl WebGpuThread<backend::Backend> {
 
         (result, namespace)
     }
-}
 
-impl<B: gpu::Backend> WebGpuThread<B> {
+    #[cfg(windows)]
+    fn create_shader_module_hlsl(
+        &mut self,
+        gpu_id: w::GpuId,
+        stage: gpu::pso::Stage,
+        data: Vec<u8>,
+    ) -> w::ShaderModuleInfo {
+        let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
+
+        let entry = match stage {
+            gpu::pso::Stage::Vertex => "vs_main",
+            gpu::pso::Stage::Fragment => "fs_main",
+            _ => unimplemented!()
+        };
+        let module = gpu.device
+            .create_shader_module_from_source(stage, entry, "main", &data)
+            .unwrap();
+
+        w::ShaderModuleInfo {
+            id: self.rehub.shaders.write().unwrap().push(module),
+        }
+    }
+
+    //TODO: make backend-agnostic (requires getting rid of HLSL path)
     /// Handles a generic WebGpuMsg message
-    fn handle_msg(&mut self, msg: w::WebGpuMsg, webgpu_chan: &w::WebGpuChan) -> bool
-    where
-        B::Device: Send,
-        B::CommandQueue: Send,
-        B::DescriptorSetLayout: Send + Sync,
-        B::DescriptorPool: Send + Sync,
-    {
+    fn handle_msg(&mut self, msg: w::WebGpuMsg, webgpu_chan: &w::WebGpuChan) -> bool {
         match msg {
             w::WebGpuMsg::CreateContext { size, external_image_id, result } => {
                 let info = self
@@ -286,6 +301,11 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                 let module = self.create_shader_module(gpu_id, data);
                 result.send(module).unwrap();
             }
+            #[cfg(windows)]
+            w::WebGpuMsg::CreateShaderModuleHLSL { gpu_id, stage, data, result } => {
+                let module = self.create_shader_module_hlsl(gpu_id, stage, data);
+                result.send(module).unwrap();
+            }
             w::WebGpuMsg::CreateGraphicsPipelines { gpu_id, descriptors, result } => {
                 let pipelines = self.create_graphics_pipelines(gpu_id, descriptors);
                 let mut pso_store = self.rehub.graphics_pipes.write().unwrap();
@@ -323,7 +343,9 @@ impl<B: gpu::Backend> WebGpuThread<B> {
 
         false
     }
+}
 
+impl<B: gpu::Backend> WebGpuThread<B> {
     /// Creates a new WebGpuContext
     fn create_context(&mut self,
         size: Size2D<u32>,
@@ -630,7 +652,6 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         let heap = Heap {
             raw,
             size: desc.size,
-            resources: desc.resources,
         };
 
         w::HeapInfo {
@@ -644,11 +665,6 @@ impl<B: gpu::Backend> WebGpuThread<B> {
     ) -> w::BufferInfo {
         let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
         let heap = &self.heaps[desc.heap_id];
-        match heap.resources {
-            gpu::device::ResourceHeapType::Any |
-            gpu::device::ResourceHeapType::Buffers => (),
-            _ => panic!("Heap doesn't support buffers")
-        }
 
         let unbound = gpu.device
             .create_buffer(desc.size as _, desc.stride as _, desc.usage)
@@ -675,11 +691,6 @@ impl<B: gpu::Backend> WebGpuThread<B> {
     ) -> w::ImageInfo {
         let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
         let heap = &self.heaps[desc.heap_id];
-        match heap.resources {
-            gpu::device::ResourceHeapType::Any |
-            gpu::device::ResourceHeapType::Images => (),
-            _ => panic!("Heap doesn't support images")
-        }
 
         let unbound = gpu.device
             .create_image(desc.kind, desc.levels, desc.format, desc.usage)

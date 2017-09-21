@@ -256,7 +256,8 @@ interface WebGpuDevice {
 	const WebGpuImageUsage IMAGE_USAGE_TRANSFER_DST				= 0x02;
 	const WebGpuImageUsage IMAGE_USAGE_COLOR_ATTACHMENT			= 0x04;
 	const WebGpuImageUsage IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT	= 0x08;
-	const WebGpuImageUsage IMAGE_USAGE_SAMPLED					= 0x10;
+	const WebGpuImageUsage IMAGE_USAGE_STORAGE					= 0x10;
+	const WebGpuImageUsage IMAGE_USAGE_SAMPLED					= 0x20;
 
 	// buffer access flags
 	const WebGpuBufferAccess BUFFER_ACCESS_TRANSFER_READ			= 0x01;
@@ -362,6 +363,11 @@ interface WebGpuDevice {
 	);
 
 	WebGpuShaderModule createShaderModuleFromGLSL(
+		WebGpuShaderType stage,
+		DOMString code
+	);
+
+	WebGpuShaderModule createShaderModuleFromHLSL(
 		WebGpuShaderType stage,
 		DOMString code
 	);

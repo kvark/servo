@@ -3,10 +3,10 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 pub extern crate gfx_core as gpu;
+#[cfg(target_os = "macos")]
+pub extern crate gfx_backend_metal as backend;
+#[cfg(windows)]
+pub extern crate gfx_backend_dx12 as backend;
+#[cfg(unix)]
 pub extern crate gfx_backend_vulkan as backend;
 //pub extern crate gfx_device_gl as backend;
-//extern crate heapsize;
-//#[macro_use]
-//extern crate heapsize_derive;
-//#[macro_use]
-//extern crate serde_derive;

@@ -483,6 +483,13 @@ pub enum WebGpuMsg {
         data: Vec<u8>,
         result: WebGpuSender<ShaderModuleInfo>,
     },
+    #[cfg(windows)]
+    CreateShaderModuleHLSL {
+        gpu_id: GpuId,
+        stage: gpu::pso::Stage,
+        data: Vec<u8>,
+        result: WebGpuSender<ShaderModuleInfo>,
+    },
     CreateGraphicsPipelines {
         gpu_id: GpuId,
         descriptors: Vec<GraphicsPipelineDesc>,
