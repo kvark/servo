@@ -357,6 +357,11 @@ pub enum WebGpuCommand {
         regions: Vec<gpu::command::BufferImageCopy>,
     },
     BindGraphicsPipeline(GraphicsPipelineId),
+    BindGraphicsDescriptorSets {
+        layout_id: PipelineLayoutId,
+        desc_offset: usize,
+        set_ids: Vec<DescriptorSetId>,
+    },
     SetScissors(Vec<gpu::target::Rect>),
     SetViewports(Vec<gpu::Viewport>),
     Draw(Range<gpu::VertexCount>, Range<gpu::InstanceCount>),

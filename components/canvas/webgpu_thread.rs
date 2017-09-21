@@ -540,6 +540,18 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                     let pso = &rehub.graphics_pipes.read().unwrap()[pso_id];
                     cb.bind_graphics_pipeline(pso);
                 }
+                w::WebGpuCommand::BindGraphicsDescriptorSets { layout_id, desc_offset, set_ids } => {
+                    let cb = &mut com_buffers[active_id.unwrap()];
+                    let layout = &rehub.pipe_layouts.read().unwrap()[layout_id];
+                    let desc_store = rehub.descriptors.read().unwrap();
+
+                    let sets = set_ids
+                        .into_iter()
+                        .map(|id| &desc_store[id])
+                        .collect::<Vec<_>>();
+
+                    cb.bind_graphics_descriptor_sets(layout, desc_offset, &sets);
+                }
                 w::WebGpuCommand::SetScissors(rects) => {
                     let cb = &mut com_buffers[active_id.unwrap()];
                     cb.set_scissors(&rects);

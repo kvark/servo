@@ -14,10 +14,12 @@ use dom::bindings::js::Root;
 use dom::bindings::reflector::{Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
 use dom::webgpubuffer::WebGpuBuffer;
+use dom::webgpudescriptorset::WebGpuDescriptorSet;
 use dom::webgpudevice::WebGpuDevice;
 use dom::webgpuframebuffer::WebGpuFramebuffer;
 use dom::webgpugraphicspipeline::WebGpuGraphicsPipeline;
 use dom::webgpuimage::WebGpuImage;
+use dom::webgpupipelinelayout::WebGpuPipelineLayout;
 use dom::webgpurenderpass::WebGpuRenderpass;
 use dom_struct::dom_struct;
 use std::cell::Cell;
@@ -242,6 +244,25 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
 
     fn BindGraphicsPipeline(&self, pso: &WebGpuGraphicsPipeline) {
         let msg = WebGpuCommand::BindGraphicsPipeline(pso.get_id());
+        self.sender.send(msg).unwrap();
+    }
+
+    fn BindGraphicsDescriptorSets(
+        &self,
+        layout: &WebGpuPipelineLayout,
+        desc_offset: u32,
+        desc_sets: Vec<Root<WebGpuDescriptorSet>>,
+    ) {
+        let set_ids = desc_sets
+            .into_iter()
+            .map(|set| set.get_id())
+            .collect();
+
+        let msg = WebGpuCommand::BindGraphicsDescriptorSets {
+            layout_id: layout.get_id(),
+            desc_offset: desc_offset as _,
+            set_ids,
+        };
         self.sender.send(msg).unwrap();
     }
 

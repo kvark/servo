@@ -113,6 +113,12 @@ interface WebGpuCommandBuffer {
 
 	void bindGraphicsPipeline(WebGpuGraphicsPipeline pipeline);
 
+	void bindGraphicsDescriptorSets(
+		WebGpuPipelineLayout layout,
+		unsigned long descOffset,
+		sequence<WebGpuDescriptorSet> descSets
+	);
+
 	void setScissors(sequence<WebGpuRectangle> rectangles);
 
 	void setViewports(sequence<WebGpuViewport> viewports);
