@@ -490,6 +490,12 @@ pub enum WebGpuMsg {
         data: Vec<u8>,
         result: WebGpuSender<ShaderModuleInfo>,
     },
+    #[cfg(target_os = "macos")]
+    CreateShaderModuleMSL {
+        gpu_id: GpuId,
+        data: String,
+        result: WebGpuSender<ShaderModuleInfo>,
+    },
     CreateGraphicsPipelines {
         gpu_id: GpuId,
         descriptors: Vec<GraphicsPipelineDesc>,

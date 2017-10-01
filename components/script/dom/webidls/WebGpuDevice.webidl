@@ -372,6 +372,8 @@ interface WebGpuDevice {
 		DOMString code
 	);
 
+	WebGpuShaderModule createShaderModuleFromMSL(DOMString code);
+
 	sequence<WebGpuGraphicsPipeline> createGraphicsPipelines(
 		sequence<WebGpuGraphicsPipelineDesc> descriptors
 	);

@@ -24,6 +24,7 @@ features = ["serialize"]
 [dependencies.gfx_backend_gl]
 git = "https://github.com/kvark/gfx"
 branch = "webgpu"
+#path = "../../../../gfx/src/backend/gl"
 
 [target.'cfg(not(target_os = "macos"))'.dependencies.gfx_backend_vulkan]
 git = "https://github.com/kvark/gfx"
@@ -32,6 +33,8 @@ branch = "webgpu"
 [target.'cfg(target_os = "macos")'.dependencies.gfx_backend_metal]
 git = "https://github.com/kvark/gfx"
 branch = "webgpu"
+#path = "../../../../gfx/src/backend/metal"
+features = ["argument_buffer"]
 
 [target.'cfg(windows)'.dependencies.gfx_backend_dx12]
 git = "https://github.com/kvark/gfx"

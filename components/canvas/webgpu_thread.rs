@@ -160,6 +160,23 @@ impl WebGpuThread<backend::Backend> {
         }
     }
 
+    #[cfg(target_os = "macos")]
+    fn create_shader_module_msl(
+        &mut self,
+        gpu_id: w::GpuId,
+        data: String,
+    ) -> w::ShaderModuleInfo {
+        let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
+
+        let module = gpu.device
+            .create_shader_library_from_source(&data, backend::LanguageVersion::new(2, 0))
+            .unwrap();
+
+        w::ShaderModuleInfo {
+            id: self.rehub.shaders.write().unwrap().push(module),
+        }
+    }
+
     //TODO: make backend-agnostic (requires getting rid of HLSL path)
     /// Handles a generic WebGpuMsg message
     fn handle_msg(&mut self, msg: w::WebGpuMsg, webgpu_chan: &w::WebGpuChan) -> bool {
@@ -304,6 +321,11 @@ impl WebGpuThread<backend::Backend> {
             #[cfg(windows)]
             w::WebGpuMsg::CreateShaderModuleHLSL { gpu_id, stage, data, result } => {
                 let module = self.create_shader_module_hlsl(gpu_id, stage, data);
+                result.send(module).unwrap();
+            }
+            #[cfg(target_os = "macos")]
+            w::WebGpuMsg::CreateShaderModuleMSL { gpu_id, data, result } => {
+                let module = self.create_shader_module_msl(gpu_id, data);
                 result.send(module).unwrap();
             }
             w::WebGpuMsg::CreateGraphicsPipelines { gpu_id, descriptors, result } => {

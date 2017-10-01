@@ -482,6 +482,27 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         }
     }
 
+    fn CreateShaderModuleFromMSL(&self, code: DOMString) -> Root<WebGpuShaderModule> {
+        #[cfg(target_os = "macos")]
+        {
+            let (sender, receiver) = webgpu_channel().unwrap();
+            let msg = WebGpuMsg::CreateShaderModuleMSL {
+                gpu_id: self.id,
+                data: code.to_string(),
+                result: sender,
+            };
+
+            self.sender.send(msg).unwrap();
+            let module = receiver.recv().unwrap();
+            WebGpuShaderModule::new(&self.global(), module)
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (ty, code);
+            unimplemented!();
+        }
+    }
+
     fn CreateGraphicsPipelines(
         &self,
         descs: Vec<binding::WebGpuGraphicsPipelineDesc>,

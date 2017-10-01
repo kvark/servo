@@ -7,6 +7,6 @@ pub extern crate gfx_core as gpu;
 pub extern crate gfx_backend_metal as backend;
 #[cfg(windows)]
 pub extern crate gfx_backend_dx12 as backend;
-#[cfg(unix)]
+#[cfg(target_os =  "linux")]
 pub extern crate gfx_backend_vulkan as backend;
 //pub extern crate gfx_device_gl as backend;
