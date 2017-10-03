@@ -86,8 +86,8 @@ impl<B: gpu::Backend> CommandPoolHandle<B> {
 }
 
 
-struct Heap<B: gpu::Backend> {
-    raw: B::Heap,
+struct Memory<B: gpu::Backend> {
+    raw: B::Memory,
     size: usize,
 }
 
@@ -96,7 +96,7 @@ pub struct WebGpuThread<B: gpu::Backend> {
     webrender_api: wrapi::RenderApi,
     present_chan: w::WebGpuPresentChan,
     adapters: Vec<B::Adapter>,
-    heaps: LazyVec<Heap<B>>,
+    memories: LazyVec<Memory<B>>,
     rehub: Arc<ResourceHub<B>>,
     command_pools: LazyVec<CommandPoolHandle<B>>,
 }
@@ -119,7 +119,7 @@ impl WebGpuThread<backend::Backend> {
                 webrender_api,
                 present_chan,
                 adapters: instance.enumerate_adapters(),
-                heaps: LazyVec::new(),
+                memories: LazyVec::new(),
                 rehub,
                 command_pools: LazyVec::new(),
             };
@@ -207,7 +207,7 @@ impl WebGpuThread<backend::Backend> {
                 let general_queues = (0 .. gpu.general_queues.len() as w::QueueId).collect();
                 let info = w::GpuInfo {
                     limits: gpu.device.get_limits().clone(),
-                    heap_types: mem::replace(&mut gpu.heap_types, Vec::new()),
+                    mem_types: mem::replace(&mut gpu.memory_types, Vec::new()),
                     id: self.rehub.gpus.lock().unwrap().push(gpu),
                     general: general_queues,
                 };
@@ -272,9 +272,9 @@ impl WebGpuThread<backend::Backend> {
                 let done = gpu.device.wait_for_fences(&fences_raw, mode, timeout);
                 result.send(done).unwrap();
             }
-            w::WebGpuMsg::CreateHeap { gpu_id, desc, result } => {
-                let heap = self.create_heap(gpu_id, desc);
-                result.send(heap).unwrap();
+            w::WebGpuMsg::AllocateMemory { gpu_id, desc, result } => {
+                let mem = self.allocate_memory(gpu_id, desc);
+                result.send(mem).unwrap();
             }
             w::WebGpuMsg::CreateBuffer { gpu_id, desc, result } => {
                 let buffer = self.create_buffer(gpu_id, desc);
@@ -539,7 +539,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                         .map(|bar| gpu::memory::Barrier::Buffer {
                             states: bar.states,
                             target: &buffer_store[bar.target],
-                            range: 0..1, //TODO
+                            //range: 0..1,
                         });
 
                     let image_iter = image_bars
@@ -660,24 +660,23 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         self.rehub.fences.write().unwrap().push(fence)
     }
 
-    fn create_heap(&mut self,
+    fn allocate_memory(&mut self,
         gpu_id: w::GpuId,
-        desc: w::HeapDesc,
-    ) -> w::HeapInfo {
+        desc: w::MemoryDesc,
+    ) -> w::MemoryInfo {
         let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
 
-        let raw = gpu.device.create_heap(
+        let raw = gpu.device.allocate_memory(
             &desc.ty,
-            desc.resources,
             desc.size as _,
         ).unwrap();
-        let heap = Heap {
+        let mem = Memory {
             raw,
             size: desc.size,
         };
 
-        w::HeapInfo {
-            id: self.heaps.push(heap),
+        w::MemoryInfo {
+            id: self.memories.push(mem),
         }
     }
 
@@ -686,7 +685,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         desc: w::BufferDesc,
     ) -> w::BufferInfo {
         let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
-        let heap = &self.heaps[desc.heap_id];
+        let mem = &self.memories[desc.mem_id];
 
         let unbound = gpu.device
             .create_buffer(desc.size as _, desc.stride as _, desc.usage)
@@ -694,16 +693,16 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         let requirements = gpu.device.get_buffer_requirements(&unbound);
         debug_assert_ne!(requirements.alignment, 0);
 
-        let offset = (desc.heap_offset as u64 + requirements.alignment - 1) &
+        let offset = (desc.mem_offset as u64 + requirements.alignment - 1) &
             !(requirements.alignment - 1);
-        assert!(offset + requirements.size <= heap.size as u64);
+        assert!(offset + requirements.size <= mem.size as u64);
         let buffer = gpu.device
-            .bind_buffer_memory(&heap.raw, offset, unbound)
+            .bind_buffer_memory(&mem.raw, offset, unbound)
             .unwrap();
 
         w::BufferInfo {
             id: self.rehub.buffers.write().unwrap().push(buffer),
-            occupied_size: (offset + requirements.size) as usize - desc.heap_offset,
+            occupied_size: (offset + requirements.size) as usize - desc.mem_offset,
         }
     }
 
@@ -712,7 +711,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         desc: w::ImageDesc,
     ) -> w::ImageInfo {
         let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
-        let heap = &self.heaps[desc.heap_id];
+        let mem = &self.memories[desc.mem_id];
 
         let unbound = gpu.device
             .create_image(desc.kind, desc.levels, desc.format, desc.usage)
@@ -720,16 +719,16 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         let requirements = gpu.device.get_image_requirements(&unbound);
         debug_assert_ne!(requirements.alignment, 0);
 
-        let offset = (desc.heap_offset as u64 + requirements.alignment - 1) &
+        let offset = (desc.mem_offset as u64 + requirements.alignment - 1) &
             !(requirements.alignment - 1);
-        assert!(offset + requirements.size <= heap.size as u64);
+        assert!(offset + requirements.size <= mem.size as u64);
         let image = gpu.device
-            .bind_image_memory(&heap.raw, offset, unbound)
+            .bind_image_memory(&mem.raw, offset, unbound)
             .unwrap();
 
         w::ImageInfo {
             id: self.rehub.images.write().unwrap().push(image),
-            occupied_size: (offset + requirements.size) as usize - desc.heap_offset,
+            occupied_size: (offset + requirements.size) as usize - desc.mem_offset,
         }
     }
 
@@ -772,6 +771,8 @@ impl<B: gpu::Backend> WebGpuThread<B> {
             .iter()
             .map(|sp| gpu::pass::SubpassDesc {
                 color_attachments: &sp.colors,
+                input_attachments: &[], //TODO
+                preserve_attachments: &[], //TODO
             })
             .collect::<Vec<_>>();
         let rp = gpu.device.create_renderpass(

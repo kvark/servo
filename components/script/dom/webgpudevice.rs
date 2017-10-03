@@ -34,8 +34,8 @@ pub struct LimitsWrapper(pub gpu::Limits);
 impl HeapSizeOf for LimitsWrapper {
     fn heap_size_of_children(&self) -> usize { 0 }
 }
-pub struct HeapTypeWrapper(pub gpu::HeapType);
-impl HeapSizeOf for HeapTypeWrapper {
+pub struct MemTypeWrapper(pub gpu::MemoryType);
+impl HeapSizeOf for MemTypeWrapper {
     fn heap_size_of_children(&self) -> usize { 0 }
 }
 
@@ -47,7 +47,7 @@ pub struct WebGpuDevice {
     sender: WebGpuChan,
     id: w::GpuId,
     limits: LimitsWrapper,
-    heap_types: Vec<HeapTypeWrapper>,
+    mem_types: Vec<MemTypeWrapper>,
 }
 
 impl WebGpuDevice {
@@ -56,7 +56,7 @@ impl WebGpuDevice {
         sender: WebGpuChan,
         id: w::GpuId,
         limits: gpu::Limits,
-        heap_types: &[gpu::HeapType],
+        mem_types: &[gpu::MemoryType],
     ) -> Root<Self>
     {
         let obj = box WebGpuDevice {
@@ -64,9 +64,10 @@ impl WebGpuDevice {
             sender,
             id,
             limits: LimitsWrapper(limits),
-            heap_types: heap_types
+            mem_types: mem_types
                 .iter()
-                .map(|ht| HeapTypeWrapper(ht.clone()))
+                .cloned()
+                .map(MemTypeWrapper)
                 .collect(),
         };
         reflect_dom_object(obj, global, binding::Wrap)
@@ -191,23 +192,20 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
     fn CreateHeap(
         &self,
         heap_type_id: binding::WebGpuHeapTypeId,
-        resource_type: binding::WebGpuResourceType,
+        _resource_type: binding::WebGpuResourceType,
         size: u32,
     ) -> Root<WebGpuHeap> {
         let (sender, receiver) = webgpu_channel().unwrap();
-        let msg = WebGpuMsg::CreateHeap {
+        let msg = WebGpuMsg::AllocateMemory {
             gpu_id: self.id,
-            desc: w::HeapDesc {
+            desc: w::MemoryDesc {
                 size: size as _,
-                ty: self.heap_types
+                ty: self.mem_types
                     .iter()
                     .find(|ht| ht.0.id == heap_type_id as _)
                     .map(|ht| &ht.0)
                     .unwrap()
                     .clone(),
-                resources: map_enum!(resource_type; self::binding::WebGpuResourceType =>
-                    self::gpu::device::ResourceHeapType {Any, Buffers, Images, Targets}
-                ),
             },
             result: sender,
         };
@@ -230,8 +228,8 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
                 size: desc.size as _,
                 stride: desc.stride as _,
                 usage: gpu::buffer::Usage::from_bits(desc.usage as _).unwrap(),
-                heap_id: heap.get_id(),
-                heap_offset: heap_offset as _,
+                mem_id: heap.get_id(),
+                mem_offset: heap_offset as _,
             },
             result: sender,
         };
@@ -259,8 +257,8 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
                 levels: 1,
                 format: Self::map_format(desc.format),
                 usage: gpu::image::Usage::from_bits(desc.usage as _).unwrap(),
-                heap_id: heap.get_id(),
-                heap_offset: heap_offset as _,
+                mem_id: heap.get_id(),
+                mem_offset: heap_offset as _,
             },
             result: sender,
         };

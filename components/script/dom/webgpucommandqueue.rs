@@ -10,7 +10,7 @@ use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
 use dom::globalscope::GlobalScope;
 use dom::webgpucommandbuffer::WebGpuCommandBuffer;
 use dom::webgpucommandpool::WebGpuCommandPool;
-use dom::webgpudevice::{HeapTypeWrapper, LimitsWrapper};
+use dom::webgpudevice::{LimitsWrapper, MemTypeWrapper};
 use dom::webgpusemaphore::WebGpuSemaphore;
 use dom::webgpufence::WebGpuFence;
 use dom_struct::dom_struct;
@@ -23,7 +23,7 @@ pub struct WebGpuCommandQueue {
     sender: WebGpuChan,
     id: (GpuId, QueueId),
     limits: LimitsWrapper,
-    heap_types: Vec<HeapTypeWrapper>,
+    memory_types: Vec<MemTypeWrapper>,
 }
 
 impl WebGpuCommandQueue {
@@ -33,16 +33,17 @@ impl WebGpuCommandQueue {
         gpu_id: GpuId,
         id: QueueId,
         limits: gpu::Limits,
-        heap_types: &[gpu::HeapType],
+        mem_types: &[gpu::MemoryType],
     ) -> Root<Self> {
         let obj = box WebGpuCommandQueue {
             reflector_: Reflector::new(),
             sender,
             id: (gpu_id, id),
             limits: LimitsWrapper(limits),
-            heap_types: heap_types
+            memory_types: mem_types
                 .iter()
-                .map(|ht| HeapTypeWrapper(ht.clone()))
+                .cloned()
+                .map(MemTypeWrapper)
                 .collect(),
         };
         reflect_dom_object(obj, global, binding::Wrap)
@@ -62,9 +63,9 @@ impl WebGpuCommandQueue {
 
     pub fn find_heap_type(
         &self,
-        properties: gpu::memory::HeapProperties,
-    ) -> Option<gpu::HeapType> {
-        self.heap_types
+        properties: gpu::memory::Properties,
+    ) -> Option<gpu::MemoryType> {
+        self.memory_types
             .iter()
             .find(|ht| ht.0.properties.contains(properties))
             .map(|ht| ht.0.clone())

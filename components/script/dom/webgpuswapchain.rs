@@ -8,7 +8,7 @@ use canvas_traits::webgpu::{
     WebGpuChan, WebGpuCommand, WebGpuMsg, WebGpuReceiver,
     gpu, webgpu_channel,
     BufferId, BufferDesc, CommandBufferId, CommandPoolInfo,
-    FenceId, GpuId, HeapId, HeapDesc, BufferBarrier, ImageBarrier,
+    FenceId, GpuId, MemoryId, MemoryDesc, BufferBarrier, ImageBarrier,
     ImageDesc, SubmitEpoch, SubmitInfo, QueueId,
     Presenter, PresentDone, ReadyFrame, WebGpuPresent,
 };
@@ -59,8 +59,8 @@ pub struct WebGpuSwapchain {
     size: Size2D<u32>,
     bytes_per_row: usize,
     bytes_per_image: usize,
-    gpu_heap_id: HeapId,
-    staging_heap_id: HeapId,
+    gpu_mem_id: MemoryId,
+    staging_mem_id: MemoryId,
     frames: Vec<Frame>,
     present_epoch: Cell<SubmitEpoch>, //TODO: atomics
     active_frame_id: Cell<u8>,
@@ -96,14 +96,13 @@ impl WebGpuSwapchain {
         let (bytes_per_row, bytes_per_image) =
             Self::compute_strides(size, bytes_pp, queue.get_limits());
 
-        let staging_heap_id = {
+        let staging_mem_id = {
             let (result, receiver) = webgpu_channel().unwrap();
-            let msg = WebGpuMsg::CreateHeap {
+            let msg = WebGpuMsg::AllocateMemory {
                 gpu_id: queue.gpu_id(),
-                desc: HeapDesc {
+                desc: MemoryDesc {
                     size: count * bytes_per_image,
                     ty: queue.find_heap_type(gpu::memory::CPU_VISIBLE).unwrap(),
-                    resources: gpu::device::ResourceHeapType::Buffers,
                 },
                 result,
             };
@@ -111,14 +110,13 @@ impl WebGpuSwapchain {
             let info = receiver.recv().unwrap();
             info.id
         };
-        let gpu_heap_id = {
+        let gpu_mem_id = {
             let (result, receiver) = webgpu_channel().unwrap();
-            let msg = WebGpuMsg::CreateHeap {
+            let msg = WebGpuMsg::AllocateMemory {
                 gpu_id: queue.gpu_id(),
-                desc: HeapDesc {
+                desc: MemoryDesc {
                     size: count * bytes_per_image,
                     ty: queue.find_heap_type(gpu::memory::DEVICE_LOCAL).unwrap(),
-                    resources: gpu::device::ResourceHeapType::Targets,
                 },
                 result,
             };
@@ -158,8 +156,8 @@ impl WebGpuSwapchain {
                         levels: 1,
                         format: WebGpuDevice::map_format(format),
                         usage: gpu::image::COLOR_ATTACHMENT | gpu::image::TRANSFER_SRC,
-                        heap_id: gpu_heap_id,
-                        heap_offset: i * bytes_per_image,
+                        mem_id: gpu_mem_id,
+                        mem_offset: i * bytes_per_image,
                     },
                     result,
                 };
@@ -176,8 +174,8 @@ impl WebGpuSwapchain {
                         size: bytes_per_image,
                         stride: bytes_pp as _,
                         usage: gpu::buffer::TRANSFER_DST,
-                        heap_id: staging_heap_id,
-                        heap_offset: i * bytes_per_image,
+                        mem_id: staging_mem_id,
+                        mem_offset: i * bytes_per_image,
                     },
                     result,
                 };
@@ -220,8 +218,8 @@ impl WebGpuSwapchain {
             size,
             bytes_per_row,
             bytes_per_image,
-            gpu_heap_id,
-            staging_heap_id,
+            gpu_mem_id,
+            staging_mem_id,
             frames,
             present_epoch: Cell::new(0),
             active_frame_id: Cell::new(0),

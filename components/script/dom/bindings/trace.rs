@@ -45,7 +45,7 @@ use dom::bindings::js::{JS, Root};
 use dom::bindings::refcounted::{Trusted, TrustedPromise};
 use dom::bindings::reflector::{DomObject, Reflector};
 use dom::bindings::str::{DOMString, USVString};
-use dom::webgpudevice::{HeapTypeWrapper, LimitsWrapper};
+use dom::webgpudevice::{LimitsWrapper, MemTypeWrapper};
 use dom::webgpuswapchain::{Frame, WebGpuParent};
 use dom::bindings::utils::WindowProxyHandler;
 use dom::document::PendingRestyle;
@@ -411,7 +411,7 @@ unsafe_no_jsmanaged_fields!(WebGLTextureId);
 unsafe_no_jsmanaged_fields!(WebGLVertexArrayId);
 unsafe_no_jsmanaged_fields!(WebGpuPipeline, WebGpuContextShareMode,
     CommandBufferInfo, CommandPoolInfo, Key, Presenter, QueueFamilyInfo, SubmitInfo);
-unsafe_no_jsmanaged_fields!(HeapTypeWrapper, LimitsWrapper, Frame, WebGpuParent);
+unsafe_no_jsmanaged_fields!(MemTypeWrapper, LimitsWrapper, Frame, WebGpuParent);
 unsafe_no_jsmanaged_fields!(MediaList);
 unsafe_no_jsmanaged_fields!(WebVRGamepadHand);
 unsafe_no_jsmanaged_fields!(ScriptToConstellationChan);

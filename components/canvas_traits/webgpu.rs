@@ -33,7 +33,7 @@ pub type GpuId = Key;
 pub type QueueFamilyId = u32;
 pub type QueueCount = u8;
 pub type QueueId = u8;
-pub type HeapId = Key;
+pub type MemoryId = Key;
 pub type BufferId = Key;
 pub type ImageId = Key;
 pub type CommandBufferId = Key;
@@ -100,7 +100,7 @@ pub struct AdapterInfo {
 pub struct GpuInfo {
     pub id: GpuId,
     pub limits: gpu::Limits,
-    pub heap_types: Vec<gpu::HeapType>,
+    pub mem_types: Vec<gpu::MemoryType>,
     pub general: Vec<QueueId>,
 }
 
@@ -186,15 +186,14 @@ pub struct RenderpassDesc {
 }
 
 #[derive(Clone, Deserialize, Serialize)]
-pub struct HeapDesc {
+pub struct MemoryDesc {
     pub size: usize,
-    pub ty: gpu::HeapType,
-    pub resources: gpu::device::ResourceHeapType,
+    pub ty: gpu::MemoryType,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
-pub struct HeapInfo {
-    pub id: HeapId,
+pub struct MemoryInfo {
+    pub id: MemoryId,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -202,8 +201,8 @@ pub struct BufferDesc {
     pub size: usize,
     pub stride: usize,
     pub usage: gpu::buffer::Usage,
-    pub heap_id: HeapId,
-    pub heap_offset: usize,
+    pub mem_id: MemoryId,
+    pub mem_offset: usize,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -218,8 +217,8 @@ pub struct ImageDesc {
     pub levels: gpu::image::Level,
     pub format: gpu::format::Format,
     pub usage: gpu::image::Usage,
-    pub heap_id: HeapId,
-    pub heap_offset: usize,
+    pub mem_id: MemoryId,
+    pub mem_offset: usize,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -432,10 +431,10 @@ pub enum WebGpuMsg {
         timeout: u32,
         result: WebGpuSender<bool>,
     },
-    CreateHeap {
+    AllocateMemory {
         gpu_id: GpuId,
-        desc: HeapDesc,
-        result: WebGpuSender<HeapInfo>,
+        desc: MemoryDesc,
+        result: WebGpuSender<MemoryInfo>,
     },
     CreateBuffer {
         gpu_id: GpuId,
