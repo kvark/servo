@@ -496,7 +496,7 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         }
         #[cfg(not(target_os = "macos"))]
         {
-            let _ = (ty, code);
+            let _ = code;
             unimplemented!();
         }
     }

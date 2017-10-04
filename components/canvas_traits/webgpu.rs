@@ -64,7 +64,7 @@ pub enum WebGpuContextShareMode {
 }
 
 /// Contains the WebGpuCommand sender and information about a WebGpuContext
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ContextInfo {
     /// Presenter channel for showing the frames.
     pub presenter: Presenter,
@@ -76,7 +76,7 @@ pub struct ContextInfo {
     pub image_key: webrender_api::ImageKey,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct QueueFamilyInfo {
     pub ty: gpu::QueueType,
     pub count: QueueCount,
@@ -89,14 +89,14 @@ impl HeapSizeOf for QueueFamilyInfo {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AdapterInfo {
     pub info: gpu::AdapterInfo,
     pub queue_families: Vec<QueueFamilyInfo>,
     pub original_id: AdapterId,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GpuInfo {
     pub id: GpuId,
     pub limits: gpu::Limits,
@@ -104,34 +104,34 @@ pub struct GpuInfo {
     pub general: Vec<QueueId>,
 }
 
-#[derive(Clone, Deserialize, Serialize, HeapSizeOf)]
+#[derive(Clone, Debug, Deserialize, Serialize, HeapSizeOf)]
 pub struct CommandBufferInfo {
     pub id: CommandBufferId,
 }
 
-#[derive(Clone, Deserialize, Serialize, HeapSizeOf)]
+#[derive(Clone, Debug, Deserialize, Serialize, HeapSizeOf)]
 pub struct SubmitInfo {
     pub pool_id: CommandPoolId,
     pub cb_id: CommandBufferId,
     pub submit_epoch: SubmitEpoch,
 }
 
-#[derive(Clone, Deserialize, Serialize, HeapSizeOf)]
+#[derive(Clone, Debug, Deserialize, Serialize, HeapSizeOf)]
 pub struct RenderTargetViewInfo {
     pub id: RenderTargetViewId,
 }
 
-#[derive(Clone, Deserialize, Serialize, HeapSizeOf)]
+#[derive(Clone, Debug, Deserialize, Serialize, HeapSizeOf)]
 pub struct DepthStencilViewInfo {
     pub id: DepthStencilViewId,
 }
 
-#[derive(Clone, Deserialize, Serialize, HeapSizeOf)]
+#[derive(Clone, Debug, Deserialize, Serialize, HeapSizeOf)]
 pub struct ShaderResourceViewInfo {
     pub id: ShaderResourceViewId,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BufferBarrier {
     pub states: Range<gpu::buffer::State>,
     pub target: BufferId,
@@ -143,7 +143,7 @@ impl HeapSizeOf for BufferBarrier {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ImageBarrier {
     pub states: Range<gpu::image::State>,
     pub target: ImageId,
@@ -155,12 +155,12 @@ impl HeapSizeOf for ImageBarrier {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct FramebufferInfo {
     pub id: FramebufferId,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct FramebufferDesc {
     pub renderpass: RenderpassId,
     pub colors: Vec<RenderTargetViewId>,
@@ -168,35 +168,35 @@ pub struct FramebufferDesc {
     pub extent: gpu::device::Extent,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RenderpassInfo {
     pub id: RenderpassId,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SubpassDesc {
     pub colors: Vec<gpu::pass::AttachmentRef>,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RenderpassDesc {
     pub attachments: Vec<gpu::pass::Attachment>,
     pub subpasses: Vec<SubpassDesc>,
     pub dependencies: Vec<gpu::pass::SubpassDependency>,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MemoryDesc {
     pub size: usize,
     pub ty: gpu::MemoryType,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MemoryInfo {
     pub id: MemoryId,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BufferDesc {
     pub size: usize,
     pub stride: usize,
@@ -205,13 +205,13 @@ pub struct BufferDesc {
     pub mem_offset: usize,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BufferInfo {
     pub id: BufferId,
     pub occupied_size: usize,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ImageDesc {
     pub kind: gpu::image::Kind,
     pub levels: gpu::image::Level,
@@ -221,60 +221,60 @@ pub struct ImageDesc {
     pub mem_offset: usize,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ImageInfo {
     pub id: ImageId,
     pub occupied_size: usize,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ShaderModuleInfo {
     pub id: ShaderModuleId,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DescriptorSetLayoutInfo {
     pub id: DescriptorSetLayoutId,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PipelineLayoutInfo {
     pub id: PipelineLayoutId,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DescriptorPoolInfo {
     pub id: DescriptorPoolId,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DescriptorSetInfo {
     pub id: DescriptorSetId,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GraphicsPipelineInfo {
     pub id: GraphicsPipelineId,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SamplerInfo {
     pub id: SamplerId,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EntryPoint {
     pub module_id: ShaderModuleId,
     pub name: String,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GraphicsShaderSet {
     pub vs: EntryPoint,
     pub fs: Option<EntryPoint>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct GraphicsPipelineDesc {
     pub shaders: GraphicsShaderSet,
     pub layout_id: PipelineLayoutId,
@@ -283,7 +283,7 @@ pub struct GraphicsPipelineDesc {
     pub inner: gpu::pso::GraphicsPipelineDesc,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct DescriptorSetWrite {
     pub set: DescriptorSetId,
     pub binding: usize,
@@ -296,7 +296,7 @@ pub struct DescriptorSetWrite {
 pub type PresentDone = bool;
 pub type SubmitStart = ();
 
-#[derive(Deserialize, Serialize, HeapSizeOf)]
+#[derive(Debug, Deserialize, Serialize, HeapSizeOf)]
 pub struct ReadyFrame {
     pub buffer_id: BufferId,
     pub bytes_per_row: usize,
@@ -325,7 +325,7 @@ impl ReadyFrame {
 }
 
 /// WebGpu Command API
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum WebGpuCommand {
     Reset,
     Exit,
@@ -370,7 +370,7 @@ pub enum WebGpuCommand {
 
 pub type WebGpuCommandChan = WebGpuSender<WebGpuCommand>;
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CommandPoolInfo {
     pub channel: WebGpuCommandChan,
     pub id: CommandPoolId,
@@ -378,7 +378,7 @@ pub struct CommandPoolInfo {
 
 
 /// WebGpu Message API
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub enum WebGpuMsg {
     /// Creates a new WebGPU context instance.
     CreateContext {
@@ -540,7 +540,7 @@ impl WebGpuPipeline {
 }
 
 /// WebGpu presenter command type
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub enum WebGpuPresent {
     Enter(GpuId),
     Exit,
@@ -549,7 +549,7 @@ pub enum WebGpuPresent {
 
 pub type WebGpuPresentChan = WebGpuSender<(webrender_api::ExternalImageId, WebGpuPresent)>;
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Presenter {
     pub id: webrender_api::ExternalImageId,
     pub channel: WebGpuPresentChan,

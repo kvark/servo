@@ -180,6 +180,7 @@ impl WebGpuThread<backend::Backend> {
     //TODO: make backend-agnostic (requires getting rid of HLSL path)
     /// Handles a generic WebGpuMsg message
     fn handle_msg(&mut self, msg: w::WebGpuMsg, webgpu_chan: &w::WebGpuChan) -> bool {
+        debug!("got message {:?}", msg);
         match msg {
             w::WebGpuMsg::CreateContext { size, external_image_id, result } => {
                 let info = self
@@ -247,11 +248,11 @@ impl WebGpuThread<backend::Backend> {
             }
             w::WebGpuMsg::CreateFence { gpu_id, set, result } => {
                 let fence = self.create_fence(gpu_id, set);
-                debug!("created fence {:?} with set {}", fence, set);
+                debug!("fence: created {:?} with set {}", fence, set);
                 result.send(fence).unwrap();
             }
             w::WebGpuMsg::ResetFences { gpu_id, fence_ids } => {
-                debug!("resetting {:?}", fence_ids);
+                debug!("fence: resetting {:?}", fence_ids);
                 let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
                 let store = self.rehub.fences.read().unwrap();
                 let fences_raw = fence_ids
@@ -261,7 +262,7 @@ impl WebGpuThread<backend::Backend> {
                 gpu.device.reset_fences(&fences_raw);
             }
             w::WebGpuMsg::WaitForFences { gpu_id, fence_ids, mode, timeout, result } => {
-                debug!("waiting for {:?} with timeout {}", fence_ids, timeout);
+                debug!("fence: waiting for {:?} with timeout {}", fence_ids, timeout);
                 let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
                 let store = self.rehub.fences.read().unwrap();
                 let fences_raw = fence_ids
@@ -481,6 +482,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         let mut active_id = None;
 
         while let Ok(com) = receiver.recv() {
+            debug!("got command {:?}", com);
             match com {
                 w::WebGpuCommand::Reset => {
                     debug_assert_eq!(active_id, None);
