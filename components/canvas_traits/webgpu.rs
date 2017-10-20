@@ -10,7 +10,7 @@ use std::ops::Range;
 use euclid::Size2D;
 use webrender_api;
 
-pub use webgpu_component::gpu;
+pub use webgpu_component::hal;
 
 pub type WebGpuSender<T> = ipc_channel::ipc::IpcSender<T>;
 pub type WebGpuReceiver<T> = ipc_channel::ipc::IpcReceiver<T>;
@@ -36,16 +36,14 @@ pub type QueueId = u8;
 pub type MemoryId = Key;
 pub type BufferId = Key;
 pub type ImageId = Key;
+pub type ImageViewId = Key;
 pub type CommandBufferId = Key;
 pub type CommandPoolId = Key;
 pub type FenceId = Key;
 pub type SemaphoreId = u32;
 pub type SubmitEpoch = Epoch;
 pub type FramebufferId = Key;
-pub type RenderpassId = Key;
-pub type RenderTargetViewId = Key;
-pub type DepthStencilViewId = Key;
-pub type ShaderResourceViewId = Key;
+pub type RenderPassId = Key;
 pub type DescriptorSetLayoutId = Key;
 pub type PipelineLayoutId = Key;
 pub type DescriptorPoolId = Key;
@@ -78,7 +76,7 @@ pub struct ContextInfo {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct QueueFamilyInfo {
-    pub ty: gpu::QueueType,
+    pub ty: hal::QueueType,
     pub count: QueueCount,
     pub original_id: QueueFamilyId,
 }
@@ -91,7 +89,7 @@ impl HeapSizeOf for QueueFamilyInfo {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AdapterInfo {
-    pub info: gpu::AdapterInfo,
+    pub info: hal::AdapterInfo,
     pub queue_families: Vec<QueueFamilyInfo>,
     pub original_id: AdapterId,
 }
@@ -99,8 +97,8 @@ pub struct AdapterInfo {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GpuInfo {
     pub id: GpuId,
-    pub limits: gpu::Limits,
-    pub mem_types: Vec<gpu::MemoryType>,
+    pub limits: hal::Limits,
+    pub mem_types: Vec<hal::MemoryType>,
     pub general: Vec<QueueId>,
 }
 
@@ -117,23 +115,13 @@ pub struct SubmitInfo {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, HeapSizeOf)]
-pub struct RenderTargetViewInfo {
-    pub id: RenderTargetViewId,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, HeapSizeOf)]
-pub struct DepthStencilViewInfo {
-    pub id: DepthStencilViewId,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, HeapSizeOf)]
-pub struct ShaderResourceViewInfo {
-    pub id: ShaderResourceViewId,
+pub struct ImageViewInfo {
+    pub id: ImageViewId,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BufferBarrier {
-    pub states: Range<gpu::buffer::State>,
+    pub states: Range<hal::buffer::State>,
     pub target: BufferId,
 }
 
@@ -145,7 +133,7 @@ impl HeapSizeOf for BufferBarrier {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ImageBarrier {
-    pub states: Range<gpu::image::State>,
+    pub states: Range<hal::image::State>,
     pub target: ImageId,
 }
 
@@ -162,33 +150,32 @@ pub struct FramebufferInfo {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct FramebufferDesc {
-    pub renderpass: RenderpassId,
-    pub colors: Vec<RenderTargetViewId>,
-    pub depth_stencil: Option<DepthStencilViewId>,
-    pub extent: gpu::device::Extent,
+    pub render_pass: RenderPassId,
+    pub attachments: Vec<ImageViewId>,
+    pub extent: hal::device::Extent,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct RenderpassInfo {
-    pub id: RenderpassId,
+pub struct RenderPassInfo {
+    pub id: RenderPassId,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SubpassDesc {
-    pub colors: Vec<gpu::pass::AttachmentRef>,
+    pub colors: Vec<hal::pass::AttachmentRef>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct RenderpassDesc {
-    pub attachments: Vec<gpu::pass::Attachment>,
+pub struct RenderPassDesc {
+    pub attachments: Vec<hal::pass::Attachment>,
     pub subpasses: Vec<SubpassDesc>,
-    pub dependencies: Vec<gpu::pass::SubpassDependency>,
+    pub dependencies: Vec<hal::pass::SubpassDependency>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MemoryDesc {
     pub size: usize,
-    pub ty: gpu::MemoryType,
+    pub ty: hal::MemoryType,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -200,7 +187,7 @@ pub struct MemoryInfo {
 pub struct BufferDesc {
     pub size: usize,
     pub stride: usize,
-    pub usage: gpu::buffer::Usage,
+    pub usage: hal::buffer::Usage,
     pub mem_id: MemoryId,
     pub mem_offset: usize,
 }
@@ -213,10 +200,10 @@ pub struct BufferInfo {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ImageDesc {
-    pub kind: gpu::image::Kind,
-    pub levels: gpu::image::Level,
-    pub format: gpu::format::Format,
-    pub usage: gpu::image::Usage,
+    pub kind: hal::image::Kind,
+    pub levels: hal::image::Level,
+    pub format: hal::format::Format,
+    pub usage: hal::image::Usage,
     pub mem_id: MemoryId,
     pub mem_offset: usize,
 }
@@ -278,9 +265,9 @@ pub struct GraphicsShaderSet {
 pub struct GraphicsPipelineDesc {
     pub shaders: GraphicsShaderSet,
     pub layout_id: PipelineLayoutId,
-    pub renderpass_id: RenderpassId,
+    pub renderpass_id: RenderPassId,
     pub subpass: u32,
-    pub inner: gpu::pso::GraphicsPipelineDesc,
+    pub inner: hal::pso::GraphicsPipelineDesc,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -288,8 +275,8 @@ pub struct DescriptorSetWrite {
     pub set: DescriptorSetId,
     pub binding: usize,
     pub array_offset: usize,
-    pub ty: gpu::pso::DescriptorType,
-    pub descriptors: Vec<(Key, gpu::image::ImageLayout)>, //careful!
+    pub ty: hal::pso::DescriptorType,
+    pub descriptors: Vec<(Key, hal::image::ImageLayout)>, //careful!
 }
 
 
@@ -334,28 +321,28 @@ pub enum WebGpuCommand {
     Begin(CommandBufferId),
     Finish(SubmitEpoch),
     PipelineBarrier {
-        stages: Range<gpu::pso::PipelineStage>,
+        stages: Range<hal::pso::PipelineStage>,
         buffer_bars: Vec<BufferBarrier>,
         image_bars: Vec<ImageBarrier>,
     },
-    BeginRenderpass {
-        renderpass: RenderpassId,
+    BeginRenderPass {
+        render_pass: RenderPassId,
         framebuffer: FramebufferId,
-        area: gpu::target::Rect,
-        clear_values: Vec<gpu::command::ClearValue>,
+        area: hal::target::Rect,
+        clear_values: Vec<hal::command::ClearValue>,
     },
-    EndRenderpass,
+    EndRenderPass,
     CopyBufferToImage {
         source_id: BufferId,
         dest_id: ImageId,
-        dest_layout: gpu::image::ImageLayout,
-        regions: Vec<gpu::command::BufferImageCopy>,
+        dest_layout: hal::image::ImageLayout,
+        regions: Vec<hal::command::BufferImageCopy>,
     },
     CopyImageToBuffer {
         source_id: ImageId,
-        source_layout: gpu::image::ImageLayout,
+        source_layout: hal::image::ImageLayout,
         dest_id: BufferId,
-        regions: Vec<gpu::command::BufferImageCopy>,
+        regions: Vec<hal::command::BufferImageCopy>,
     },
     BindGraphicsPipeline(GraphicsPipelineId),
     BindGraphicsDescriptorSets {
@@ -363,9 +350,9 @@ pub enum WebGpuCommand {
         desc_offset: usize,
         set_ids: Vec<DescriptorSetId>,
     },
-    SetScissors(Vec<gpu::target::Rect>),
-    SetViewports(Vec<gpu::Viewport>),
-    Draw(Range<gpu::VertexCount>, Range<gpu::InstanceCount>),
+    SetScissors(Vec<hal::target::Rect>),
+    SetViewports(Vec<hal::Viewport>),
+    Draw(Range<hal::VertexCount>, Range<hal::InstanceCount>),
 }
 
 pub type WebGpuCommandChan = WebGpuSender<WebGpuCommand>;
@@ -395,7 +382,7 @@ pub enum WebGpuMsg {
     CreateCommandPool {
         gpu_id: GpuId,
         queue_id: QueueId,
-        flags: gpu::pool::CommandPoolCreateFlags,
+        flags: hal::pool::CommandPoolCreateFlags,
         result: WebGpuSender<CommandPoolInfo>,
     },
     Submit {
@@ -427,7 +414,7 @@ pub enum WebGpuMsg {
     WaitForFences {
         gpu_id: GpuId,
         fence_ids: Vec<FenceId>,
-        mode: gpu::device::WaitFor,
+        mode: hal::device::WaitFor,
         timeout: u32,
         result: WebGpuSender<bool>,
     },
@@ -446,19 +433,26 @@ pub enum WebGpuMsg {
         desc: ImageDesc,
         result: WebGpuSender<ImageInfo>,
     },
+    CreateImageView {
+        gpu_id: GpuId,
+        image_id: ImageId,
+        format: hal::format::Format,
+        range: hal::image::SubresourceRange,
+        result: WebGpuSender<ImageViewInfo>,
+    },
     CreateFramebuffer {
         gpu_id: GpuId,
         desc: FramebufferDesc,
         result: WebGpuSender<FramebufferInfo>,
     },
-    CreateRenderpass {
+    CreateRenderPass {
         gpu_id: GpuId,
-        desc: RenderpassDesc,
-        result: WebGpuSender<RenderpassInfo>,
+        desc: RenderPassDesc,
+        result: WebGpuSender<RenderPassInfo>,
     },
     CreateDescriptorSetLayout {
         gpu_id: GpuId,
-        bindings: Vec<gpu::pso::DescriptorSetLayoutBinding>,
+        bindings: Vec<hal::pso::DescriptorSetLayoutBinding>,
         result: WebGpuSender<DescriptorSetLayoutInfo>,
     },
     CreatePipelineLayout {
@@ -469,7 +463,7 @@ pub enum WebGpuMsg {
     CreateDescriptorPool {
         gpu_id: GpuId,
         max_sets: usize,
-        ranges: Vec<gpu::pso::DescriptorRangeDesc>,
+        ranges: Vec<hal::pso::DescriptorRangeDesc>,
         result: WebGpuSender<DescriptorPoolInfo>,
     },
     AllocateDescriptorSets {
@@ -485,7 +479,7 @@ pub enum WebGpuMsg {
     #[cfg(windows)]
     CreateShaderModuleHLSL {
         gpu_id: GpuId,
-        stage: gpu::pso::Stage,
+        stage: hal::pso::Stage,
         data: Vec<u8>,
         result: WebGpuSender<ShaderModuleInfo>,
     },
@@ -502,20 +496,8 @@ pub enum WebGpuMsg {
     },
     CreateSampler {
         gpu_id: GpuId,
-        desc: gpu::image::SamplerInfo,
+        desc: hal::image::SamplerInfo,
         result: WebGpuSender<SamplerInfo>,
-    },
-    ViewImageAsRenderTarget {
-        gpu_id: GpuId,
-        image_id: ImageId,
-        format: gpu::format::Format,
-        result: WebGpuSender<RenderTargetViewInfo>,
-    },
-    ViewImageAsShaderResource {
-        gpu_id: GpuId,
-        image_id: ImageId,
-        format: gpu::format::Format,
-        result: WebGpuSender<ShaderResourceViewInfo>,
     },
     UploadBufferData {
         gpu_id: GpuId,

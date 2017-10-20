@@ -102,14 +102,14 @@ interface WebGpuCommandBuffer {
 		sequence<WebGpuBufferImageCopy> regions
 	);
 
-	void beginRenderpass(
-		WebGpuRenderpass renderpass,
+	void beginRenderPass(
+		WebGpuRenderPass renderPass,
 		WebGpuFramebuffer framebuffer,
 		WebGpuRectangle rect,
 		sequence<WebGpuClearValue> clearValues
 	);
 
-	void endRenderpass();
+	void endRenderPass();
 
 	void bindGraphicsPipeline(WebGpuGraphicsPipeline pipeline);
 

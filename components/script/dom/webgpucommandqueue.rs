@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use canvas_traits::webgpu::{GpuId, QueueId, WebGpuChan, WebGpuMsg,
-    gpu, webgpu_channel};
+    hal, webgpu_channel};
 use dom::bindings::codegen::Bindings::WebGpuCommandQueueBinding as binding;
 use dom::bindings::js::Root;
 use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
@@ -32,8 +32,8 @@ impl WebGpuCommandQueue {
         sender: WebGpuChan,
         gpu_id: GpuId,
         id: QueueId,
-        limits: gpu::Limits,
-        mem_types: &[gpu::MemoryType],
+        limits: hal::Limits,
+        mem_types: &[hal::MemoryType],
     ) -> Root<Self> {
         let obj = box WebGpuCommandQueue {
             reflector_: Reflector::new(),
@@ -57,14 +57,14 @@ impl WebGpuCommandQueue {
         self.id.0
     }
 
-    pub fn get_limits(&self) -> &gpu::Limits {
+    pub fn get_limits(&self) -> &hal::Limits {
         &self.limits.0
     }
 
     pub fn find_heap_type(
         &self,
-        properties: gpu::memory::Properties,
-    ) -> Option<gpu::MemoryType> {
+        properties: hal::memory::Properties,
+    ) -> Option<hal::MemoryType> {
         self.memory_types
             .iter()
             .find(|ht| ht.0.properties.contains(properties))
@@ -80,7 +80,7 @@ impl binding::WebGpuCommandQueueMethods for WebGpuCommandQueue {
         let msg = WebGpuMsg::CreateCommandPool {
             gpu_id: self.id.0,
             queue_id: self.id.1,
-            flags: gpu::pool::CommandPoolCreateFlags::from_bits(flags as _).unwrap(),
+            flags: hal::pool::CommandPoolCreateFlags::from_bits(flags as _).unwrap(),
             result: sender,
         };
         self.sender.send(msg).unwrap();

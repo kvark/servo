@@ -15,28 +15,28 @@ heapsize_derive = "0.1"
 serde = "1"
 serde_derive = "1"
 
-[dependencies.gfx_core]
-git = "https://github.com/kvark/gfx"
-branch = "webgpu"
-#path = "../../../../gfx/src/core"
+[dependencies.gfx-hal]
+git = "https://github.com/gfx-rs/gfx"
+#branch = "webgpu"
+#path = "../../../../gfx/src/hal"
 features = ["serialize"]
 
-[dependencies.gfx_backend_gl]
-git = "https://github.com/kvark/gfx"
-branch = "webgpu"
+[dependencies.gfx-backend-gl]
+git = "https://github.com/gfx-rs/gfx"
+#branch = "webgpu"
 #path = "../../../../gfx/src/backend/gl"
 
-[target.'cfg(not(target_os = "macos"))'.dependencies.gfx_backend_vulkan]
-git = "https://github.com/kvark/gfx"
-branch = "webgpu"
+[target.'cfg(not(target_os = "macos"))'.dependencies.gfx-backend-vulkan]
+git = "https://github.com/gfx-rs/gfx"
+#branch = "webgpu"
+#path = "../../../../gfx/src/backend/vulkan"
 
-[target.'cfg(target_os = "macos")'.dependencies.gfx_backend_metal]
-git = "https://github.com/kvark/gfx"
-branch = "webgpu"
+[target.'cfg(target_os = "macos")'.dependencies.gfx-backend-metal]
+git = "https://github.com/gfx-rs/gfx"
+#branch = "webgpu"
 #path = "../../../../gfx/src/backend/metal"
-features = ["argument_buffer"]
 
-[target.'cfg(windows)'.dependencies.gfx_backend_dx12]
-git = "https://github.com/kvark/gfx"
-branch = "webgpu"
+[target.'cfg(windows)'.dependencies.gfx-backend-dx12]
+git = "https://github.com/gfx-rs/gfx"
+#branch = "webgpu"
 #path = "../../../../gfx/src/backend/dx12"

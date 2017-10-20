@@ -4,7 +4,7 @@
 
 use canvas_traits::webgpu as w;
 use webgpu::backend;
-use webgpu::gpu::{self,
+use webgpu::hal::{self,
     Adapter, DescriptorPool, Device, Instance, QueueFamily,
     RawCommandBuffer, RawCommandPool, RawCommandQueue,
 };
@@ -23,13 +23,13 @@ use euclid::Size2D;
 use webrender_api as wrapi;
 
 
-enum PoolCommand<B: gpu::Backend> {
+enum PoolCommand<B: hal::Backend> {
     FinishBuffer(w::CommandBufferId, w::SubmitEpoch, B::CommandBuffer),
     Reset,
     Destroy,
 }
 
-struct CommandPoolHandle<B: gpu::Backend> {
+struct CommandPoolHandle<B: hal::Backend> {
     _join: thread::JoinHandle<()>,
     //Note: you can't have more than one buffer encoded at a single time,
     // but you can have multiple finished command buffers ready for submission.
@@ -38,7 +38,7 @@ struct CommandPoolHandle<B: gpu::Backend> {
     is_alive: bool,
 }
 
-impl<B: gpu::Backend> CommandPoolHandle<B> {
+impl<B: hal::Backend> CommandPoolHandle<B> {
     fn process_command(&mut self, command: PoolCommand<B>) {
         match command {
             PoolCommand::FinishBuffer(cb_id, submit_epoch, cb) => {
@@ -86,12 +86,12 @@ impl<B: gpu::Backend> CommandPoolHandle<B> {
 }
 
 
-struct Memory<B: gpu::Backend> {
+struct Memory<B: hal::Backend> {
     raw: B::Memory,
     size: usize,
 }
 
-pub struct WebGpuThread<B: gpu::Backend> {
+pub struct WebGpuThread<B: hal::Backend> {
     /// Channel used to generate/update or delete `wrapi::ImageKey`s.
     webrender_api: wrapi::RenderApi,
     present_chan: w::WebGpuPresentChan,
@@ -141,14 +141,14 @@ impl WebGpuThread<backend::Backend> {
     fn create_shader_module_hlsl(
         &mut self,
         gpu_id: w::GpuId,
-        stage: gpu::pso::Stage,
+        stage: hal::pso::Stage,
         data: Vec<u8>,
     ) -> w::ShaderModuleInfo {
         let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
 
         let entry = match stage {
-            gpu::pso::Stage::Vertex => "vs_main",
-            gpu::pso::Stage::Fragment => "fs_main",
+            hal::pso::Stage::Vertex => "vs_main",
+            hal::pso::Stage::Fragment => "fs_main",
             _ => unimplemented!()
         };
         let module = gpu.device
@@ -289,9 +289,9 @@ impl WebGpuThread<backend::Backend> {
                 let framebuffer = self.create_framebuffer(gpu_id, desc);
                 result.send(framebuffer).unwrap();
             }
-            w::WebGpuMsg::CreateRenderpass { gpu_id, desc, result } => {
-                let renderpass = self.create_renderpass(gpu_id, desc);
-                result.send(renderpass).unwrap();
+            w::WebGpuMsg::CreateRenderPass { gpu_id, desc, result } => {
+                let render_pass = self.create_renderpass(gpu_id, desc);
+                result.send(render_pass).unwrap();
             }
             w::WebGpuMsg::CreateDescriptorSetLayout { gpu_id, bindings, result } => {
                 let layout = self.create_descriptor_set_layout(gpu_id, bindings);
@@ -343,13 +343,9 @@ impl WebGpuThread<backend::Backend> {
                 let sampler = self.create_sampler(gpu_id, desc);
                 result.send(sampler).unwrap();
             }
-            w::WebGpuMsg::ViewImageAsRenderTarget { gpu_id, image_id, format, result } => {
-                let rtv = self.view_image_as_render_target(gpu_id, image_id, format);
-                result.send(rtv).unwrap();
-            }
-            w::WebGpuMsg::ViewImageAsShaderResource { gpu_id, image_id, format, result } => {
-                let rtv = self.view_image_as_shader_resource(gpu_id, image_id, format);
-                result.send(rtv).unwrap();
+            w::WebGpuMsg::CreateImageView { gpu_id, image_id, format, range, result } => {
+                let view = self.create_image_view(gpu_id, image_id, format, range);
+                result.send(view).unwrap();
             }
             w::WebGpuMsg::UploadBufferData { gpu_id, buffer_id, data } => {
                 let device = &mut self.rehub.gpus.lock().unwrap()[gpu_id].device;
@@ -368,7 +364,7 @@ impl WebGpuThread<backend::Backend> {
     }
 }
 
-impl<B: gpu::Backend> WebGpuThread<B> {
+impl<B: hal::Backend> WebGpuThread<B> {
     /// Creates a new WebGpuContext
     fn create_context(&mut self,
         size: Size2D<u32>,
@@ -437,7 +433,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
     fn create_command_pool(&mut self,
         gpu_id: w::GpuId,
         queue_id: w::QueueId,
-        flags: gpu::pool::CommandPoolCreateFlags,
+        flags: hal::pool::CommandPoolCreateFlags,
     ) -> w::CommandPoolInfo
     where
         B::Device: Send,
@@ -538,7 +534,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
 
                     let buffer_iter = buffer_bars
                         .into_iter()
-                        .map(|bar| gpu::memory::Barrier::Buffer {
+                        .map(|bar| hal::memory::Barrier::Buffer {
                             states: bar.states,
                             target: &buffer_store[bar.target],
                             //range: 0..1,
@@ -546,10 +542,14 @@ impl<B: gpu::Backend> WebGpuThread<B> {
 
                     let image_iter = image_bars
                         .into_iter()
-                        .map(|bar| gpu::memory::Barrier::Image {
+                        .map(|bar| hal::memory::Barrier::Image {
                             states: bar.states,
                             target: &image_store[bar.target],
-                            range: (0..1, 0..1), //TODO
+                            range: hal::image::SubresourceRange {
+                                aspects: hal::image::ASPECT_COLOR,
+                                levels: 0..1,
+                                layers: 0..1,
+                            },
                         });
 
                     let barriers = buffer_iter
@@ -557,13 +557,13 @@ impl<B: gpu::Backend> WebGpuThread<B> {
                         .collect::<Vec<_>>();
                     cb.pipeline_barrier(stages, &barriers);
                 }
-                w::WebGpuCommand::BeginRenderpass { renderpass, framebuffer, area, clear_values } => {
+                w::WebGpuCommand::BeginRenderPass { render_pass, framebuffer, area, clear_values } => {
                     let cb = &mut com_buffers[active_id.unwrap()];
-                    let pass = &rehub.renderpasses.read().unwrap()[renderpass];
+                    let pass = &rehub.render_passes.read().unwrap()[render_pass];
                     let fbo = &rehub.framebuffers.read().unwrap()[framebuffer];
-                    cb.begin_renderpass(pass, fbo, area, &clear_values, gpu::command::SubpassContents::Inline);
+                    cb.begin_renderpass(pass, fbo, area, &clear_values, hal::command::SubpassContents::Inline);
                 }
-                w::WebGpuCommand::EndRenderpass => {
+                w::WebGpuCommand::EndRenderPass => {
                     let cb = &mut com_buffers[active_id.unwrap()];
                     cb.end_renderpass();
                 }
@@ -633,7 +633,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         let fence_store = &self.rehub.fences.read().unwrap();
         let queue = gpu.general_queues[queue_id as usize].as_mut();
 
-        let submission = gpu::RawSubmission {
+        let submission = hal::RawSubmission {
             cmd_buffers: &cmd_buffers,
             wait_semaphores: &[],
             signal_semaphores: &[],
@@ -740,23 +740,17 @@ impl<B: gpu::Backend> WebGpuThread<B> {
     ) -> w::FramebufferInfo {
         let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
 
-        let renderpass = &self.rehub.renderpasses.read().unwrap()[desc.renderpass];
-        let rtv_store = self.rehub.rtvs.read().unwrap();
-        let color_attachments = desc.colors
+        let render_pass = &self.rehub.render_passes.read().unwrap()[desc.render_pass];
+        let iv_store = self.rehub.image_views.read().unwrap();
+        let attachments = desc.attachments
             .into_iter()
-            .map(|id| &rtv_store[id])
-            .collect::<Vec<_>>();
-        let dsv_store = self.rehub.dsvs.read().unwrap();
-        let depth_stencil_attachments = desc.depth_stencil
-            .into_iter()
-            .map(|id| &dsv_store[id])
+            .map(|id| &iv_store[id])
             .collect::<Vec<_>>();
         let fbo = gpu.device.create_framebuffer(
-            renderpass,
-            &color_attachments,
-            &depth_stencil_attachments,
+            render_pass,
+            &attachments,
             desc.extent,
-        );
+        ).unwrap();
 
         w::FramebufferInfo {
             id: self.rehub.framebuffers.write().unwrap().push(fbo),
@@ -765,33 +759,34 @@ impl<B: gpu::Backend> WebGpuThread<B> {
 
     fn create_renderpass(&mut self,
         gpu_id: w::GpuId,
-        desc: w::RenderpassDesc,
-    ) -> w::RenderpassInfo {
+        desc: w::RenderPassDesc,
+    ) -> w::RenderPassInfo {
         let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
 
         let subpasses = desc.subpasses
             .iter()
-            .map(|sp| gpu::pass::SubpassDesc {
-                color_attachments: &sp.colors,
-                input_attachments: &[], //TODO
-                preserve_attachments: &[], //TODO
+            .map(|sp| hal::pass::SubpassDesc {
+                colors: &sp.colors,
+                depth_stencil: None,
+                inputs: &[], //TODO
+                preserves: &[], //TODO
             })
             .collect::<Vec<_>>();
-        let rp = gpu.device.create_renderpass(
+        let rp = gpu.device.create_render_pass(
             &desc.attachments,
             &subpasses,
             &desc.dependencies,
         );
 
-        w::RenderpassInfo {
-            id: self.rehub.renderpasses.write().unwrap().push(rp),
+        w::RenderPassInfo {
+            id: self.rehub.render_passes.write().unwrap().push(rp),
         }
     }
 
     fn create_descriptor_set_layout(
         &mut self,
         gpu_id: w::GpuId,
-        bindings: Vec<gpu::pso::DescriptorSetLayoutBinding>,
+        bindings: Vec<hal::pso::DescriptorSetLayoutBinding>,
     ) -> w::DescriptorSetLayoutInfo {
         let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
         let layout = gpu.device.create_descriptor_set_layout(&bindings);
@@ -824,7 +819,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         &mut self,
         gpu_id: w::GpuId,
         max_sets: usize,
-        ranges: Vec<gpu::pso::DescriptorRangeDesc>,
+        ranges: Vec<hal::pso::DescriptorRangeDesc>,
     ) -> w::DescriptorPoolInfo {
         let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
 
@@ -869,30 +864,30 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         &mut self,
         gpu_id: w::GpuId,
         descriptors: Vec<w::GraphicsPipelineDesc>,
-    ) -> Vec<Result<B::GraphicsPipeline, gpu::pso::CreationError>> {
+    ) -> Vec<Result<B::GraphicsPipeline, hal::pso::CreationError>> {
         let gpu = &mut self.rehub.gpus.lock().unwrap()[gpu_id];
         let shader_store = self.rehub.shaders.read().unwrap();
-        let rp_store = self.rehub.renderpasses.read().unwrap();
+        let rp_store = self.rehub.render_passes.read().unwrap();
         let layout_store = self.rehub.pipe_layouts.read().unwrap();
 
         let descs = descriptors
             .iter()
             .map(|desc| {
-                let shaders = gpu::pso::GraphicsShaderSet {
-                    vertex: gpu::pso::EntryPoint {
+                let shaders = hal::pso::GraphicsShaderSet {
+                    vertex: hal::pso::EntryPoint {
                         module: &shader_store[desc.shaders.vs.module_id],
                         entry: &desc.shaders.vs.name,
                     },
                     geometry: None,
                     hull: None,
                     domain: None,
-                    fragment: desc.shaders.fs.as_ref().map(|s| gpu::pso::EntryPoint {
+                    fragment: desc.shaders.fs.as_ref().map(|s| hal::pso::EntryPoint {
                         module: &shader_store[s.module_id],
                         entry: &s.name,
                     }),
                 };
                 let layout = &layout_store[desc.layout_id];
-                let subpass = gpu::pass::Subpass {
+                let subpass = hal::pass::Subpass {
                     index: desc.subpass as _,
                     main_pass: &rp_store[desc.renderpass_id],
                 };
@@ -906,7 +901,7 @@ impl<B: gpu::Backend> WebGpuThread<B> {
     fn create_sampler(
         &mut self,
         gpu_id: w::GpuId,
-        desc: gpu::image::SamplerInfo,
+        desc: hal::image::SamplerInfo,
     ) -> w::SamplerInfo {
         let device = &mut self.rehub.gpus.lock().unwrap()[gpu_id].device;
 
@@ -917,36 +912,25 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         }
     }
 
-    fn view_image_as_render_target(
+    fn create_image_view(
         &mut self,
         gpu_id: w::GpuId,
         image_id: w::ImageId,
-        format: gpu::format::Format,
-    ) -> w::RenderTargetViewInfo {
-        let device = &mut self.rehub.gpus.lock().unwrap()[gpu_id].device;
-        let image = &self.rehub.images.read().unwrap()[image_id];
-        let range = ((0..1), (0..1));
-
-        let view = device.view_image_as_render_target(image, format, range).unwrap();
-
-        w::RenderTargetViewInfo {
-            id: self.rehub.rtvs.write().unwrap().push(view),
-        }
-    }
-
-    fn view_image_as_shader_resource(
-        &mut self,
-        gpu_id: w::GpuId,
-        image_id: w::ImageId,
-        format: gpu::format::Format,
-    ) -> w::ShaderResourceViewInfo {
+        format: hal::format::Format,
+        range: hal::image::SubresourceRange,
+    ) -> w::ImageViewInfo {
         let device = &mut self.rehub.gpus.lock().unwrap()[gpu_id].device;
         let image = &self.rehub.images.read().unwrap()[image_id];
 
-        let view = device.view_image_as_shader_resource(image, format).unwrap();
+        let view = device.create_image_view(
+            image,
+            format,
+            hal::format::Swizzle::NO,
+            range,
+        ).unwrap();
 
-        w::ShaderResourceViewInfo {
-            id: self.rehub.srvs.write().unwrap().push(view),
+        w::ImageViewInfo {
+            id: self.rehub.image_views.write().unwrap().push(view),
         }
     }
 
@@ -958,28 +942,28 @@ impl<B: gpu::Backend> WebGpuThread<B> {
         let device = &mut self.rehub.gpus.lock().unwrap()[gpu_id].device;
         let descriptor_store = self.rehub.descriptors.read().unwrap();
         let sampler_store = self.rehub.samplers.read().unwrap();
-        let srv_store = self.rehub.srvs.read().unwrap();
+        let iv_store = self.rehub.image_views.read().unwrap();
 
         let mut writes = Vec::new();
         for w in set_writes {
             let write = match w.ty {
-                gpu::pso::DescriptorType::Sampler => {
+                hal::pso::DescriptorType::Sampler => {
                     let objects = w.descriptors
                         .into_iter()
                         .map(|(id, _)| &sampler_store[id])
                         .collect();
-                    gpu::pso::DescriptorWrite::Sampler(objects)
+                    hal::pso::DescriptorWrite::Sampler(objects)
                 }
-                gpu::pso::DescriptorType::SampledImage => {
+                hal::pso::DescriptorType::SampledImage => {
                     let objects = w.descriptors
                         .into_iter()
-                        .map(|(id, layout)| (&srv_store[id], layout))
+                        .map(|(id, layout)| (&iv_store[id], layout))
                         .collect();
-                    gpu::pso::DescriptorWrite::SampledImage(objects)
+                    hal::pso::DescriptorWrite::SampledImage(objects)
                 }
                 _ => { unimplemented!() } //TODO
             };
-            writes.push(gpu::pso::DescriptorSetWrite {
+            writes.push(hal::pso::DescriptorSetWrite {
                 set: &descriptor_store[w.set],
                 binding: w.binding,
                 array_offset: w.array_offset,

@@ -8,7 +8,7 @@ use webrender::{ExternalImage, ExternalImageHandler, ExternalImageSource};
 use super::lazyvec::LazyVec;
 use super::resource::ResourceHub;
 use canvas_traits::webgpu as w;
-use webgpu::gpu::{self, Device};
+use webgpu::hal::{self, Device};
 
 
 struct FrameQueue {
@@ -19,7 +19,7 @@ struct FrameQueue {
 }
 
 impl FrameQueue {
-    fn collapse<B: gpu::Backend>(
+    fn collapse<B: hal::Backend>(
         &mut self,
         device: &mut B::Device,
         fence_store: &LazyVec<B::Fence>)
@@ -39,7 +39,7 @@ impl FrameQueue {
             };
 
             debug!("frame queue checking for {:?} ", self.others.front().unwrap().fence_id);
-            if !device.wait_for_fences(&[fence], gpu::device::WaitFor::Any, 0) {
+            if !device.wait_for_fences(&[fence], hal::device::WaitFor::Any, 0) {
                 return
             }
             device.reset_fences(&[fence]);
@@ -51,13 +51,13 @@ impl FrameQueue {
     }
 }
 
-pub struct FrameHandler<B: gpu::Backend> {
+pub struct FrameHandler<B: hal::Backend> {
     receiver: w::WebGpuReceiver<(wrapi::ExternalImageId, w::WebGpuPresent)>,
     queues: HashMap<wrapi::ExternalImageId, FrameQueue>, //TODO: faster collection?
     rehub: Arc<ResourceHub<B>>,
 }
 
-impl<B: gpu::Backend> FrameHandler<B> {
+impl<B: hal::Backend> FrameHandler<B> {
     pub fn new(rehub: Arc<ResourceHub<B>>) -> (Self, w::WebGpuPresentChan) {
         let (sender, receiver) = w::webgpu_channel().unwrap();
         let handler = FrameHandler {
@@ -102,7 +102,7 @@ impl<B: gpu::Backend> FrameHandler<B> {
     }
 }
 
-impl<B: gpu::Backend> ExternalImageHandler for FrameHandler<B> {
+impl<B: hal::Backend> ExternalImageHandler for FrameHandler<B> {
     #[allow(unsafe_code)]
     fn lock(&mut self, id: wrapi::ExternalImageId, channel_index: u8) -> ExternalImage {
         //println!("entering lock for {:?}", id);
@@ -140,7 +140,7 @@ impl<B: gpu::Backend> ExternalImageHandler for FrameHandler<B> {
                     }
                     let fence = &fence_store[frame.fence_id];
                     debug!("frame queue waiting for {:?} ", frame.fence_id);
-                    device.wait_for_fences(&[fence], gpu::device::WaitFor::Any, !0);
+                    device.wait_for_fences(&[fence], hal::device::WaitFor::Any, !0);
                     device.reset_fences(&[fence]);
                     frame
                 }

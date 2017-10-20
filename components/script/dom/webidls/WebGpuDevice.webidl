@@ -100,7 +100,7 @@ enum WebGpuDescriptorType {
 	"StorageImage",
 	"UniformTexelBuffer",
 	"StorageTexelBuffer",
-	"ConstantBuffer",
+	"UniformBuffer",
 	"StorageBuffer",
 	"InputAttachment",
 };
@@ -202,7 +202,7 @@ dictionary WebGpuGraphicsPipelineDesc {
 	required WebGpuRasterizerState rasterizerState;
 	required WebGpuBlendState blendState;
 	required WebGpuPipelineLayout layout;
-	required WebGpuRenderpass renderpass;
+	required WebGpuRenderPass renderPass;
 	unsigned long subpass = 0;
 };
 
@@ -336,17 +336,21 @@ interface WebGpuDevice {
 		unsigned long heap_offset
 	);
 
-	WebGpuRenderpass createRenderpass(
+	WebGpuImageView createImageView(
+		WebGpuImage image,
+		WebGpuFormat format
+	);
+
+	WebGpuRenderPass createRenderPass(
 		sequence<WebGpuAttachmentDesc> attachments,
 		sequence<WebGpuSubpassDesc> subpasses,
 		sequence<WebGpuDependency> dependencies
 	);
 
 	WebGpuFramebuffer createFramebuffer(
-		WebGpuRenderpass renderpass,
+		WebGpuRenderPass renderPass,
 		WebGpuFramebufferSize size,
-		sequence<WebGpuRenderTargetView> colors,
-		WebGpuDepthStencilView? depth_stencil
+		sequence<WebGpuImageView> attachments
 	);
 
 	WebGpuDescriptorSetLayout createDescriptorSetLayout(
@@ -379,16 +383,6 @@ interface WebGpuDevice {
 	);
 
 	WebGpuSampler createSampler(WebGpuSamplerDesc desc);
-
-	WebGpuRenderTargetView viewImageAsRenderTarget(
-		WebGpuImage image,
-		WebGpuFormat format
-	);
-
-	WebGpuShaderResourceView viewImageAsShaderResource(
-		WebGpuImage image,
-		WebGpuFormat format
-	);
 
 	void uploadBufferData(WebGpuBuffer buffer, object data);
 

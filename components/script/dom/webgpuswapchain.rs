@@ -6,7 +6,7 @@ use std::cell::Cell;
 
 use canvas_traits::webgpu::{
     WebGpuChan, WebGpuCommand, WebGpuMsg, WebGpuReceiver,
-    gpu, webgpu_channel,
+    hal, webgpu_channel,
     BufferId, BufferDesc, CommandBufferId, CommandPoolInfo,
     FenceId, GpuId, MemoryId, MemoryDesc, BufferBarrier, ImageBarrier,
     ImageDesc, SubmitEpoch, SubmitInfo, QueueId,
@@ -67,7 +67,7 @@ pub struct WebGpuSwapchain {
 }
 
 impl WebGpuSwapchain {
-    pub fn compute_strides(size: Size2D<u32>, bytes_pp: usize, limits: &gpu::Limits) -> (usize, usize) {
+    pub fn compute_strides(size: Size2D<u32>, bytes_pp: usize, limits: &hal::Limits) -> (usize, usize) {
         let align = |x: usize, to: usize| { (x + to - 1) & !(to - 1) };
         let per_row = align(size.width as usize * bytes_pp, limits.min_buffer_copy_pitch_alignment);
         let per_image = align(align(size.height as usize, 0x100) * per_row, 0x10000);
@@ -102,7 +102,7 @@ impl WebGpuSwapchain {
                 gpu_id: queue.gpu_id(),
                 desc: MemoryDesc {
                     size: count * bytes_per_image,
-                    ty: queue.find_heap_type(gpu::memory::CPU_VISIBLE).unwrap(),
+                    ty: queue.find_heap_type(hal::memory::CPU_VISIBLE).unwrap(),
                 },
                 result,
             };
@@ -116,7 +116,7 @@ impl WebGpuSwapchain {
                 gpu_id: queue.gpu_id(),
                 desc: MemoryDesc {
                     size: count * bytes_per_image,
-                    ty: queue.find_heap_type(gpu::memory::DEVICE_LOCAL).unwrap(),
+                    ty: queue.find_heap_type(hal::memory::DEVICE_LOCAL).unwrap(),
                 },
                 result,
             };
@@ -129,7 +129,7 @@ impl WebGpuSwapchain {
             let msg = WebGpuMsg::CreateCommandPool {
                 gpu_id: queue.gpu_id(),
                 queue_id: queue.get_id(),
-                flags: gpu::pool::RESET_INDIVIDUAL,
+                flags: hal::pool::RESET_INDIVIDUAL,
                 result,
             };
             sender.send(msg).unwrap();
@@ -148,14 +148,14 @@ impl WebGpuSwapchain {
                 let msg = WebGpuMsg::CreateImage {
                     gpu_id: queue.gpu_id(),
                     desc: ImageDesc {
-                        kind: gpu::image::Kind::D2(
+                        kind: hal::image::Kind::D2(
                             size.width as _,
                             size.height as _,
-                            gpu::image::AaMode::Single,
+                            hal::image::AaMode::Single,
                         ),
                         levels: 1,
                         format: WebGpuDevice::map_format(format),
-                        usage: gpu::image::COLOR_ATTACHMENT | gpu::image::TRANSFER_SRC,
+                        usage: hal::image::COLOR_ATTACHMENT | hal::image::TRANSFER_SRC,
                         mem_id: gpu_mem_id,
                         mem_offset: i * bytes_per_image,
                     },
@@ -173,7 +173,7 @@ impl WebGpuSwapchain {
                     desc: BufferDesc {
                         size: bytes_per_image,
                         stride: bytes_pp as _,
-                        usage: gpu::buffer::TRANSFER_DST,
+                        usage: hal::buffer::TRANSFER_DST,
                         mem_id: staging_mem_id,
                         mem_offset: i * bytes_per_image,
                     },
@@ -286,31 +286,34 @@ impl binding::WebGpuSwapchainMethods for WebGpuSwapchain {
         self.present_epoch.set(present_epoch + 1);
 
         let return_state = WebGpuImageState {
-            access: gpu::image::TRANSFER_READ.bits() as _,
+            access: hal::image::TRANSFER_READ.bits() as _,
             layout: WebGpuImageLayout::TransferSrcOptimal,
         };
-        let src_layout = gpu::image::ImageLayout::Present;
+        let src_layout = hal::image::ImageLayout::Present;
         let dst_layout = WebGpuDevice::map_image_layout(return_state.layout);
         let image_bar = ImageBarrier {
-            states: (gpu::image::Access::empty(), src_layout) .. (gpu::image::TRANSFER_READ, dst_layout),
+            states: (hal::image::Access::empty(), src_layout) .. (hal::image::TRANSFER_READ, dst_layout),
             target: frame.image.get_id(),
         };
         let buffer_bar = BufferBarrier {
-            states: gpu::buffer::TRANSFER_WRITE .. gpu::buffer::Access::empty(),
+            states: hal::buffer::TRANSFER_WRITE .. hal::buffer::Access::empty(),
             target: frame.staging_buffer_id,
         };
-        let region = gpu::command::BufferImageCopy {
+        let region = hal::command::BufferImageCopy {
             buffer_offset: 0,
             buffer_row_pitch: self.bytes_per_row as _,
             buffer_slice_pitch: self.bytes_per_image as _,
-            image_aspect: gpu::image::ASPECT_COLOR,
-            image_subresource: (0, 0..1),
-            image_offset: gpu::command::Offset {
+            image_layers: hal::image::SubresourceLayers {
+                aspects: hal::image::ASPECT_COLOR,
+                level: 0,
+                layers: 0 .. 1,
+            },
+            image_offset: hal::command::Offset {
                 x: 0,
                 y: 0,
                 z: 0,
             },
-            image_extent: gpu::device::Extent {
+            image_extent: hal::device::Extent {
                 width: self.size.width as _,
                 height: self.size.height as _,
                 depth: 1,
@@ -320,7 +323,7 @@ impl binding::WebGpuSwapchainMethods for WebGpuSwapchain {
         let chan = &self.command_pool_info.channel;
         chan.send(WebGpuCommand::Begin(frame.command_buffer_id)).unwrap();
         chan.send(WebGpuCommand::PipelineBarrier {
-            stages: gpu::pso::BOTTOM_OF_PIPE .. gpu::pso::TRANSFER, //TODO?
+            stages: hal::pso::BOTTOM_OF_PIPE .. hal::pso::TRANSFER, //TODO?
             buffer_bars: Vec::new(),
             image_bars: vec![image_bar],
         }).unwrap();
@@ -331,7 +334,7 @@ impl binding::WebGpuSwapchainMethods for WebGpuSwapchain {
             regions: vec![region],
         }).unwrap();
         chan.send(WebGpuCommand::PipelineBarrier {
-            stages: gpu::pso::TRANSFER .. gpu::pso::HOST,
+            stages: hal::pso::TRANSFER .. hal::pso::HOST,
             buffer_bars: vec![buffer_bar],
             image_bars: Vec::new(),
         }).unwrap();

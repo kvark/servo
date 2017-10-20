@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use canvas_traits::webgpu::{self as w, gpu, webgpu_channel,
+use canvas_traits::webgpu::{self as w, hal, webgpu_channel,
     WebGpuChan, WebGpuMsg};
 use dom::bindings::codegen::Bindings::WebGpuDeviceBinding as binding;
 use dom::bindings::js::Root;
@@ -10,7 +10,6 @@ use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
 use dom::bindings::str::DOMString;
 use dom::globalscope::GlobalScope;
 use dom::webgpubuffer::WebGpuBuffer;
-use dom::webgpudepthstencilview::WebGpuDepthStencilView;
 use dom::webgpudescriptorpool::WebGpuDescriptorPool;
 use dom::webgpudescriptorsetlayout::WebGpuDescriptorSetLayout;
 use dom::webgpufence::WebGpuFence;
@@ -18,23 +17,22 @@ use dom::webgpuframebuffer::WebGpuFramebuffer;
 use dom::webgpugraphicspipeline::WebGpuGraphicsPipeline;
 use dom::webgpuheap::WebGpuHeap;
 use dom::webgpuimage::WebGpuImage;
+use dom::webgpuimageview::WebGpuImageView;
 use dom::webgpupipelinelayout::WebGpuPipelineLayout;
-use dom::webgpurenderpass::WebGpuRenderpass;
-use dom::webgpurendertargetview::WebGpuRenderTargetView;
+use dom::webgpurenderpass::WebGpuRenderPass;
 use dom::webgpusampler::WebGpuSampler;
 use dom::webgpushadermodule::WebGpuShaderModule;
-use dom::webgpushaderresourceview::WebGpuShaderResourceView;
 use dom_struct::dom_struct;
 use heapsize::HeapSizeOf;
 use js::jsapi::{JSContext, JSObject};
 use glsl_to_spirv;
 
 
-pub struct LimitsWrapper(pub gpu::Limits);
+pub struct LimitsWrapper(pub hal::Limits);
 impl HeapSizeOf for LimitsWrapper {
     fn heap_size_of_children(&self) -> usize { 0 }
 }
-pub struct MemTypeWrapper(pub gpu::MemoryType);
+pub struct MemTypeWrapper(pub hal::MemoryType);
 impl HeapSizeOf for MemTypeWrapper {
     fn heap_size_of_children(&self) -> usize { 0 }
 }
@@ -55,8 +53,8 @@ impl WebGpuDevice {
         global: &GlobalScope,
         sender: WebGpuChan,
         id: w::GpuId,
-        limits: gpu::Limits,
-        mem_types: &[gpu::MemoryType],
+        limits: hal::Limits,
+        mem_types: &[hal::MemoryType],
     ) -> Root<Self>
     {
         let obj = box WebGpuDevice {
@@ -73,8 +71,8 @@ impl WebGpuDevice {
         reflect_dom_object(obj, global, binding::Wrap)
     }
 
-    pub fn map_image_layout(layout: binding::WebGpuImageLayout) -> gpu::image::ImageLayout {
-        map_enum!(layout; self::binding::WebGpuImageLayout => self::gpu::image::ImageLayout {
+    pub fn map_image_layout(layout: binding::WebGpuImageLayout) -> hal::image::ImageLayout {
+        map_enum!(layout; self::binding::WebGpuImageLayout => self::hal::image::ImageLayout {
             General, ColorAttachmentOptimal, DepthStencilAttachmentOptimal,
             DepthStencilReadOnlyOptimal, ShaderReadOnlyOptimal,
             TransferSrcOptimal, TransferDstOptimal,
@@ -82,9 +80,9 @@ impl WebGpuDevice {
         })
     }
 
-    pub fn map_format(format: binding::WebGpuFormat) -> gpu::format::Format {
+    pub fn map_format(format: binding::WebGpuFormat) -> hal::format::Format {
         use self::binding::WebGpuFormat::*;
-        use self::gpu::format::{Format, SurfaceType, ChannelType};
+        use self::hal::format::{Format, SurfaceType, ChannelType};
         match format {
             R8G8B8A8_UNORM => Format(SurfaceType::R8_G8_B8_A8, ChannelType::Unorm),
             R8G8B8A8_SRGB => Format(SurfaceType::R8_G8_B8_A8, ChannelType::Srgb),
@@ -93,9 +91,9 @@ impl WebGpuDevice {
         }
     }
 
-    fn map_load_op(op: binding::WebGpuAttachmentLoadOp) -> gpu::pass::AttachmentLoadOp {
+    fn map_load_op(op: binding::WebGpuAttachmentLoadOp) -> hal::pass::AttachmentLoadOp {
         use self::binding::WebGpuAttachmentLoadOp::*;
-        use self::gpu::pass::AttachmentLoadOp as Alo;
+        use self::hal::pass::AttachmentLoadOp as Alo;
         match op {
             Load => Alo::Load,
             Clear => Alo::Clear,
@@ -103,26 +101,26 @@ impl WebGpuDevice {
         }
     }
 
-    fn map_store_op(op: binding::WebGpuAttachmentStoreOp) -> gpu::pass::AttachmentStoreOp {
+    fn map_store_op(op: binding::WebGpuAttachmentStoreOp) -> hal::pass::AttachmentStoreOp {
         use self::binding::WebGpuAttachmentStoreOp::*;
-        use self::gpu::pass::AttachmentStoreOp as Aso;
+        use self::hal::pass::AttachmentStoreOp as Aso;
         match op {
             Store => Aso::Store,
             DontCare => Aso::DontCare,
         }
     }
 
-    fn map_pass_ref(pass_ref: Option<u32>) -> gpu::pass::SubpassRef {
+    fn map_pass_ref(pass_ref: Option<u32>) -> hal::pass::SubpassRef {
         match pass_ref {
-            Some(id) => gpu::pass::SubpassRef::Pass(id as _),
-            None => gpu::pass::SubpassRef::External,
+            Some(id) => hal::pass::SubpassRef::Pass(id as _),
+            None => hal::pass::SubpassRef::External,
         }
     }
 
-    fn map_descriptor_type(ty: binding::WebGpuDescriptorType) -> gpu::pso::DescriptorType {
-        map_enum!(ty; self::binding::WebGpuDescriptorType => self::gpu::pso::DescriptorType {
+    fn map_descriptor_type(ty: binding::WebGpuDescriptorType) -> hal::pso::DescriptorType {
+        map_enum!(ty; self::binding::WebGpuDescriptorType => self::hal::pso::DescriptorType {
             Sampler, SampledImage, StorageImage, UniformTexelBuffer, StorageTexelBuffer,
-            ConstantBuffer, StorageBuffer, InputAttachment
+            UniformBuffer, StorageBuffer, InputAttachment
         })
     }
 }
@@ -172,8 +170,8 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
             .map(|f| f.get_id())
             .collect();
         let mode = match wait_mode {
-            binding::WebGpuFenceWait::Any => gpu::device::WaitFor::Any,
-            binding::WebGpuFenceWait::All => gpu::device::WaitFor::All,
+            binding::WebGpuFenceWait::Any => hal::device::WaitFor::Any,
+            binding::WebGpuFenceWait::All => hal::device::WaitFor::All,
         };
 
         let (sender, receiver) = webgpu_channel().unwrap();
@@ -227,7 +225,7 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
             desc: w::BufferDesc {
                 size: desc.size as _,
                 stride: desc.stride as _,
-                usage: gpu::buffer::Usage::from_bits(desc.usage as _).unwrap(),
+                usage: hal::buffer::Usage::from_bits(desc.usage as _).unwrap(),
                 mem_id: heap.get_id(),
                 mem_offset: heap_offset as _,
             },
@@ -249,14 +247,14 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         let msg = WebGpuMsg::CreateImage {
             gpu_id: self.id,
             desc: w::ImageDesc {
-                kind: gpu::image::Kind::D2(
+                kind: hal::image::Kind::D2(
                     desc.width as _,
                     desc.height as _,
-                    gpu::image::AaMode::Single,
+                    hal::image::AaMode::Single,
                 ),
                 levels: 1,
                 format: Self::map_format(desc.format),
-                usage: gpu::image::Usage::from_bits(desc.usage as _).unwrap(),
+                usage: hal::image::Usage::from_bits(desc.usage as _).unwrap(),
                 mem_id: heap.get_id(),
                 mem_offset: heap_offset as _,
             },
@@ -268,19 +266,19 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         WebGpuImage::new(&self.global(), info)
     }
 
-    fn CreateRenderpass(
+    fn CreateRenderPass(
         &self,
         attachment_descs: Vec<binding::WebGpuAttachmentDesc>,
         subpass_descs: Vec<binding::WebGpuSubpassDesc>,
         dependency_descs: Vec<binding::WebGpuDependency>,
-    ) -> Root<WebGpuRenderpass> {
+    ) -> Root<WebGpuRenderPass> {
         let attachments = attachment_descs
             .into_iter()
-            .map(|at| gpu::pass::Attachment {
+            .map(|at| hal::pass::Attachment {
                 format: Self::map_format(at.format),
                 layouts: Self::map_image_layout(at.srcLayout) .. Self::map_image_layout(at.dstLayout),
-                ops: gpu::pass::AttachmentOps::new(Self::map_load_op(at.loadOp), Self::map_store_op(at.storeOp)),
-                stencil_ops: gpu::pass::AttachmentOps::new(Self::map_load_op(at.stencilLoadOp), Self::map_store_op(at.stencilStoreOp)),
+                ops: hal::pass::AttachmentOps::new(Self::map_load_op(at.loadOp), Self::map_store_op(at.storeOp)),
+                stencil_ops: hal::pass::AttachmentOps::new(Self::map_load_op(at.stencilLoadOp), Self::map_store_op(at.stencilStoreOp)),
             })
             .collect();
 
@@ -299,20 +297,20 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
 
         let dependencies = dependency_descs
             .into_iter()
-            .map(|dep| gpu::pass::SubpassDependency {
+            .map(|dep| hal::pass::SubpassDependency {
                 passes: Self::map_pass_ref(dep.srcPass) ..
                         Self::map_pass_ref(dep.dstPass),
-                stages: gpu::pso::PipelineStage::from_bits(dep.srcStages as _).unwrap() ..
-                        gpu::pso::PipelineStage::from_bits(dep.dstStages as _).unwrap(),
-                accesses: gpu::image::Access::from_bits(dep.srcAccess as _).unwrap() ..
-                          gpu::image::Access::from_bits(dep.dstAccess as _).unwrap(),
+                stages: hal::pso::PipelineStage::from_bits(dep.srcStages as _).unwrap() ..
+                        hal::pso::PipelineStage::from_bits(dep.dstStages as _).unwrap(),
+                accesses: hal::image::Access::from_bits(dep.srcAccess as _).unwrap() ..
+                          hal::image::Access::from_bits(dep.dstAccess as _).unwrap(),
             })
             .collect();
 
         let (sender, receiver) = webgpu_channel().unwrap();
-        let msg = WebGpuMsg::CreateRenderpass {
+        let msg = WebGpuMsg::CreateRenderPass {
             gpu_id: self.id,
-            desc: w::RenderpassDesc {
+            desc: w::RenderPassDesc {
                 attachments,
                 subpasses,
                 dependencies,
@@ -322,24 +320,22 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         self.sender.send(msg).unwrap();
 
         let info = receiver.recv().unwrap();
-        WebGpuRenderpass::new(&self.global(), info)
+        WebGpuRenderPass::new(&self.global(), info)
     }
 
     fn CreateFramebuffer(
         &self,
-        renderpass: &WebGpuRenderpass,
+        render_pass: &WebGpuRenderPass,
         size: &binding::WebGpuFramebufferSize,
-        colors: Vec<Root<WebGpuRenderTargetView>>,
-        depth_stencil: Option<&WebGpuDepthStencilView>,
+        attachments: Vec<Root<WebGpuImageView>>,
     ) -> Root<WebGpuFramebuffer> {
         let (sender, receiver) = webgpu_channel().unwrap();
         let msg = WebGpuMsg::CreateFramebuffer {
             gpu_id: self.id,
             desc: w::FramebufferDesc {
-                renderpass: renderpass.get_id(),
-                colors: colors.into_iter().map(|v| v.get_id()).collect(),
-                depth_stencil: depth_stencil.map(|v| v.get_id()),
-                extent: gpu::device::Extent {
+                render_pass: render_pass.get_id(),
+                attachments: attachments.into_iter().map(|v| v.get_id()).collect(),
+                extent: hal::device::Extent {
                     width: size.width as _,
                     height: size.height as _,
                     depth: size.layers as _,
@@ -363,11 +359,11 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
             gpu_id: self.id,
             bindings: bindings
                 .into_iter()
-                .map(|b| gpu::pso::DescriptorSetLayoutBinding {
+                .map(|b| hal::pso::DescriptorSetLayoutBinding {
                     binding: b.binding as _,
                     ty: Self::map_descriptor_type(b.type_),
                     count: b.count as _,
-                    stage_flags: gpu::pso::ShaderStageFlags::from_bits(b.stages as _).unwrap(),
+                    stage_flags: hal::pso::ShaderStageFlags::from_bits(b.stages as _).unwrap(),
                 })
                 .collect(),
             result: sender,
@@ -410,7 +406,7 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
             max_sets: max_sets as _,
             ranges: ranges
                 .into_iter()
-                .map(|r| gpu::pso::DescriptorRangeDesc {
+                .map(|r| hal::pso::DescriptorRangeDesc {
                     ty: Self::map_descriptor_type(r.type_),
                     count: r.count as _,
                 })
@@ -457,8 +453,8 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         #[cfg(windows)]
         {
             let stage = match ty {
-                binding::WebGpuShaderType::Vertex => gpu::pso::Stage::Vertex,
-                binding::WebGpuShaderType::Fragment => gpu::pso::Stage::Fragment,
+                binding::WebGpuShaderType::Vertex => hal::pso::Stage::Vertex,
+                binding::WebGpuShaderType::Fragment => hal::pso::Stage::Fragment,
             };
 
             let (sender, receiver) = webgpu_channel().unwrap();
@@ -509,34 +505,34 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
             module_id: stage.shader_module.get_id(),
             name: stage.entry_point.to_string(),
         };
-        let map_input_assembler = |ia: binding::WebGpuInputAssemblyState| gpu::pso::InputAssemblerDesc {
+        let map_input_assembler = |ia: binding::WebGpuInputAssemblyState| hal::pso::InputAssemblerDesc {
             primitive: match ia.topology {
-                binding::WebGpuPrimitiveTopology::PointList => gpu::Primitive::PointList,
-                binding::WebGpuPrimitiveTopology::LineList => gpu::Primitive::LineList,
-                binding::WebGpuPrimitiveTopology::LineStrip => gpu::Primitive::LineStrip,
-                binding::WebGpuPrimitiveTopology::TriangleList => gpu::Primitive::TriangleList,
-                binding::WebGpuPrimitiveTopology::TriangleStrip => gpu::Primitive::TriangleStrip,
+                binding::WebGpuPrimitiveTopology::PointList => hal::Primitive::PointList,
+                binding::WebGpuPrimitiveTopology::LineList => hal::Primitive::LineList,
+                binding::WebGpuPrimitiveTopology::LineStrip => hal::Primitive::LineStrip,
+                binding::WebGpuPrimitiveTopology::TriangleList => hal::Primitive::TriangleList,
+                binding::WebGpuPrimitiveTopology::TriangleStrip => hal::Primitive::TriangleStrip,
             },
-            primitive_restart: gpu::pso::PrimitiveRestart::Disabled, //TODO
+            primitive_restart: hal::pso::PrimitiveRestart::Disabled, //TODO
         };
-        let map_rasterizer = |r: binding::WebGpuRasterizerState| gpu::pso::Rasterizer {
+        let map_rasterizer = |r: binding::WebGpuRasterizerState| hal::pso::Rasterizer {
             polgyon_mode: match r.polygonMode {
-                binding::WebGpuPolygonMode::Fill => gpu::state::RasterMethod::Fill,
+                binding::WebGpuPolygonMode::Fill => hal::state::RasterMethod::Fill,
             },
-            cull_mode: gpu::state::CullFace::Nothing,
+            cull_mode: hal::state::CullFace::Nothing,
             front_face: match r.frontFace {
-                binding::WebGpuFrontFace::Cw => gpu::state::FrontFace::Clockwise,
-                binding::WebGpuFrontFace::Ccw => gpu::state::FrontFace::CounterClockwise,
+                binding::WebGpuFrontFace::Cw => hal::state::FrontFace::Clockwise,
+                binding::WebGpuFrontFace::Ccw => hal::state::FrontFace::CounterClockwise,
             },
             depth_clamping: false,
             depth_bias: None,
             conservative: false,
         };
         let map_factor = |factor: binding::WebGpuBlendFactor| match factor {
-            binding::WebGpuBlendFactor::Zero => gpu::state::Factor::Zero,
-            binding::WebGpuBlendFactor::One => gpu::state::Factor::One,
-            binding::WebGpuBlendFactor::SrcAlpha => gpu::state::Factor::ZeroPlus(gpu::state::BlendValue::SourceAlpha),
-            binding::WebGpuBlendFactor::OneMinusSrcAlpha => gpu::state::Factor::OneMinus(gpu::state::BlendValue::SourceAlpha),
+            binding::WebGpuBlendFactor::Zero => hal::state::Factor::Zero,
+            binding::WebGpuBlendFactor::One => hal::state::Factor::One,
+            binding::WebGpuBlendFactor::SrcAlpha => hal::state::Factor::ZeroPlus(hal::state::BlendValue::SourceAlpha),
+            binding::WebGpuBlendFactor::OneMinusSrcAlpha => hal::state::Factor::OneMinus(hal::state::BlendValue::SourceAlpha),
         };
         let map_channel = |chan: binding::WebGpuBlendChannel| {
             match chan {
@@ -545,20 +541,20 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
                     src: binding::WebGpuBlendFactor::One,
                     dst: binding::WebGpuBlendFactor::Zero,
                 } => None,
-                _ => Some(gpu::state::BlendChannel {
+                _ => Some(hal::state::BlendChannel {
                     equation: map_enum!(chan.eq; self::binding::WebGpuBlendEquation =>
-                        self::gpu::state::Equation {Add, Sub, RevSub, Min, Max}
+                        self::hal::state::Equation {Add, Sub, RevSub, Min, Max}
                     ),
                     source: map_factor(chan.src),
                     destination: map_factor(chan.dst),
                 })
             }
         };
-        let map_blender = |blend: binding::WebGpuBlendState| gpu::pso::BlendDesc {
+        let map_blender = |blend: binding::WebGpuBlendState| hal::pso::BlendDesc {
             alpha_coverage: blend.alphaToCoverage,
             logic_op: None, //TODO
-            targets: blend.targets.into_iter().map(|target| gpu::pso::ColorInfo {
-                mask: gpu::state::ColorMask::from_bits(target.mask as _).unwrap(),
+            targets: blend.targets.into_iter().map(|target| hal::pso::ColorInfo {
+                mask: hal::state::ColorMask::from_bits(target.mask as _).unwrap(),
                 color: map_channel(target.color),
                 alpha: map_channel(target.alpha),
             }).collect(),
@@ -575,9 +571,9 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
                     fs: desc.shaders.get("fs").map(&map_entry_point),
                 },
                 layout_id: desc.layout.get_id(),
-                renderpass_id: desc.renderpass.get_id(),
+                renderpass_id: desc.renderPass.get_id(),
                 subpass: desc.subpass,
-                inner: gpu::pso::GraphicsPipelineDesc {
+                inner: hal::pso::GraphicsPipelineDesc {
                     rasterizer: map_rasterizer(desc.rasterizerState),
                     vertex_buffers: Vec::new(), //TODO
                     attributes: Vec::new(), //TODO
@@ -610,14 +606,14 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         let (sender, receiver) = webgpu_channel().unwrap();
         let msg = WebGpuMsg::CreateSampler {
             gpu_id: self.id,
-            desc: gpu::image::SamplerInfo::new(
+            desc: hal::image::SamplerInfo::new(
                 map_enum!(desc.filter;
-                    self::binding::WebGpuFilterMode => self::gpu::image::FilterMethod {
+                    self::binding::WebGpuFilterMode => self::hal::image::FilterMethod {
                         Scale, Mipmap, Bilinear, Trilinear
                     }
                 ),
                 map_enum!(desc.wrap;
-                    self::binding::WebGpuWrapMode => self::gpu::image::WrapMode {
+                    self::binding::WebGpuWrapMode => self::hal::image::WrapMode {
                         Tile, Mirror, Clamp, Border
                     }
                 ),
@@ -630,40 +626,29 @@ impl binding::WebGpuDeviceMethods for WebGpuDevice {
         WebGpuSampler::new(&self.global(), info)
     }
 
-    fn ViewImageAsRenderTarget(
+    fn CreateImageView(
         &self,
         image: &WebGpuImage,
         format: binding::WebGpuFormat,
-    ) -> Root<WebGpuRenderTargetView> {
+    ) -> Root<WebGpuImageView> {
+        let range = hal::image::SubresourceRange {
+            aspects: hal::image::ASPECT_COLOR, //TODO
+            levels: 0 .. 1,
+            layers: 0 .. 1,
+        };
+
         let (sender, receiver) = webgpu_channel().unwrap();
-        let msg = WebGpuMsg::ViewImageAsRenderTarget {
+        let msg = WebGpuMsg::CreateImageView {
             gpu_id: self.id,
             image_id: image.get_id(),
             format: Self::map_format(format),
+            range,
             result: sender,
         };
         self.sender.send(msg).unwrap();
 
         let info = receiver.recv().unwrap();
-        WebGpuRenderTargetView::new(&self.global(), info)
-    }
-
-    fn ViewImageAsShaderResource(
-        &self,
-        image: &WebGpuImage,
-        format: binding::WebGpuFormat,
-    ) -> Root<WebGpuShaderResourceView> {
-        let (sender, receiver) = webgpu_channel().unwrap();
-        let msg = WebGpuMsg::ViewImageAsShaderResource {
-            gpu_id: self.id,
-            image_id: image.get_id(),
-            format: Self::map_format(format),
-            result: sender,
-        };
-        self.sender.send(msg).unwrap();
-
-        let info = receiver.recv().unwrap();
-        WebGpuShaderResourceView::new(&self.global(), info)
+        WebGpuImageView::new(&self.global(), info)
     }
 
     #[allow(unsafe_code)]

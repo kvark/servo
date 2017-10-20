@@ -6,7 +6,7 @@ use canvas_traits::webgpu::{
     WebGpuCommand, WebGpuCommandChan,
     BufferBarrier, ImageBarrier,
     CommandBufferId, CommandBufferInfo, CommandPoolId, SubmitEpoch, SubmitInfo,
-    gpu,
+    hal,
 };
 use dom::bindings::codegen::Bindings::WebGpuCommandBufferBinding as binding;
 use dom::bindings::codegen::Bindings::WebGpuDeviceBinding::{WebGpuImageLayout, WebGpuPipelineStage};
@@ -20,7 +20,7 @@ use dom::webgpuframebuffer::WebGpuFramebuffer;
 use dom::webgpugraphicspipeline::WebGpuGraphicsPipeline;
 use dom::webgpuimage::WebGpuImage;
 use dom::webgpupipelinelayout::WebGpuPipelineLayout;
-use dom::webgpurenderpass::WebGpuRenderpass;
+use dom::webgpurenderpass::WebGpuRenderPass;
 use dom_struct::dom_struct;
 use std::cell::Cell;
 
@@ -64,19 +64,19 @@ impl WebGpuCommandBuffer {
         }
     }
 
-    fn map_buffer_state(state: binding::WebGpuBufferState) -> gpu::buffer::State {
-        let access = gpu::buffer::Access::from_bits(state.access as _).unwrap();
+    fn map_buffer_state(state: binding::WebGpuBufferState) -> hal::buffer::State {
+        let access = hal::buffer::Access::from_bits(state.access as _).unwrap();
         access
     }
 
-    fn map_image_state(state: binding::WebGpuImageState) -> gpu::image::State {
+    fn map_image_state(state: binding::WebGpuImageState) -> hal::image::State {
         let layout = WebGpuDevice::map_image_layout(state.layout);
-        let access = gpu::image::Access::from_bits(state.access as _).unwrap();
+        let access = hal::image::Access::from_bits(state.access as _).unwrap();
         (access, layout)
     }
 
-    fn map_rect(rect: &binding::WebGpuRectangle) -> gpu::target::Rect {
-        gpu::target::Rect {
+    fn map_rect(rect: &binding::WebGpuRectangle) -> hal::target::Rect {
+        hal::target::Rect {
             x: rect.x,
             y: rect.y,
             w: rect.width,
@@ -84,9 +84,9 @@ impl WebGpuCommandBuffer {
         }
     }
 
-    fn map_clear_value(cv: binding::WebGpuClearValue) -> gpu::command::ClearValue {
+    fn map_clear_value(cv: binding::WebGpuClearValue) -> hal::command::ClearValue {
         use self::binding::WebGpuClearValueKind::*;
-        use self::gpu::command::{ClearColor, ClearDepthStencil, ClearValue};
+        use self::hal::command::{ClearColor, ClearDepthStencil, ClearValue};
         match cv.kind {
             ColorUint => {
                 let data = [*cv.data[0] as u32, *cv.data[1] as u32, *cv.data[2] as u32, *cv.data[3] as u32];
@@ -109,19 +109,22 @@ impl WebGpuCommandBuffer {
         }
     }
 
-    fn map_buffer_image_copy(copy: binding::WebGpuBufferImageCopy) -> gpu::command::BufferImageCopy {
-        gpu::command::BufferImageCopy {
+    fn map_buffer_image_copy(copy: binding::WebGpuBufferImageCopy) -> hal::command::BufferImageCopy {
+        hal::command::BufferImageCopy {
             buffer_offset: copy.bufferOffset as _,
             buffer_row_pitch: copy.bufferRowPitch as _,
             buffer_slice_pitch: copy.bufferSlicePitch as _,
-            image_aspect: gpu::image::ASPECT_COLOR, //TODO
-            image_subresource: (0, 0..1), //TODO
-            image_offset: gpu::command::Offset {
+            image_layers: hal::image::SubresourceLayers {
+                aspects: hal::image::ASPECT_COLOR, //TODO
+                level: 0,
+                layers: 0 .. 1,
+            },
+            image_offset: hal::command::Offset {
                 x: copy.imageOffset.x as _,
                 y: copy.imageOffset.y as _,
                 z: copy.imageOffset.z as _,
             },
-            image_extent: gpu::device::Extent {
+            image_extent: hal::device::Extent {
                 width: copy.imageExtent.width,
                 height: copy.imageExtent.height,
                 depth: copy.imageExtent.depth,
@@ -170,8 +173,8 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
             .collect();
 
         let msg = WebGpuCommand::PipelineBarrier {
-            stages: gpu::pso::PipelineStage::from_bits(src_stages as _).unwrap() ..
-                    gpu::pso::PipelineStage::from_bits(dst_stages as _).unwrap(),
+            stages: hal::pso::PipelineStage::from_bits(src_stages as _).unwrap() ..
+                    hal::pso::PipelineStage::from_bits(dst_stages as _).unwrap(),
             buffer_bars,
             image_bars,
         };
@@ -216,9 +219,9 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
         self.sender.send(msg).unwrap();
     }
 
-    fn BeginRenderpass(
+    fn BeginRenderPass(
         &self,
-        renderpass: &WebGpuRenderpass,
+        render_pass: &WebGpuRenderPass,
         framebuffer: &WebGpuFramebuffer,
         rect: &binding::WebGpuRectangle,
         clearValues: Vec<binding::WebGpuClearValue>,
@@ -228,8 +231,8 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
             .map(Self::map_clear_value)
             .collect();
 
-        let msg = WebGpuCommand::BeginRenderpass {
-            renderpass: renderpass.get_id(),
+        let msg = WebGpuCommand::BeginRenderPass {
+            render_pass: render_pass.get_id(),
             framebuffer: framebuffer.get_id(),
             area: Self::map_rect(rect),
             clear_values,
@@ -237,8 +240,8 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
         self.sender.send(msg).unwrap();
     }
 
-    fn EndRenderpass(&self) {
-        let msg = WebGpuCommand::EndRenderpass;
+    fn EndRenderPass(&self) {
+        let msg = WebGpuCommand::EndRenderPass;
         self.sender.send(msg).unwrap();
     }
 
@@ -279,7 +282,7 @@ impl binding::WebGpuCommandBufferMethods for WebGpuCommandBuffer {
     fn SetViewports(&self, viewports: Vec<binding::WebGpuViewport>) {
         let ports = viewports
             .into_iter()
-            .map(|vp| gpu::Viewport::from_rect(Self::map_rect(&vp.rect), *vp.near, *vp.far))
+            .map(|vp| hal::Viewport::from_rect(Self::map_rect(&vp.rect), *vp.near, *vp.far))
             .collect();
 
         let msg = WebGpuCommand::SetViewports(ports);
