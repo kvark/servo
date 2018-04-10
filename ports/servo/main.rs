@@ -21,12 +21,12 @@
 extern crate android_injected_glue;
 extern crate backtrace;
 #[macro_use] extern crate bitflags;
+extern crate canvas_traits;
 extern crate compositing;
 extern crate euclid;
 #[cfg(target_os = "windows")] extern crate gdi32;
 //extern crate gleam;
 extern crate gfx_backend_vulkan as back;
-extern crate gfx_hal;
 extern crate winit;
 // The window backed by winit
 #[macro_use] extern crate log;
@@ -50,8 +50,8 @@ extern crate webrender_api;
 mod winit_app;
 
 use backtrace::Backtrace;
+use canvas_traits::hal::Instance;
 use compositing::windowing::WindowMethods;
-use gfx_hal::Instance;
 use servo::Servo;
 use servo::compositing::windowing::WindowEvent;
 #[cfg(target_os = "android")]

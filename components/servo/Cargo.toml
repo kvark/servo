@@ -30,7 +30,6 @@ unstable = [
 bluetooth_traits = {path = "../bluetooth_traits"}
 bluetooth = {path = "../bluetooth"}
 canvas = {path = "../canvas"}
-canvas_traits = {path = "../canvas_traits"}
 compositing = {path = "../compositing"}
 constellation = {path = "../constellation"}
 debugger = {path = "../debugger"}
@@ -39,7 +38,6 @@ devtools_traits = {path = "../devtools_traits"}
 env_logger = "0.4"
 euclid = "0.17"
 gfx = {path = "../gfx"}
-gfx-hal = { git = "https://github.com/gfx-rs/gfx.git", rev= "d78bd11" , feature = "serde"}
 gleam = "0.4"
 ipc-channel = "0.9"
 layout_thread = {path = "../layout_thread"}

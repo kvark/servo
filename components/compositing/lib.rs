@@ -6,7 +6,6 @@
 
 extern crate euclid;
 extern crate gfx_traits;
-extern crate gfx_hal;
 extern crate gleam;
 extern crate image;
 extern crate ipc_channel;
@@ -31,6 +30,7 @@ pub use compositor_thread::CompositorProxy;
 pub use compositor::IOCompositor;
 pub use compositor::RenderNotifier;
 pub use compositor::ShutdownState;
+pub use webrender::hal;
 use euclid::TypedSize2D;
 use ipc_channel::ipc::IpcSender;
 use msg::constellation_msg::PipelineId;

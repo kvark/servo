@@ -20,9 +20,15 @@ opt-level = 3
 
 #[patch.crates-io]
 
+[patch."https://github.com/gfx-rs/gfx.git"]
+"gfx-hal" = { path = "../../gfx/src/hal" }
+"gfx-backend-vulkan" = { path = "../../gfx/src/backend/vulkan" }
+
 [patch."https://github.com/servo/webrender"]
-"webrender" = { git = 'https://github.com/szeged/webrender', branch='rebase_upstream' }
-"webrender_api" = { git = 'https://github.com/szeged/webrender', branch='rebase_upstream' }
+"webrender" = { path = "../wr/webrender" }
+"webrender_api" = { path = "../wr/webrender_api" }
+#"webrender" = { git = 'https://github.com/szeged/webrender', branch='rebase_upstream' }
+#"webrender_api" = { git = 'https://github.com/szeged/webrender', branch='rebase_upstream' }
 
 # If you need to temporarily test Servo with a local fork of some upstream
 # crate, add that here. Use the form:

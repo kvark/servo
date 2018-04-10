@@ -8,7 +8,6 @@ use compositor_thread::{CompositorProxy, CompositorReceiver};
 use compositor_thread::{InitialCompositorState, Msg};
 use euclid::{TypedPoint2D, TypedVector2D, TypedScale};
 use gfx_traits::Epoch;
-use gfx_hal;
 use gleam::gl;
 use image::{DynamicImage, ImageFormat, RgbImage};
 use ipc_channel::ipc::{self, IpcSharedMemory};
@@ -34,6 +33,7 @@ use style_traits::viewport::ViewportConstraints;
 use time::{precise_time_ns, precise_time_s};
 use touch::{TouchHandler, TouchAction};
 use webrender;
+use webrender::hal;
 use webrender_api::{self, DeviceUintRect, DeviceUintSize, HitTestFlags, HitTestResult};
 use webrender_api::{LayoutVector2D, ScrollEventPhase, ScrollLocation};
 use windowing::{self, MouseWindowEvent, WebRenderDebugOption, WindowMethods};
@@ -94,7 +94,7 @@ impl FrameTreeId {
 enum LayerPixel {}
 
 /// NB: Never block on the constellation, because sometimes the constellation blocks on us.
-pub struct IOCompositor<Window: WindowMethods, Back: gfx_hal::Backend> {
+pub struct IOCompositor<Window: WindowMethods, Back: hal::Backend> {
     /// The application window.
     pub window: Rc<Window>,
 
@@ -183,9 +183,6 @@ pub struct IOCompositor<Window: WindowMethods, Back: gfx_hal::Backend> {
 
     /// The webrender interface, if enabled.
     webrender_api: webrender_api::RenderApi,
-
-    /*/// GL functions interface (may be GL or GLES)
-    gl: Rc<gl::Gl>,*/
 
     /// Map of the pending paint metrics per layout thread.
     /// The layout thread for each specific pipeline expects the compositor to
@@ -347,7 +344,7 @@ impl webrender_api::RenderNotifier for RenderNotifier {
     }
 }
 
-impl<Window: WindowMethods, Back: gfx_hal::Backend> IOCompositor<Window, Back> {
+impl<Window: WindowMethods, Back: hal::Backend> IOCompositor<Window, Back> {
     fn new(window: Rc<Window>, state: InitialCompositorState<Back>)
            -> IOCompositor<Window, Back> {
         let frame_size = window.framebuffer_size();
@@ -1325,7 +1322,8 @@ impl<Window: WindowMethods, Back: gfx_hal::Backend> IOCompositor<Window, Back> {
             }
         }
 
-        let rv = None; /*match target {
+        let rv = match target {
+            _ if true => None, //TODO
             CompositeTarget::Window => None,
             CompositeTarget::WindowAndPng => {
                 let img = self.draw_img(render_target_info,
@@ -1357,7 +1355,7 @@ impl<Window: WindowMethods, Back: gfx_hal::Backend> IOCompositor<Window, Back> {
                 });
                 None
             }
-        };*/
+        };
 
         // Perform the page flip. This will likely block for a while.
         //self.window.present();
@@ -1373,11 +1371,12 @@ impl<Window: WindowMethods, Back: gfx_hal::Backend> IOCompositor<Window, Back> {
         Ok(rv)
     }
 
-    /*fn draw_img(&self,
+    fn draw_img(&self,
                 render_target_info: RenderTargetInfo,
                 width: usize,
                 height: usize)
                 -> RgbImage {
+        /*
         // For some reason, OSMesa fails to render on the 3rd
         // attempt in headless mode, under some conditions.
         // I think this can only be some kind of synchronization
@@ -1396,6 +1395,8 @@ impl<Window: WindowMethods, Back: gfx_hal::Backend> IOCompositor<Window, Back> {
         self.gl.delete_buffers(&render_target_info.texture_ids);
         self.gl.delete_renderbuffers(&render_target_info.renderbuffer_ids);
         self.gl.delete_framebuffers(&render_target_info.framebuffer_ids);
+        */
+        let mut pixels: Vec<u8> = Vec::new();
 
         // flip image vertically (texture is upside down)
         let orig_pixels = pixels.clone();
@@ -1407,7 +1408,7 @@ impl<Window: WindowMethods, Back: gfx_hal::Backend> IOCompositor<Window, Back> {
             (&mut pixels[dst_start .. dst_start + stride]).clone_from_slice(&src_slice[..stride]);
         }
         RgbImage::from_raw(width as u32, height as u32, pixels).expect("Flipping image failed!")
-    }*/
+    }
 
     fn composite_if_necessary(&mut self, reason: CompositingReason) {
         if self.composition_request == CompositionRequest::NoCompositingNecessary {

@@ -12,6 +12,7 @@ path = "lib.rs"
 [dependencies]
 cssparser = "0.23.0"
 euclid = "0.17"
+gfx-hal = { git = "https://github.com/gfx-rs/gfx.git", rev= "b3d362f", features = ["serde"]}
 ipc-channel = "0.9"
 lazy_static = "1"
 malloc_size_of = { path = "../malloc_size_of" }

@@ -95,6 +95,7 @@ use browsingcontext::{BrowsingContext, SessionHistoryChange, SessionHistoryEntry
 use browsingcontext::{FullyActiveBrowsingContextsIterator, AllBrowsingContextsIterator};
 use canvas::canvas_paint_thread::CanvasPaintThread;
 use canvas::webgl_thread::WebGLThreads;
+use canvas::webgpu_thread::WebGPUThreads;
 use canvas_traits::canvas::CanvasMsg;
 use clipboard::{ClipboardContext, ClipboardProvider};
 use compositing::SendableFrameTree;
@@ -327,6 +328,9 @@ pub struct Constellation<Message, LTF, STF> {
     /// Entry point to create and get channels to a WebGLThread.
     webgl_threads: Option<WebGLThreads>,
 
+    /// Entry point to create and get channels to a WebGPUThread.
+    webgpu_threads: Option<WebGPUThreads>,
+
     /// A channel through which messages can be sent to the webvr thread.
     webvr_chan: Option<IpcSender<WebVRMsg>>,
 }
@@ -371,6 +375,9 @@ pub struct InitialConstellationState {
 
     /// Entry point to create and get channels to a WebGLThread.
     pub webgl_threads: Option<WebGLThreads>,
+
+    /// Entry point to create and get channels to a WebGPUThread.
+    pub webgpu_threads: Option<WebGPUThreads>,
 
     /// A channel to the webgl thread.
     pub webvr_chan: Option<IpcSender<WebVRMsg>>,
@@ -621,6 +628,7 @@ impl<Message, LTF, STF> Constellation<Message, LTF, STF>
                     (rng, prob)
                 }),
                 webgl_threads: state.webgl_threads,
+                webgpu_threads: state.webgpu_threads,
                 webvr_chan: state.webvr_chan,
             };
 
@@ -741,6 +749,7 @@ impl<Message, LTF, STF> Constellation<Message, LTF, STF>
             webrender_document: self.webrender_document,
             is_private,
             webgl_chan: self.webgl_threads.as_ref().map(|threads| threads.pipeline()),
+            webgpu_chan: self.webgpu_threads.as_ref().map(|threads| threads.pipeline()),
             webvr_chan: self.webvr_chan.clone()
         });
 
@@ -1435,6 +1444,13 @@ impl<Message, LTF, STF> Constellation<Message, LTF, STF>
             debug!("Exiting WebGL thread.");
             if let Err(e) = webgl_threads.exit() {
                 warn!("Exit WebGL Thread failed ({})", e);
+            }
+        }
+
+        if let Some(webgpu_threads) = self.webgpu_threads.as_ref() {
+            debug!("Exiting WebGPU thread.");
+            if let Err(e) = webgpu_threads.exit() {
+                warn!("Exit WebGPU Thread failed ({})", e);
             }
         }
 

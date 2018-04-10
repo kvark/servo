@@ -19,6 +19,9 @@ extern crate offscreen_gl_context;
 extern crate servo_config;
 extern crate webrender_api;
 
+pub extern crate gfx_hal as hal;
+
 pub mod canvas;
 pub mod webgl;
+pub mod webgpu;
 mod webgl_channel;

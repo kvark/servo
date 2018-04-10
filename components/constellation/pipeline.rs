@@ -4,6 +4,7 @@
 
 use bluetooth_traits::BluetoothRequest;
 use canvas_traits::webgl::WebGLPipeline;
+use canvas_traits::webgpu::WebGPUPipeline;
 use compositing::CompositionPipeline;
 use compositing::CompositorProxy;
 use compositing::compositor_thread::Msg as CompositorMsg;
@@ -172,6 +173,9 @@ pub struct InitialPipelineState {
 
     /// A channel to the WebGL thread.
     pub webgl_chan: Option<WebGLPipeline>,
+
+    /// A channel to the WebGPU thread.
+    pub webgpu_chan: Option<WebGPUPipeline>,
 
     /// A channel to the webvr thread.
     pub webvr_chan: Option<IpcSender<WebVRMsg>>,

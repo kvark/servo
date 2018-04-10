@@ -7,8 +7,8 @@
 use SendableFrameTree;
 use compositor::CompositingReason;
 use euclid::{Point2D, Size2D};
-use gfx_hal;
 use gfx_traits::Epoch;
+use hal;
 use ipc_channel::ipc::IpcSender;
 use msg::constellation_msg::{Key, KeyModifiers, KeyState, PipelineId, TopLevelBrowsingContextId};
 use net_traits::image::base::Image;
@@ -246,7 +246,7 @@ impl Debug for EmbedderMsg {
 }
 
 /// Data used to construct a compositor.
-pub struct InitialCompositorState<Back: gfx_hal::Backend> {
+pub struct InitialCompositorState<Back: hal::Backend> {
     /// A channel to the compositor.
     pub sender: CompositorProxy,
     /// A port on which messages inbound to the compositor can be received.

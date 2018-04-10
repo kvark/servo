@@ -27,7 +27,6 @@ extern crate log;
 pub extern crate bluetooth;
 pub extern crate bluetooth_traits;
 pub extern crate canvas;
-pub extern crate canvas_traits;
 pub extern crate compositing;
 pub extern crate constellation;
 pub extern crate debugger;
@@ -35,7 +34,6 @@ pub extern crate devtools;
 pub extern crate devtools_traits;
 pub extern crate euclid;
 pub extern crate gfx;
-pub extern crate gfx_hal;
 pub extern crate ipc_channel;
 pub extern crate layout_thread;
 pub extern crate msg;
@@ -72,6 +70,7 @@ use bluetooth::BluetoothThreadFactory;
 use bluetooth_traits::BluetoothRequest;
 use canvas::gl_context::GLContextFactory;
 use canvas::webgl_thread::WebGLThreads;
+use canvas::webgpu_thread::WebGPUThreads;
 use compositing::{IOCompositor, ShutdownState, RenderNotifier};
 use compositing::compositor_thread::{self, CompositorProxy, CompositorReceiver, InitialCompositorState};
 use compositing::compositor_thread::{EmbedderMsg, EmbedderProxy, EmbedderReceiver};
@@ -85,7 +84,6 @@ use env_logger::Logger as EnvLogger;
 #[cfg(all(not(target_os = "windows"), not(target_os = "ios")))]
 use gaol::sandbox::{ChildSandbox, ChildSandboxMethods};
 use gfx::font_cache_thread::FontCacheThread;
-use gfx_hal::Instance;
 use ipc_channel::ipc::{self, IpcSender};
 use log::{Log, LogMetadata, LogRecord};
 use msg::constellation_msg::KeyState;
@@ -107,6 +105,7 @@ use std::sync::mpsc::{Sender, channel};
 use webrender::RendererKind;
 use webvr::{WebVRThread, WebVRCompositorHandler};
 
+pub use compositing::hal;
 pub use gleam::gl;
 pub use servo_config as config;
 pub use servo_url as url;
@@ -123,7 +122,7 @@ pub use msg::constellation_msg::TopLevelBrowsingContextId as BrowserId;
 /// application Servo is embedded in. Clients then create an event
 /// loop to pump messages between the embedding application and
 /// various browser components.
-pub struct Servo<Window: WindowMethods + 'static, Back: gfx_hal::Backend + 'static> {
+pub struct Servo<Window: WindowMethods + 'static, Back: hal::Backend + 'static> {
     compositor: IOCompositor<Window, Back>,
     constellation_chan: Sender<ConstellationMsg>,
     embedder_receiver: EmbedderReceiver,
@@ -131,11 +130,11 @@ pub struct Servo<Window: WindowMethods + 'static, Back: gfx_hal::Backend + 'stat
 
 impl<Window, Back> Servo<Window, Back>
     where Window: WindowMethods + 'static,
-          Back: gfx_hal::Backend + 'static
+          Back: hal::Backend + 'static
 {
     pub fn new(
         window: Rc<Window>,
-        adapter: gfx_hal::Adapter<Back>,
+        adapter: hal::Adapter<Back>,
         surface: &mut Back::Surface,
     ) -> Servo<Window, Back> {
         // Global configuration options, parsed from the command line.
@@ -543,7 +542,7 @@ fn create_compositor_channel(event_loop_waker: Box<compositor_thread::EventLoopW
      })
 }
 
-fn create_constellation<Back: gfx_hal::Backend>(
+fn create_constellation<Back: hal::Backend>(
     user_agent: Cow<'static, str>,
     config_dir: Option<PathBuf>,
     embedder_proxy: EmbedderProxy,
@@ -609,6 +608,10 @@ fn create_constellation<Back: gfx_hal::Backend>(
         webgl_threads
     });
 
+    let (webgpu_threads, _webgpu_namespace) = WebGPUThreads::new::<Back>(
+        webrender_api_sender.clone(),
+    );
+
     let initial_state = InitialConstellationState {
         compositor_proxy,
         embedder_proxy,
@@ -624,6 +627,7 @@ fn create_constellation<Back: gfx_hal::Backend>(
         webrender_document,
         webrender_api_sender,
         webgl_threads,
+        webgpu_threads,
         webvr_chan,
     };
     let (constellation_chan, from_swmanager_sender) =

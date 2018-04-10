@@ -27,10 +27,10 @@ unstable = ["libservo/unstable"]
 [dependencies]
 backtrace = "0.3"
 bitflags = "1.0"
+canvas_traits = {path = "../../components/canvas_traits"}
 compositing = {path = "../../components/compositing"}
 euclid = "0.17"
 gfx-backend-vulkan = { git = "https://github.com/gfx-rs/gfx.git", rev= "d78bd11", features = ["glsl-to-spirv"] }
-gfx-hal = { git = "https://github.com/gfx-rs/gfx.git", rev= "d78bd11" , feature = "serde"}
 #gleam = "0.4"
 winit = "0.10.0"
 libservo = {path = "../../components/servo"}
