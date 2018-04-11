@@ -36,6 +36,7 @@ use canvas_traits::webgl::{WebGLBufferId, WebGLFramebufferId, WebGLProgramId, We
 use canvas_traits::webgl::{WebGLChan, WebGLContextShareMode, WebGLError, WebGLPipeline, WebGLMsgSender};
 use canvas_traits::webgl::{WebGLReceiver, WebGLSender, WebGLShaderId, WebGLTextureId, WebGLVertexArrayId};
 use canvas_traits::webgl::{WebGLSLVersion, WebGLVersion};
+use canvas_traits::webgpu;
 use cssparser::RGBA;
 use devtools_traits::{CSSError, TimelineMarkerType, WorkerId};
 use dom::abstractworker::SharedRt;
@@ -418,6 +419,7 @@ unsafe_no_jsmanaged_fields!(WebVRGamepadHand);
 unsafe_no_jsmanaged_fields!(ScriptToConstellationChan);
 unsafe_no_jsmanaged_fields!(InteractiveMetrics);
 unsafe_no_jsmanaged_fields!(InteractiveWindow);
+unsafe_no_jsmanaged_fields!(webgpu::Key);
 
 unsafe impl<'a> JSTraceable for &'a str {
     #[inline]

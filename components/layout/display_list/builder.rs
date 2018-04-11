@@ -1792,6 +1792,7 @@ impl FragmentDisplayListBuilding for Fragment {
 
                 let (image_key, format) = match canvas_fragment_info.source {
                     CanvasFragmentSource::WebGL(image_key) => (image_key, PixelFormat::BGRA8),
+                    CanvasFragmentSource::WebGPU(image_key) => (image_key, PixelFormat::BGRA8),
                     CanvasFragmentSource::Image(ref ipc_renderer) => match *ipc_renderer {
                         Some(ref ipc_renderer) => {
                             let ipc_renderer = ipc_renderer.lock().unwrap();

@@ -21,11 +21,13 @@ pub fn webgpu_channel<T: Serialize + for<'de> Deserialize<'de>>(
 }
 
 pub type Epoch = u32;
-#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, MallocSizeOf, Deserialize, Serialize)]
 pub struct Key {
     pub index: u32,
     pub epoch: u32,
 }
+
+pub type SwapchainId = Key;
 
 /// WebGpu Message API
 #[derive(Debug, Deserialize, Serialize)]

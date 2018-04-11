@@ -126,6 +126,7 @@ pub enum LayoutElementType {
 
 pub enum HTMLCanvasDataSource {
     WebGL(webrender_api::ImageKey),
+    WebGPU(webrender_api::ImageKey),
     Image(Option<IpcSender<CanvasMsg>>)
 }
 
