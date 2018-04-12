@@ -6,25 +6,24 @@
 
 use canvas_traits::webgpu as w;
 use dom::bindings::reflector::Reflector;
-use dom::bindings::root::LayoutDom;
 use dom_struct::dom_struct;
 
 
 #[dom_struct]
-pub struct WebGPUSwapChain {
+pub struct WebGPUDevice {
     reflector_: Reflector,
-    id: w::SwapchainId,
+    id: w::DeviceId,
     #[ignore_malloc_size_of = "Defined in ipc-channel"]
     sender: w::WebGPUMainChan,
 }
 
-impl WebGPUSwapChain {
-    pub fn id(&self) -> w::SwapchainId {
+impl WebGPUDevice {
+    pub fn id(&self) -> w::DeviceId {
         self.id
     }
 }
 
-impl Drop for WebGPUSwapChain {
+impl Drop for WebGPUDevice {
     fn drop(&mut self) {
         //TODO
     }

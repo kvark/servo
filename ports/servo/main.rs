@@ -32,7 +32,7 @@ extern crate winit;
 #[macro_use] extern crate log;
 extern crate msg;
 extern crate net_traits;
-#[cfg(any(target_os = "linux", target_os = "macos"))] extern crate osmesa_sys;
+//#[cfg(any(target_os = "linux", target_os = "macos"))] extern crate osmesa_sys;
 extern crate script_traits;
 extern crate servo;
 extern crate servo_config;

@@ -19,8 +19,8 @@ use msg::constellation_msg::{self, Key, TopLevelBrowsingContextId as BrowserId};
 use msg::constellation_msg::{KeyModifiers, KeyState, TraversalDirection};
 use net_traits::net_error_list::NetError;
 use net_traits::pub_domains::is_reg_domain;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-use osmesa_sys;
+//#[cfg(any(target_os = "linux", target_os = "macos"))]
+//use osmesa_sys;
 use script_traits::{LoadData, TouchEventType};
 use servo::ipc_channel::ipc::IpcSender;
 use servo_config::opts;
@@ -28,10 +28,12 @@ use servo_config::prefs::PREFS;
 use servo_geometry::DeviceIndependentPixel;
 use servo_url::ServoUrl;
 use std::cell::{Cell, RefCell};
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-use std::ffi::CString;
+//#[cfg(any(target_os = "linux", target_os = "macos"))]
+//use std::ffi::CString;
 use std::mem;
+#[cfg(target_os = "windows")]
 use std::os::raw::c_void;
+#[cfg(target_os = "windows")]
 use std::ptr;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -74,9 +76,9 @@ const CMD_OR_ALT: KeyModifiers = KeyModifiers::ALT;
 // This should vary by zoom level and maybe actual text size (focused or under cursor)
 const LINE_HEIGHT: f32 = 38.0;
 
-const MULTISAMPLES: u16 = 16;
+//const MULTISAMPLES: u16 = 16;
 
-#[cfg(target_os = "macos")]
+/*#[cfg(target_os = "macos")]
 fn builder_with_platform_options(mut builder: winit::WindowBuilder) -> winit::WindowBuilder {
     if opts::get().headless || opts::get().output_file.is_some() {
         // Prevent the window from showing in Dock.app, stealing focus,
@@ -90,7 +92,7 @@ fn builder_with_platform_options(mut builder: winit::WindowBuilder) -> winit::Wi
 #[cfg(not(target_os = "macos"))]
 fn builder_with_platform_options(builder: winit::WindowBuilder) -> winit::WindowBuilder {
     builder
-}
+}*/
 
 /*#[cfg(any(target_os = "linux", target_os = "macos"))]
 struct HeadlessContext {
@@ -161,9 +163,9 @@ impl HeadlessContext {
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]*/
-    fn get_proc_address(_: &str) -> *const c_void {
-        ptr::null() as *const _
-    }
+    //fn get_proc_address(_: &str) -> *const c_void {
+    //    ptr::null() as *const _
+    //}
 }
 
 enum WindowKind {
@@ -255,8 +257,6 @@ impl Window {
             /*if opts::get().use_msaa {
                 context_builder = context_builder.with_multisampling(MULTISAMPLES)
             }*/
-
-            let mut events_loop = winit::EventsLoop::new();
 
             let winit_window = window_builder.build(&events_loop).expect("Failed to create window.");
 

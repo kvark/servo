@@ -26,7 +26,7 @@ use dom::node::{Node, window_from_node};
 use dom::virtualmethods::VirtualMethods;
 use dom::webgl2renderingcontext::WebGL2RenderingContext;
 use dom::webglrenderingcontext::{LayoutCanvasWebGLRenderingContextHelpers, WebGLRenderingContext};
-use dom::webgpuswapchain::{LayoutCanvasWebGPUSwapchainHelpers, WebGPUSwapchain};
+use dom::webgpucanvascontext::{LayoutCanvasWebGPUCanvasContextHelpers, WebGPUCanvasContext};
 use dom_struct::dom_struct;
 use euclid::Size2D;
 use html5ever::{LocalName, Prefix};
@@ -50,7 +50,7 @@ pub enum CanvasContext {
     Context2d(Dom<CanvasRenderingContext2D>),
     WebGL(Dom<WebGLRenderingContext>),
     WebGL2(Dom<WebGL2RenderingContext>),
-    WebGPU(Dom<WebGPUSwapchain>),
+    WebGPU(Dom<WebGPUCanvasContext>),
 }
 
 #[dom_struct]
@@ -85,7 +85,7 @@ impl HTMLCanvasElement {
                 CanvasContext::Context2d(ref context) => context.set_bitmap_dimensions(size),
                 CanvasContext::WebGL(ref context) => context.recreate(size),
                 CanvasContext::WebGL2(ref context) => context.recreate(size),
-                CanvasContext::WebGPU(ref swapchain) => swapchain.recreate(size),
+                CanvasContext::WebGPU(ref context) => context.recreate(size),
             }
         }
     }
@@ -123,8 +123,8 @@ impl LayoutHTMLCanvasElementHelpers for LayoutDom<HTMLCanvasElement> {
                 Some(&CanvasContext::WebGL2(ref context)) => {
                     context.to_layout().canvas_data_source()
                 }
-                Some(&CanvasContext::WebGPU(ref swapchain)) => {
-                    swapchain.to_layout().canvas_data_source()
+                Some(&CanvasContext::WebGPU(ref context)) => {
+                    context.to_layout().canvas_data_source()
                 }
                 None => {
                     HTMLCanvasDataSource::Image(None)

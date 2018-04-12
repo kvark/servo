@@ -3,7 +3,12 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 // https://html.spec.whatwg.org/multipage/#htmlcanvaselement
-typedef (CanvasRenderingContext2D or WebGLRenderingContext or WebGL2RenderingContext) RenderingContext;
+typedef (
+  CanvasRenderingContext2D or
+  WebGLRenderingContext or
+  WebGL2RenderingContext or
+  WebGPUCanvasContext
+) RenderingContext;
 
 [HTMLConstructor]
 interface HTMLCanvasElement : HTMLElement {

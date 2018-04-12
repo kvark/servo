@@ -5,6 +5,5 @@
 // WebGPU IDL definitions scraped from the WebGPU sketch:
 //
 
-[Exposed=Window]
-interface WebGPUSwapchain {
+interface WebGPUSwapChain {
 };

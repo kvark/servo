@@ -2,11 +2,11 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use hal;
+//use hal;
 use ipc_channel;
 use serde::{Deserialize, Serialize};
 use std::io;
-use std::ops::Range;
+//use std::ops::Range;
 use euclid::Size2D;
 use webrender_api;
 
@@ -28,6 +28,7 @@ pub struct Key {
 }
 
 pub type SwapchainId = Key;
+pub type DeviceId = Key;
 
 /// WebGpu Message API
 #[derive(Debug, Deserialize, Serialize)]
