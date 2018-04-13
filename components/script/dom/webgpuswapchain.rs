@@ -5,8 +5,10 @@
 //TODO: URL here
 
 use canvas_traits::webgpu as w;
-use dom::bindings::reflector::Reflector;
-use dom::bindings::root::LayoutDom;
+use dom::bindings::codegen::Bindings::WebGPUSwapChainBinding as binding;
+use dom::bindings::reflector::{Reflector, reflect_dom_object};
+use dom::bindings::root::DomRoot;
+use dom::window::Window;
 use dom_struct::dom_struct;
 
 
@@ -19,6 +21,23 @@ pub struct WebGPUSwapChain {
 }
 
 impl WebGPUSwapChain {
+    #[allow(unrooted_must_root)]
+    pub fn new_internal(id: w::SwapchainId, sender: w::WebGPUMainChan) -> Self {
+        WebGPUSwapChain {
+            reflector_: Reflector::new(),
+            id,
+            sender,
+        }
+    }
+
+    #[allow(unrooted_must_root)]
+    pub fn new(
+        window: &Window, id: w::SwapchainId, sender: w::WebGPUMainChan,
+    ) -> DomRoot<Self> {
+        let object = Self::new_internal(id, sender);
+        reflect_dom_object(Box::new(object), window, binding::Wrap)
+    }
+
     pub fn id(&self) -> w::SwapchainId {
         self.id
     }

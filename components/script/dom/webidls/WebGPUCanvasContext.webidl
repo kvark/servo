@@ -7,4 +7,5 @@
 
 [Exposed=Window]
 interface WebGPUCanvasContext: WebGPUSwapChain {
+	WebGPU getInstance(); //TEMP!
 };

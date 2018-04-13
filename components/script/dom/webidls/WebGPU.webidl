@@ -30,7 +30,7 @@ dictionary WebGPUDeviceDescriptor {
 
 // WebGPU "namespace" used for device creation
 interface WebGPU {
-    static WebGPU instance();
+    //static WebGPU instance();
 
     WebGPUExtensions getExtensions();
     WebGPUFeatures getFeatures();

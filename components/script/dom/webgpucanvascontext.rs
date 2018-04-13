@@ -4,12 +4,14 @@
 
 //TODO: URL here
 
-//use canvas_traits::webgpu as w;
+use canvas_traits::webgpu as w;
+use dom::bindings::codegen::Bindings::WebGPUCanvasContextBinding as binding;
 use dom::bindings::reflector::reflect_dom_object;
 use dom::bindings::root::{DomRoot, LayoutDom};
 use dom::htmlcanvaselement::HTMLCanvasElement;
 use dom::window::Window;
 use dom_struct::dom_struct;
+use dom::webgpu::WebGPU;
 use dom::webgpuswapchain::WebGPUSwapChain;
 use script_layout_interface::HTMLCanvasDataSource;
 
@@ -20,6 +22,7 @@ use webrender_api;
 #[dom_struct]
 pub struct WebGPUCanvasContext {
     swap_chain: WebGPUSwapChain,
+    instance: DomRoot<WebGPU>,
     #[ignore_malloc_size_of = "Defined in webrender"]
     wr_image: webrender_api::ImageKey,
 }
@@ -27,61 +30,41 @@ pub struct WebGPUCanvasContext {
 impl WebGPUCanvasContext {
     #[allow(unrooted_must_root)]
     pub fn new(
-        _window: &Window,
+        window: &Window,
         _canvas: &HTMLCanvasElement,
-        _size: Size2D<i32>,
+        size: Size2D<i32>,
     ) -> Option<DomRoot<WebGPUCanvasContext>> {
-        /*let swap_chain = WebGPUSwapChain::new();
-
-        let webgpu_chan =
-        let webgl_chan = match window.webgl_chan() {
+        let webgpu_chan = match window.webgpu_chan() {
             Some(chan) => chan,
-            None => return Err("WebGL initialization failed early on".into()),
+            None => {
+                error!("WebGPU initialization failed early on");
+                return None
+            }
         };
 
-        let (sender, receiver) = webgl_channel().unwrap();
-        webgl_chan.send(WebGLMsg::CreateContext(webgl_version, size, attrs, sender))
-                  .unwrap();
-        let result = receiver.recv().unwrap();
+        let (sender, receiver) = w::webgpu_channel().unwrap();
+        let msg = w::WebGPUMsg::CreateContext {
+            size: size.to_u32(),
+            result: sender,
+        };
+        webgpu_chan.send(msg).unwrap();
+        let data = match receiver.recv().unwrap() {
+            Ok(data) => data,
+            Err(e) => {
+                error!("WebGPU server error");
+                return None
+            }
+        };
 
-        result.map(|ctx_data| {
-            WebGLRenderingContext {
-                reflector_: Reflector::new(),
-                webgl_sender: ctx_data.sender,
-                webrender_image: Cell::new(None),
-                share_mode: ctx_data.share_mode,
-                webgl_version,
-                glsl_version: ctx_data.glsl_version,
-                limits: ctx_data.limits,
-                canvas: Dom::from_ref(canvas),
-                last_error: Cell::new(None),
-                texture_unpacking_settings: Cell::new(TextureUnpacking::CONVERT_COLORSPACE),
-                texture_unpacking_alignment: Cell::new(4),
-                bound_framebuffer: MutNullableDom::new(None),
-                bound_textures: DomRefCell::new(Default::default()),
-                bound_texture_unit: Cell::new(constants::TEXTURE0),
-                bound_buffer_array: MutNullableDom::new(None),
-                bound_buffer_element_array: MutNullableDom::new(None),
-                bound_attrib_buffers: DomRefCell::new(Default::default()),
-                bound_renderbuffer: MutNullableDom::new(None),
-                current_program: MutNullableDom::new(None),
-                current_vertex_attrib_0: Cell::new((0f32, 0f32, 0f32, 1f32)),
-                current_scissor: Cell::new((0, 0, size.width, size.height)),
-                current_clear_color: Cell::new((0.0, 0.0, 0.0, 0.0)),
-                extension_manager: WebGLExtensions::new(webgl_version)
-            }
-        })
-
-        match receiver.recv().unwrap() {
-            Ok(ctx_data) => {
-                Some(reflect_dom_object(Box::new(ctx), window, binding::Wrap))
-            }
-            Err(msg) => {
-                error!("Couldn't create WebGPUCanvasContext: {}", msg);
-                None
-            }
-        }*/
-        None //TODO
+        let object = WebGPUCanvasContext {
+            swap_chain: WebGPUSwapChain::new_internal(
+                data.swapchain,
+                webgpu_chan.clone(),
+            ),
+            instance: WebGPU::new(window, data.info, webgpu_chan),
+            wr_image: data.image_key,
+        };
+        Some(reflect_dom_object(Box::new(object), window, binding::Wrap))
     }
 
     pub fn recreate(&self, _size: Size2D<i32>) {
@@ -90,6 +73,12 @@ impl WebGPUCanvasContext {
 
     fn layout_handle(&self) -> webrender_api::ImageKey {
         self.wr_image
+    }
+}
+
+impl WebGPUCanvasContext {
+    pub fn GetInstance(&self) -> DomRoot<WebGPU> {
+        self.instance.clone()
     }
 }
 

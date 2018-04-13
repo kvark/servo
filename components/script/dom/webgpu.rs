@@ -6,7 +6,7 @@
 
 use canvas_traits::webgpu as w;
 use dom::bindings::codegen::Bindings::WebGPUBinding as binding;
-use dom::bindings::reflector::Reflector;
+use dom::bindings::reflector::{Reflector, reflect_dom_object};
 use dom::bindings::root::DomRoot;
 use dom::window::Window;
 use dom::webgpudevice::WebGPUDevice;
@@ -17,14 +17,30 @@ use dom_struct::dom_struct;
 #[dom_struct]
 pub struct WebGPU {
     reflector_: Reflector,
+    _info: w::InstanceInfo,
     #[ignore_malloc_size_of = "Defined in ipc-channel"]
     sender: w::WebGPUMainChan,
 }
 
 impl WebGPU {
+    #[allow(unrooted_must_root)]
+    pub fn new(
+        window: &Window, info: w::InstanceInfo, sender: w::WebGPUMainChan
+    ) -> DomRoot<Self> {
+        let object = WebGPU {
+            reflector_: Reflector::new(),
+            _info: info,
+            sender,
+        };
+        reflect_dom_object(Box::new(object), window, binding::Wrap)
+    }
+}
+
+impl WebGPU {
+    /*
     pub fn Instance(_win: &DomRoot<Window>) -> DomRoot<Self> {
         unimplemented!()
-    }
+    }*/
 
     pub fn GetExtensions(&self) -> binding::WebGPUExtensions {
         binding::WebGPUExtensions {

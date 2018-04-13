@@ -2,12 +2,13 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-//use hal;
+use hal;
 use ipc_channel;
 use serde::{Deserialize, Serialize};
 use std::io;
 //use std::ops::Range;
 use euclid::Size2D;
+use malloc_size_of::{MallocSizeOf, MallocSizeOfOps};
 use webrender_api;
 
 
@@ -30,14 +31,41 @@ pub struct Key {
 pub type SwapchainId = Key;
 pub type DeviceId = Key;
 
-/// WebGpu Message API
+#[derive(Serialize, Deserialize, Debug)]
+pub struct InstanceInfo {
+    /// Selected adapter info.
+    pub adapter_info: hal::AdapterInfo,
+    /// Supported features.
+    pub features: hal::Features,
+    /// Supported limits.
+    pub limits: hal::Limits,
+}
+
+impl MallocSizeOf for InstanceInfo {
+    fn size_of(&self, ops: &mut MallocSizeOfOps) -> usize {
+        self.adapter_info.name.size_of(ops)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ContextInfo {
+    /// Instance info.
+    pub info: InstanceInfo,
+    /// Swapchain identifier.
+    pub swapchain: SwapchainId,
+    /// An image key for the currently presenting frame.
+    pub image_key: webrender_api::ImageKey,
+}
+
+
+/// WebGPU Message API
 #[derive(Debug, Deserialize, Serialize)]
 pub enum WebGPUMsg {
     /// Creates a new WebGPU context instance.
     CreateContext {
         size: Size2D<u32>,
         //external_image_id: webrender_api::ExternalImageId,
-        //result: WebGpuSender<Result<ContextInfo, String>>,
+        result: WebGPUSender<Result<ContextInfo, String>>,
     },
     Exit,
 }
