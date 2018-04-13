@@ -40,6 +40,7 @@ pub mod webdriver_msg;
 
 use bluetooth_traits::BluetoothRequest;
 use canvas_traits::webgl::WebGLPipeline;
+use canvas_traits::webgpu::WebGPUPipeline;
 use devtools_traits::{DevtoolScriptControlMsg, ScriptToDevtoolsControlMsg, WorkerId};
 use euclid::{Size2D, Length, Point2D, Vector2D, Rect, TypedScale, TypedSize2D};
 use gfx_traits::Epoch;
@@ -541,6 +542,8 @@ pub struct InitialScriptState {
     pub content_process_shutdown_chan: IpcSender<()>,
     /// A channel to the WebGL thread used in this pipeline.
     pub webgl_chan: Option<WebGLPipeline>,
+    /// A channel to the WebGL thread used in this pipeline.
+    pub webgpu_chan: Option<WebGPUPipeline>,
     /// A channel to the webvr thread, if available.
     pub webvr_chan: Option<IpcSender<WebVRMsg>>,
     /// The Webrender document ID associated with this thread.

@@ -14,7 +14,7 @@ use script_traits::{LoadData, MouseButton, TouchEventType, TouchId};
 use servo_geometry::DeviceIndependentPixel;
 use servo_url::ServoUrl;
 use std::fmt::{Debug, Error, Formatter};
-use std::rc::Rc;
+//use std::rc::Rc;
 use style_traits::DevicePixel;
 use style_traits::cursor::CursorKind;
 use webrender_api::{DeviceUintSize, DeviceUintRect, ScrollLocation};

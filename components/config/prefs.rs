@@ -277,4 +277,8 @@ impl Preferences {
     pub fn is_webgl2_enabled(&self) -> bool {
         self.get("dom.webgl2.enabled").as_boolean().unwrap_or(false)
     }
+
+    pub fn is_webgpu_enabled(&self) -> bool {
+        self.get("dom.webgpu.enabled").as_boolean().unwrap_or(false)
+    }
 }

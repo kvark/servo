@@ -6,6 +6,7 @@ use app_units::Au;
 use base64;
 use bluetooth_traits::BluetoothRequest;
 use canvas_traits::webgl::WebGLChan;
+use canvas_traits::webgpu::WebGPUMainChan;
 use cssparser::{Parser, ParserInput};
 use devtools_traits::{ScriptToDevtoolsControlMsg, TimelineMarker, TimelineMarkerType};
 use dom::bindings::cell::DomRefCell;
@@ -261,6 +262,10 @@ pub struct Window {
     #[ignore_malloc_size_of = "channels are hard"]
     webgl_chan: Option<WebGLChan>,
 
+    /// A handle for communicating messages to the WebGPU thread, if available.
+    #[ignore_malloc_size_of = "channels are hard"]
+    webgpu_chan: Option<WebGPUMainChan>,
+
     /// A handle for communicating messages to the webvr thread, if available.
     #[ignore_malloc_size_of = "channels are hard"]
     webvr_chan: Option<IpcSender<WebVRMsg>>,
@@ -404,6 +409,10 @@ impl Window {
 
     pub fn webgl_chan(&self) -> Option<WebGLChan> {
         self.webgl_chan.clone()
+    }
+
+    pub fn webgpu_chan(&self) -> Option<WebGPUMainChan> {
+        self.webgpu_chan.clone()
     }
 
     pub fn webvr_thread(&self) -> Option<IpcSender<WebVRMsg>> {
@@ -1757,6 +1766,7 @@ impl Window {
         navigation_start: u64,
         navigation_start_precise: u64,
         webgl_chan: Option<WebGLChan>,
+        webgpu_chan: Option<WebGPUMainChan>,
         webvr_chan: Option<IpcSender<WebVRMsg>>,
         microtask_queue: Rc<MicrotaskQueue>,
         webrender_document: DocumentId,
@@ -1828,6 +1838,7 @@ impl Window {
             media_query_lists: WeakMediaQueryListVec::new(),
             test_runner: Default::default(),
             webgl_chan,
+            webgpu_chan,
             webvr_chan,
             permission_state_invocation_results: Default::default(),
             pending_layout_images: Default::default(),

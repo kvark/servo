@@ -223,6 +223,30 @@ impl HTMLCanvasElement {
         }
     }
 
+    pub fn get_or_init_webgpu_context(
+        &self,
+        cx: *mut JSContext,
+        _attrs: Option<HandleValue>
+    ) -> Option<DomRoot<WebGPUCanvasContext>> {
+        if !PREFS.is_webgpu_enabled() {
+            return None
+        }
+        if self.context.borrow().is_none() {
+            let window = window_from_node(self);
+            let size = self.get_size();
+            //let attrs = Self::get_gpu_attributes(cx, attrs)?;
+            let maybe_ctx = WebGPUCanvasContext::new(&window, self, size);
+
+            *self.context.borrow_mut() = maybe_ctx.map( |ctx| CanvasContext::WebGPU(Dom::from_ref(&*ctx)));
+        }
+
+        if let Some(CanvasContext::WebGPU(ref context)) = *self.context.borrow() {
+            Some(DomRoot::from_ref(&*context))
+        } else {
+            None
+        }
+    }
+
     /// Gets the base WebGLRenderingContext for WebGL or WebGL 2, if exists.
     pub fn get_base_webgl_context(&self) -> Option<DomRoot<WebGLRenderingContext>> {
         match *self.context.borrow() {
@@ -323,6 +347,10 @@ impl HTMLCanvasElementMethods for HTMLCanvasElement {
             "webgl2" | "experimental-webgl2" => {
                 self.get_or_init_webgl2_context(cx, attributes.get(0).cloned())
                     .map(RenderingContext::WebGL2RenderingContext)
+            }
+            "experimental-webgpu" => {
+                self.get_or_init_webgpu_context(cx, attributes.get(0).cloned())
+                    .map(RenderingContext::WebGPUCanvasContext)
             }
             _ => None
         }
