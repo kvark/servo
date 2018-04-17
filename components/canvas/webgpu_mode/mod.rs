@@ -5,7 +5,9 @@
 mod inprocess;
 mod lazyvec;
 mod resource;
+mod swapchain;
 
 pub use self::inprocess::WebGPUThreads;
 pub use self::lazyvec::LazyVec;
 pub use self::resource::ResourceHub;
+pub use self::swapchain::Swapchain;

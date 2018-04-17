@@ -9,32 +9,17 @@ typedef boolean wg_bool;
 typedef unsigned long wg_u32;
 
 
-dictionary WebGPUExtensions {
-    required wg_bool anisotropicFiltering;
-};
-
-dictionary WebGPUFeatures {
-    required wg_bool logicOp;
-};
-
-dictionary WebGPULimits {
-    required wg_u32 maxBindGroups;
-};
-
 dictionary WebGPUDeviceDescriptor {
     required WebGPUExtensions extensions;
-    required WebGPULimits limits;
     required WebGPUFeatures features;
+    required WebGPULimits limits;
     // TODO are other things configurable like queues?
 };
 
 // WebGPU "namespace" used for device creation
+[Exposed=Window]
 interface WebGPU {
-    //static WebGPU instance();
-
-    WebGPUExtensions getExtensions();
-    WebGPUFeatures getFeatures();
-    WebGPULimits getLimits();
+    [NewObject] static WebGPU instance();
 
     WebGPUDevice createDevice(WebGPUDeviceDescriptor descriptor);
 };

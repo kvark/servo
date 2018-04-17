@@ -3,22 +3,17 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use canvas_traits::{hal, webgpu as w};
-/*use webgpu::hal::{self,
-    Adapter, DescriptorPool, Device, Instance, QueueFamily,
-    RawCommandBuffer, RawCommandPool, RawCommandQueue,
-};*/
+use canvas_traits::hal::PhysicalDevice;
 
 use std::thread;
-//use std::cmp::Ordering;
-//use std::collections::HashMap;
 use std::sync::{Arc};
 
-use webgpu_mode::{LazyVec, ResourceHub};
+use webgpu_mode::{LazyVec, ResourceHub, Swapchain};
 /// WebGL Threading API entry point that lives in the constellation.
 /// It allows to get a WebGPUThread handle for each script pipeline.
 pub use webgpu_mode::WebGPUThreads;
 
-//use euclid::Size2D;
+use euclid::Size2D;
 use webrender_api as wrapi;
 
 
@@ -28,7 +23,9 @@ pub struct WebGPUThread<B: hal::Backend> {
     //present_chan: w::WebGPUPresentChan,
     //adapters: Vec<B::Adapter>,
     //memories: LazyVec<Memory<B>>,
+    adapter: hal::Adapter<B>,
     rehub: Arc<ResourceHub<B>>,
+    swapchains: LazyVec<Swapchain<B>>,
     //command_pools: LazyVec<CommandPoolHandle<B>>,
 }
 
@@ -38,11 +35,12 @@ impl<B: hal::Backend> WebGPUThread<B> {
     pub fn start(
         webrender_api_sender: wrapi::RenderApiSender,
         //present_chan: w::WebGPUPresentChan,
+        adapter: hal::Adapter<B>,
         rehub: Arc<ResourceHub<B>>,
-    ) -> (w::WebGPUSender<w::WebGPUMsg>, wrapi::IdNamespace) {
+    ) -> (w::WebGPUSender<w::Message>, wrapi::IdNamespace) {
         let webrender_api = webrender_api_sender.create_api();
         let namespace = webrender_api.get_namespace_id();
-        let (sender, receiver) = w::webgpu_channel::<w::WebGPUMsg>().unwrap();
+        let (sender, receiver) = w::webgpu_channel::<w::Message>().unwrap();
         let result = sender.clone();
         thread::Builder::new().name("WebGPUThread".to_owned()).spawn(move || {
             //let instance = backend::Instance::create("Servo", 1);
@@ -51,7 +49,9 @@ impl<B: hal::Backend> WebGPUThread<B> {
                 //present_chan,
                 //adapters: instance.enumerate_adapters(),
                 //memories: LazyVec::new(),
+                adapter,
                 rehub,
+                swapchains: LazyVec::new(),
             };
             let webgpu_chan = sender;
             loop {
@@ -67,26 +67,58 @@ impl<B: hal::Backend> WebGPUThread<B> {
         (result, namespace)
     }
 
-    /// Handles a generic WebGPUMsg message
-    fn handle_msg(&mut self, msg: w::WebGPUMsg, webgpu_chan: &w::WebGPUMainChan) -> bool {
+    /// Handles a generic Message message
+    fn handle_msg(&mut self, msg: w::Message, _webgpu_chan: &w::WebGPUMainChan) -> bool {
         debug!("got message {:?}", msg);
         match msg {
-            w::WebGPUMsg::CreateContext { .. } => {
-                /*let info = self
-                    .create_context(size, external_image_id)
-                    .map(|(presenter, adapters, image_key)| w::ContextInfo {
-                        presenter,
-                        adapters,
-                        sender: webgpu_chan.clone(),
-                        image_key,
-                    });
-                result.send(info).unwrap();*/
+            w::Message::Init { result } => {
+                let info = self.init();
+                result.send(info).unwrap();
             }
-            w::WebGPUMsg::Exit => {
+            w::Message::CreateDevice { result } => {
+                let info = self.create_device();
+                result.send(info).unwrap();
+            }
+            w::Message::CreateSwapChain { device, size, result } => {
+                let info = self.create_swapchain(device, size);
+                result.send(info).unwrap();
+            }
+            w::Message::Exit => {
                 return true;
             }
         }
-
         false
+    }
+
+    fn init(&mut self) -> Result<w::InstanceInfo, String> {
+        Ok(w::InstanceInfo {
+            adapter_info: self.adapter.info.clone(),
+            features: self.adapter.physical_device.features(),
+            limits: self.adapter.physical_device.limits(),
+        })
+    }
+
+    fn create_device(&mut self) -> Result<w::DeviceInfo, String> {
+        let families = vec![(&self.adapter.queue_families[0], vec![1.0])];
+        let gpu = self.adapter.physical_device
+            .open(families)
+            .map_err(|e| e.to_string())?;
+        let id = self.rehub.gpus.write().unwrap().push(gpu);
+        Ok(w::DeviceInfo {
+            id,
+        })
+    }
+
+    fn create_swapchain(
+        &mut self, device: w::DeviceId, size: Size2D<u32>
+    ) -> Result<w::SwapChainInfo, String> {
+        let image_key = self.webrender_api.generate_image_key();
+        let dev = &self.rehub.gpus.read().unwrap()[device].device;
+        let swapchain = Swapchain::new(dev, size);
+        let id = self.swapchains.push(swapchain);
+        Ok(w::SwapChainInfo {
+            id,
+            image_key,
+        })
     }
 }

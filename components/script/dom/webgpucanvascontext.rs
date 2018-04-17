@@ -9,9 +9,9 @@ use dom::bindings::codegen::Bindings::WebGPUCanvasContextBinding as binding;
 use dom::bindings::reflector::reflect_dom_object;
 use dom::bindings::root::{DomRoot, LayoutDom};
 use dom::htmlcanvaselement::HTMLCanvasElement;
+use dom::webgpudevice::WebGPUDevice;
 use dom::window::Window;
 use dom_struct::dom_struct;
-use dom::webgpu::WebGPU;
 use dom::webgpuswapchain::WebGPUSwapChain;
 use script_layout_interface::HTMLCanvasDataSource;
 
@@ -22,7 +22,6 @@ use webrender_api;
 #[dom_struct]
 pub struct WebGPUCanvasContext {
     swap_chain: WebGPUSwapChain,
-    instance: DomRoot<WebGPU>,
     #[ignore_malloc_size_of = "Defined in webrender"]
     wr_image: webrender_api::ImageKey,
 }
@@ -33,6 +32,7 @@ impl WebGPUCanvasContext {
         window: &Window,
         _canvas: &HTMLCanvasElement,
         size: Size2D<i32>,
+        device: &WebGPUDevice,
     ) -> Option<DomRoot<WebGPUCanvasContext>> {
         let webgpu_chan = match window.webgpu_chan() {
             Some(chan) => chan,
@@ -43,7 +43,8 @@ impl WebGPUCanvasContext {
         };
 
         let (sender, receiver) = w::webgpu_channel().unwrap();
-        let msg = w::WebGPUMsg::CreateContext {
+        let msg = w::Message::CreateSwapChain {
+            device: device.id(),
             size: size.to_u32(),
             result: sender,
         };
@@ -51,17 +52,16 @@ impl WebGPUCanvasContext {
         let data = match receiver.recv().unwrap() {
             Ok(data) => data,
             Err(e) => {
-                error!("WebGPU server error");
+                error!("WebGPU server error, no response for CreateSwapChain");
                 return None
             }
         };
 
         let object = WebGPUCanvasContext {
             swap_chain: WebGPUSwapChain::new_internal(
-                data.swapchain,
+                data.id,
                 webgpu_chan.clone(),
             ),
-            instance: WebGPU::new(window, data.info, webgpu_chan),
             wr_image: data.image_key,
         };
         Some(reflect_dom_object(Box::new(object), window, binding::Wrap))
@@ -73,12 +73,6 @@ impl WebGPUCanvasContext {
 
     fn layout_handle(&self) -> webrender_api::ImageKey {
         self.wr_image
-    }
-}
-
-impl WebGPUCanvasContext {
-    pub fn GetInstance(&self) -> DomRoot<WebGPU> {
-        self.instance.clone()
     }
 }
 

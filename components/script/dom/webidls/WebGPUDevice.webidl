@@ -5,7 +5,23 @@
 // WebGPU IDL definitions scraped from the WebGPU sketch:
 //
 
+dictionary WebGPUExtensions {
+    required wg_bool anisotropicFiltering;
+};
+
+dictionary WebGPUFeatures {
+    required wg_bool logicOp;
+};
+
+dictionary WebGPULimits {
+    required wg_u32 maxBindGroups;
+};
+
 interface WebGPUDevice {
+    WebGPUExtensions getExtensions();
+    WebGPUFeatures getFeatures();
+    WebGPULimits getLimits();
+
     //WebGPUBuffer createBuffer(WebGPUBufferDescriptor descriptor);
     //WebGPUTexture createTexture(WebGPUTextureDescriptor descriptor);
     //WebGPUSampler createSampler(WebGPUSamplerDescriptor descriptor);

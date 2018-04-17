@@ -11,6 +11,7 @@ use dom::bindings::codegen::Bindings::CanvasRenderingContext2DBinding::CanvasRen
 use dom::bindings::codegen::Bindings::HTMLCanvasElementBinding;
 use dom::bindings::codegen::Bindings::HTMLCanvasElementBinding::{HTMLCanvasElementMethods, RenderingContext};
 use dom::bindings::codegen::Bindings::WebGLRenderingContextBinding::WebGLContextAttributes;
+use dom::bindings::codegen::Bindings::WebGPUCanvasContextBinding::WebGPUContextDescriptor;
 use dom::bindings::conversions::ConversionResult;
 use dom::bindings::error::{Error, Fallible};
 use dom::bindings::inheritance::Castable;
@@ -226,7 +227,7 @@ impl HTMLCanvasElement {
     pub fn get_or_init_webgpu_context(
         &self,
         cx: *mut JSContext,
-        _attrs: Option<HandleValue>
+        attrs: Option<HandleValue>
     ) -> Option<DomRoot<WebGPUCanvasContext>> {
         if !PREFS.is_webgpu_enabled() {
             return None
@@ -234,8 +235,8 @@ impl HTMLCanvasElement {
         if self.context.borrow().is_none() {
             let window = window_from_node(self);
             let size = self.get_size();
-            //let attrs = Self::get_gpu_attributes(cx, attrs)?;
-            let maybe_ctx = WebGPUCanvasContext::new(&window, self, size);
+            let descriptor = Self::get_gpu_attributes(cx, attrs)?;
+            let maybe_ctx = WebGPUCanvasContext::new(&window, self, size, &descriptor.device);
 
             *self.context.borrow_mut() = maybe_ctx.map( |ctx| CanvasContext::WebGPU(Dom::from_ref(&*ctx)));
         }
@@ -270,6 +271,28 @@ impl HTMLCanvasElement {
             }
             _ => {
                 debug!("Unexpected error on conversion of WebGLContextAttributes");
+                None
+            }
+        }
+    }
+
+    #[allow(unsafe_code)]
+    fn get_gpu_attributes(cx: *mut JSContext, attrs: Option<HandleValue>) -> Option<WebGPUContextDescriptor> {
+        let webgpu_attributes = match attrs {
+            Some(attrs) => attrs,
+            None => {
+                warn!("WebGPU attributes are missing the device");
+                return None
+            },
+        };
+        match unsafe { WebGPUContextDescriptor::new(cx, webgpu_attributes) } {
+            Ok(ConversionResult::Success(desc)) => Some(desc),
+            Ok(ConversionResult::Failure(ref error)) => {
+                unsafe { throw_type_error(cx, &error); }
+                None
+            }
+            _ => {
+                debug!("Unexpected error on conversion of WebGPUContextAttributes");
                 None
             }
         }

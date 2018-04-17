@@ -31,7 +31,7 @@ pub struct Key {
 pub type SwapchainId = Key;
 pub type DeviceId = Key;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InstanceInfo {
     /// Selected adapter info.
     pub adapter_info: hal::AdapterInfo,
@@ -48,11 +48,14 @@ impl MallocSizeOf for InstanceInfo {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ContextInfo {
-    /// Instance info.
-    pub info: InstanceInfo,
+pub struct DeviceInfo {
+    pub id: DeviceId,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SwapChainInfo {
     /// Swapchain identifier.
-    pub swapchain: SwapchainId,
+    pub id: SwapchainId,
     /// An image key for the currently presenting frame.
     pub image_key: webrender_api::ImageKey,
 }
@@ -60,17 +63,26 @@ pub struct ContextInfo {
 
 /// WebGPU Message API
 #[derive(Debug, Deserialize, Serialize)]
-pub enum WebGPUMsg {
-    /// Creates a new WebGPU context instance.
-    CreateContext {
+pub enum Message {
+    /// Initializes a new WebGPU instance.
+    Init {
+        result: WebGPUSender<Result<InstanceInfo, String>>,
+    },
+    /// Creates a new logical device.
+    CreateDevice {
+        result: WebGPUSender<Result<DeviceInfo, String>>,
+    },
+    /// Creates a new WebGPU swap chain.
+    CreateSwapChain {
+        device: DeviceId,
         size: Size2D<u32>,
         //external_image_id: webrender_api::ExternalImageId,
-        result: WebGPUSender<Result<ContextInfo, String>>,
+        result: WebGPUSender<Result<SwapChainInfo, String>>,
     },
     Exit,
 }
 
-pub type WebGPUMainChan = WebGPUSender<WebGPUMsg>;
+pub type WebGPUMainChan = WebGPUSender<Message>;
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct WebGPUPipeline(WebGPUMainChan);

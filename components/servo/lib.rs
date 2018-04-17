@@ -211,7 +211,7 @@ impl<Window, Back> Servo<Window, Back>
                     ..Default::default()
                 },
                 &window.get_window(),
-                adapter,
+                &adapter,
                 surface,
             ).expect("Unable to initialize webrender!")
         };
@@ -237,6 +237,7 @@ impl<Window, Back> Servo<Window, Back>
                                                                     debugger_chan,
                                                                     devtools_chan,
                                                                     supports_clipboard,
+                                                                    adapter,
                                                                     &mut webrender,
                                                                     webrender_document,
                                                                     webrender_api_sender);
@@ -552,6 +553,7 @@ fn create_constellation<Back: hal::Backend>(
     debugger_chan: Option<debugger::Sender>,
     devtools_chan: Option<Sender<devtools_traits::DevtoolsControlMsg>>,
     supports_clipboard: bool,
+    adapter: hal::Adapter<Back>,
     webrender: &mut webrender::Renderer<Back>,
     webrender_document: webrender_api::DocumentId,
     webrender_api_sender: webrender_api::RenderApiSender
@@ -610,6 +612,7 @@ fn create_constellation<Back: hal::Backend>(
 
     let (webgpu_threads, _webgpu_namespace) = WebGPUThreads::new::<Back>(
         webrender_api_sender.clone(),
+        adapter,
     );
 
     let initial_state = InitialConstellationState {

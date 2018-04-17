@@ -5,7 +5,10 @@
 // WebGPU IDL definitions scraped from the WebGPU sketch:
 //
 
+dictionary WebGPUContextDescriptor {
+	required WebGPUDevice device;
+};
+
 [Exposed=Window]
 interface WebGPUCanvasContext: WebGPUSwapChain {
-	WebGPU getInstance(); //TEMP!
 };
