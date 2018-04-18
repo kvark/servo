@@ -29,4 +29,4 @@ style_traits = {path = "../style_traits"}
 time = "0.1.17"
 webrender = {git = "https://github.com/servo/webrender"}
 webrender_api = {git = "https://github.com/servo/webrender", features = ["ipc"]}
-winit = "0.10.0"
+winit = "0.12"

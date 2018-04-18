@@ -28,8 +28,13 @@ pub struct Key {
     pub epoch: u32,
 }
 
-pub type SwapchainId = Key;
+pub type SwapChainId = Key;
 pub type DeviceId = Key;
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, MallocSizeOf, Deserialize, Serialize)]
+pub enum TextureId {
+    Owned(Key),
+    Swapchain(SwapChainId, usize),
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InstanceInfo {
@@ -54,10 +59,18 @@ pub struct DeviceInfo {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SwapChainInfo {
-    /// Swapchain identifier.
-    pub id: SwapchainId,
+    /// Unique identifier.
+    pub id: SwapChainId,
+    /// A texture per swapchain image.
+    pub textures: Vec<TextureInfo>,
     /// An image key for the currently presenting frame.
     pub image_key: webrender_api::ImageKey,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TextureInfo {
+    /// Unique identifier.
+    pub id: TextureId,
 }
 
 
@@ -78,6 +91,11 @@ pub enum Message {
         size: Size2D<u32>,
         //external_image_id: webrender_api::ExternalImageId,
         result: WebGPUSender<Result<SwapChainInfo, String>>,
+    },
+    AcquireFrame {
+        device: DeviceId,
+        swapchain: SwapChainId,
+        result: WebGPUSender<TextureInfo>,
     },
     Exit,
 }

@@ -485,6 +485,7 @@ pub mod webgpu;
 pub mod webgpucanvascontext;
 pub mod webgpudevice;
 pub mod webgpuswapchain;
+pub mod webgputexture;
 pub mod websocket;
 pub mod window;
 pub mod windowproxy;

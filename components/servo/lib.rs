@@ -210,7 +210,7 @@ impl<Window, Back> Servo<Window, Back>
                     enable_subpixel_aa: opts.enable_subpixel_text_antialiasing,
                     ..Default::default()
                 },
-                &window.get_window(),
+                window.get_window(),
                 &adapter,
                 surface,
             ).expect("Unable to initialize webrender!")

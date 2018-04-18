@@ -24,7 +24,7 @@ pub struct WebGPUDevice {
 impl WebGPUDevice {
     #[allow(unrooted_must_root)]
     pub fn new(
-        window: &Window, id: w::SwapchainId, info: w::InstanceInfo, sender: w::WebGPUMainChan,
+        window: &Window, id: w::DeviceId, info: w::InstanceInfo, sender: w::WebGPUMainChan,
     ) -> DomRoot<Self> {
         let object = WebGPUDevice {
             reflector_: Reflector::new(),

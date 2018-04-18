@@ -40,7 +40,7 @@ impl WebGPU {
         let data = match receiver.recv().unwrap() {
             Ok(data) => data,
             Err(e) => {
-                panic!("WebGPU server error, no response for Init");
+                panic!("WebGPU server error, no response for Init: {:?}", e);
             }
         };
 
@@ -72,7 +72,7 @@ impl WebGPU {
                 )
             }
             Err(e) => {
-                panic!("WebGPU server error, no response for CreateDevice");
+                panic!("WebGPU server error, no response for CreateDevice: {:?}", e);
             }
         }
     }

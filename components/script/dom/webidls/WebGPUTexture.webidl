@@ -5,7 +5,5 @@
 // WebGPU IDL definitions scraped from the WebGPU sketch:
 //
 
-interface WebGPUSwapChain {
-    WebGPUTexture getNextTexture();
-    void present();
+interface WebGPUTexture {
 };

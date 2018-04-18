@@ -419,7 +419,10 @@ unsafe_no_jsmanaged_fields!(WebVRGamepadHand);
 unsafe_no_jsmanaged_fields!(ScriptToConstellationChan);
 unsafe_no_jsmanaged_fields!(InteractiveMetrics);
 unsafe_no_jsmanaged_fields!(InteractiveWindow);
-unsafe_no_jsmanaged_fields!(webgpu::Key, webgpu::InstanceInfo, webgpu::WebGPUPipeline);
+unsafe_no_jsmanaged_fields!(
+    webgpu::Key, webgpu::TextureId,
+    webgpu::InstanceInfo, webgpu::WebGPUPipeline
+);
 
 unsafe impl<'a> JSTraceable for &'a str {
     #[inline]

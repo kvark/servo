@@ -52,13 +52,14 @@ impl WebGPUCanvasContext {
         let data = match receiver.recv().unwrap() {
             Ok(data) => data,
             Err(e) => {
-                error!("WebGPU server error, no response for CreateSwapChain");
+                error!("WebGPU server error, no response for CreateSwapChain: {:?}", e);
                 return None
             }
         };
 
         let object = WebGPUCanvasContext {
             swap_chain: WebGPUSwapChain::new_internal(
+                device.id(),
                 data.id,
                 webgpu_chan.clone(),
             ),

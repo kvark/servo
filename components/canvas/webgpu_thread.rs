@@ -83,6 +83,10 @@ impl<B: hal::Backend> WebGPUThread<B> {
                 let info = self.create_swapchain(device, size);
                 result.send(info).unwrap();
             }
+            w::Message::AcquireFrame { device, swapchain, result } => {
+                let info = self.acquire_frame(device, swapchain);
+                result.send(info).unwrap();
+            }
             w::Message::Exit => {
                 return true;
             }
@@ -99,9 +103,10 @@ impl<B: hal::Backend> WebGPUThread<B> {
     }
 
     fn create_device(&mut self) -> Result<w::DeviceInfo, String> {
-        let families = vec![(&self.adapter.queue_families[0], vec![1.0])];
+        let priorities = [1.0];
+        let families = [(&self.adapter.queue_families[0], &priorities[..])];
         let gpu = self.adapter.physical_device
-            .open(families)
+            .open(&families)
             .map_err(|e| e.to_string())?;
         let id = self.rehub.gpus.write().unwrap().push(gpu);
         Ok(w::DeviceInfo {
@@ -110,15 +115,44 @@ impl<B: hal::Backend> WebGPUThread<B> {
     }
 
     fn create_swapchain(
-        &mut self, device: w::DeviceId, size: Size2D<u32>
+        &mut self, dev_id: w::DeviceId, size: Size2D<u32>
     ) -> Result<w::SwapChainInfo, String> {
+        let num_frames = 3;
+        let format = hal::format::Format::Rgba8Srgb;
         let image_key = self.webrender_api.generate_image_key();
-        let dev = &self.rehub.gpus.read().unwrap()[device].device;
-        let swapchain = Swapchain::new(dev, size);
+
+        let dev = &self.rehub.gpus.read().unwrap()[dev_id].device;
+        let memory_types = self.adapter.physical_device
+            .memory_properties()
+            .memory_types;
+        let swapchain = Swapchain::new(
+            size, num_frames, format,
+            dev, &memory_types,
+        );
         let id = self.swapchains.push(swapchain);
+
+        let textures = (0 .. num_frames)
+            .map(|i| w::TextureInfo {
+                id: w::TextureId::Swapchain(id, i),
+            })
+            .collect();
+
         Ok(w::SwapChainInfo {
             id,
+            textures,
             image_key,
         })
+    }
+
+    fn acquire_frame(
+        &mut self, dev_id: w::DeviceId, swapchain_id: w::SwapChainId
+    ) -> w::TextureInfo {
+        let dev = &self.rehub.gpus.read().unwrap()[dev_id].device;
+        let swapchain = &mut self.swapchains[swapchain_id];
+        let index = swapchain.acquire_frame(dev);
+
+        w::TextureInfo {
+            id: w::TextureId::Swapchain(swapchain_id, index),
+        }
     }
 }
