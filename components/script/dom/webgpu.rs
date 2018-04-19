@@ -66,7 +66,7 @@ impl WebGPU {
             Ok(data) => {
                 WebGPUDevice::new(
                     self.global().as_window(),
-                    data.id,
+                    data,
                     self.info.clone(),
                     self.sender.clone(),
                 )

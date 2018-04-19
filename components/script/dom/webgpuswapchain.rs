@@ -15,7 +15,7 @@ use dom_struct::dom_struct;
 #[dom_struct]
 pub struct WebGPUSwapChain {
     reflector_: Reflector,
-    id: (w::DeviceId, w::SwapChainId),
+    id: (w::DeviceId, w::QueueId, w::SwapChainId),
     #[ignore_malloc_size_of = "Defined in ipc-channel"]
     sender: w::WebGPUMainChan,
 }
@@ -23,17 +23,18 @@ pub struct WebGPUSwapChain {
 impl WebGPUSwapChain {
     #[allow(unrooted_must_root)]
     pub fn new_internal(
-        device: w::DeviceId, id: w::SwapChainId, sender: w::WebGPUMainChan
+        device: w::DeviceId, queue: w::QueueId, id: w::SwapChainId,
+        sender: w::WebGPUMainChan,
     ) -> Self {
         WebGPUSwapChain {
             reflector_: Reflector::new(),
-            id: (device, id),
+            id: (device, queue, id),
             sender,
         }
     }
 
     pub fn _id(&self) -> w::SwapChainId {
-        self.id.1
+        self.id.2
     }
 }
 
@@ -48,7 +49,7 @@ impl WebGPUSwapChain {
         let (sender, receiver) = w::webgpu_channel().unwrap();
         let msg = w::Message::AcquireFrame {
             device: self.id.0,
-            swapchain: self.id.1,
+            swapchain: self.id.2,
             result: sender,
         };
         self.sender.send(msg).unwrap();
@@ -58,6 +59,10 @@ impl WebGPUSwapChain {
     }
 
     pub fn Present(&self) {
-        //TODO
+        let msg = w::Message::Present {
+            queue: self.id.1,
+            swapchain: self.id.2,
+        };
+        self.sender.send(msg).unwrap();
     }
 }

@@ -3,9 +3,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use canvas_traits::{hal, webgpu as w};
-use canvas_traits::hal::PhysicalDevice;
+use self::hal::{PhysicalDevice, QueueFamily};
 
-use std::thread;
+use std::{iter, thread};
 use std::sync::{Arc};
 
 use webgpu_mode::{LazyVec, ResourceHub, Swapchain};
@@ -25,6 +25,8 @@ pub struct WebGPUThread<B: hal::Backend> {
     //memories: LazyVec<Memory<B>>,
     adapter: hal::Adapter<B>,
     rehub: Arc<ResourceHub<B>>,
+    gpus: LazyVec<hal::Gpu<B>>,
+    queues: LazyVec<hal::CommandQueue<B, hal::General>>,
     swapchains: LazyVec<Swapchain<B>>,
     //command_pools: LazyVec<CommandPoolHandle<B>>,
 }
@@ -51,6 +53,8 @@ impl<B: hal::Backend> WebGPUThread<B> {
                 //memories: LazyVec::new(),
                 adapter,
                 rehub,
+                gpus: LazyVec::new(),
+                queues: LazyVec::new(),
                 swapchains: LazyVec::new(),
             };
             let webgpu_chan = sender;
@@ -75,6 +79,9 @@ impl<B: hal::Backend> WebGPUThread<B> {
                 let info = self.init();
                 result.send(info).unwrap();
             }
+            w::Message::Exit => {
+                return true;
+            }
             w::Message::CreateDevice { result } => {
                 let info = self.create_device();
                 result.send(info).unwrap();
@@ -87,8 +94,8 @@ impl<B: hal::Backend> WebGPUThread<B> {
                 let info = self.acquire_frame(device, swapchain);
                 result.send(info).unwrap();
             }
-            w::Message::Exit => {
-                return true;
+            w::Message::Present { queue, swapchain } => {
+                self.present(queue, swapchain);
             }
         }
         false
@@ -104,13 +111,19 @@ impl<B: hal::Backend> WebGPUThread<B> {
 
     fn create_device(&mut self) -> Result<w::DeviceInfo, String> {
         let priorities = [1.0];
-        let families = [(&self.adapter.queue_families[0], &priorities[..])];
-        let gpu = self.adapter.physical_device
+        let family = &self.adapter.queue_families[0];
+        let families = [(family, &priorities[..])];
+        let mut gpu = self.adapter.physical_device
             .open(&families)
             .map_err(|e| e.to_string())?;
-        let id = self.rehub.gpus.write().unwrap().push(gpu);
+        let queue = gpu.queues
+            .take(family.id())
+            .unwrap()
+            .queues
+            .remove(0);
         Ok(w::DeviceInfo {
-            id,
+            id: self.gpus.push(gpu),
+            queue_id: self.queues.push(queue),
         })
     }
 
@@ -121,13 +134,14 @@ impl<B: hal::Backend> WebGPUThread<B> {
         let format = hal::format::Format::Rgba8Srgb;
         let image_key = self.webrender_api.generate_image_key();
 
-        let dev = &self.rehub.gpus.read().unwrap()[dev_id].device;
+        let dev = &self.gpus[dev_id].device;
+        let queue_family = self.adapter.queue_families[0].id();
         let memory_types = self.adapter.physical_device
             .memory_properties()
             .memory_types;
         let swapchain = Swapchain::new(
             size, num_frames, format,
-            dev, &memory_types,
+            dev, queue_family, &memory_types,
         );
         let id = self.swapchains.push(swapchain);
 
@@ -147,12 +161,21 @@ impl<B: hal::Backend> WebGPUThread<B> {
     fn acquire_frame(
         &mut self, dev_id: w::DeviceId, swapchain_id: w::SwapChainId
     ) -> w::TextureInfo {
-        let dev = &self.rehub.gpus.read().unwrap()[dev_id].device;
+        let dev = &self.gpus[dev_id].device;
         let swapchain = &mut self.swapchains[swapchain_id];
         let index = swapchain.acquire_frame(dev);
 
         w::TextureInfo {
             id: w::TextureId::Swapchain(swapchain_id, index),
         }
+    }
+
+    fn present(&mut self, queue_id: w::QueueId, swapchain_id: w::SwapChainId) {
+        let queue = &mut self.queues[queue_id];
+        let swapchain = &mut self.swapchains[swapchain_id];
+        let (submit, fence) = swapchain.present();
+        let submission = hal::Submission::new()
+            .submit(iter::once(submit));
+        queue.submit(submission, Some(fence));
     }
 }

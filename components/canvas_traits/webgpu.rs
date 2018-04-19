@@ -30,6 +30,8 @@ pub struct Key {
 
 pub type SwapChainId = Key;
 pub type DeviceId = Key;
+pub type QueueId = Key;
+
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, MallocSizeOf, Deserialize, Serialize)]
 pub enum TextureId {
     Owned(Key),
@@ -55,6 +57,7 @@ impl MallocSizeOf for InstanceInfo {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DeviceInfo {
     pub id: DeviceId,
+    pub queue_id: QueueId,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -81,6 +84,8 @@ pub enum Message {
     Init {
         result: WebGPUSender<Result<InstanceInfo, String>>,
     },
+    /// Ceases all operations and exit.
+    Exit,
     /// Creates a new logical device.
     CreateDevice {
         result: WebGPUSender<Result<DeviceInfo, String>>,
@@ -88,16 +93,22 @@ pub enum Message {
     /// Creates a new WebGPU swap chain.
     CreateSwapChain {
         device: DeviceId,
+        //queue: QueueId,
         size: Size2D<u32>,
         //external_image_id: webrender_api::ExternalImageId,
         result: WebGPUSender<Result<SwapChainInfo, String>>,
     },
+    /// Gets the next available frame from the swapchain.
     AcquireFrame {
         device: DeviceId,
         swapchain: SwapChainId,
         result: WebGPUSender<TextureInfo>,
     },
-    Exit,
+    /// Presents a swapchain frame.
+    Present {
+        queue: QueueId,
+        swapchain: SwapChainId,
+    },
 }
 
 pub type WebGPUMainChan = WebGPUSender<Message>;

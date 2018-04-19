@@ -60,6 +60,7 @@ impl WebGPUCanvasContext {
         let object = WebGPUCanvasContext {
             swap_chain: WebGPUSwapChain::new_internal(
                 device.id(),
+                device.queue_id(),
                 data.id,
                 webgpu_chan.clone(),
             ),

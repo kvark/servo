@@ -9,7 +9,6 @@ use super::LazyVec;
 
 pub struct ResourceHub<B: hal::Backend> {
     //TODO: consider moving to `WebGPUThread`
-    pub gpus: RwLock<LazyVec<hal::Gpu<B>>>,
     pub buffers: RwLock<LazyVec<B::Buffer>>,
     pub images: RwLock<LazyVec<B::Image>>,
     pub image_views: RwLock<LazyVec<B::ImageView>>,
@@ -28,7 +27,6 @@ pub struct ResourceHub<B: hal::Backend> {
 impl<B: hal::Backend> ResourceHub<B> {
     pub fn new() -> Arc<Self> {
         Arc::new(ResourceHub {
-            gpus: RwLock::new(LazyVec::new()),
             buffers: RwLock::new(LazyVec::new()),
             images: RwLock::new(LazyVec::new()),
             image_views: RwLock::new(LazyVec::new()),

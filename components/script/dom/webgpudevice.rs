@@ -15,7 +15,7 @@ use dom::window::Window;
 #[dom_struct]
 pub struct WebGPUDevice {
     reflector_: Reflector,
-    id: w::DeviceId,
+    id: (w::DeviceId, w::QueueId),
     info: w::InstanceInfo,
     #[ignore_malloc_size_of = "Defined in ipc-channel"]
     sender: w::WebGPUMainChan,
@@ -24,19 +24,25 @@ pub struct WebGPUDevice {
 impl WebGPUDevice {
     #[allow(unrooted_must_root)]
     pub fn new(
-        window: &Window, id: w::DeviceId, info: w::InstanceInfo, sender: w::WebGPUMainChan,
+        window: &Window,
+        dev_info: w::DeviceInfo, instance_info: w::InstanceInfo,
+        sender: w::WebGPUMainChan,
     ) -> DomRoot<Self> {
         let object = WebGPUDevice {
             reflector_: Reflector::new(),
-            id,
-            info,
+            id: (dev_info.id, dev_info.queue_id),
+            info: instance_info,
             sender,
         };
         reflect_dom_object(Box::new(object), window, binding::Wrap)
     }
 
     pub fn id(&self) -> w::DeviceId {
-        self.id
+        self.id.0
+    }
+
+    pub fn queue_id(&self) -> w::QueueId {
+        self.id.1
     }
 }
 
