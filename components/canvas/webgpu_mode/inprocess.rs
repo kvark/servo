@@ -2,12 +2,13 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use super::ResourceHub;
+use super::{FrameHandler, ResourceHub};
 
 use canvas_traits::{hal, webgpu as w};
 use webgpu_thread::WebGPUThread;
 
 use webrender_api;
+use webrender::ExternalImageHandler;
 
 
  /// WebGPU Threading API entry point that lives in the constellation.
@@ -18,11 +19,14 @@ impl WebGPUThreads {
     pub fn new<B: hal::Backend>(
         webrender_api_sender: webrender_api::RenderApiSender,
         adapter: hal::Adapter<B>,
-    ) -> (Option<Self>, webrender_api::IdNamespace) {
+    ) -> (Option<Self>, webrender_api::IdNamespace, Box<ExternalImageHandler>) {
         let rehub = ResourceHub::<B>::new();
+        let (handler, frame_sender) = FrameHandler::new();
         // This implementation creates a single `WebGPUThread` for all the pipelines.
-        let (channel, namespace) = WebGPUThread::start(webrender_api_sender, adapter, rehub);
-        (Some(WebGPUThreads(channel)), namespace)
+        let (channel, namespace) = WebGPUThread::start(
+            webrender_api_sender, frame_sender, adapter, rehub
+        );
+        (Some(WebGPUThreads(channel)), namespace, handler)
     }
 
     /// Gets the WebGPUThread handle for each script pipeline.

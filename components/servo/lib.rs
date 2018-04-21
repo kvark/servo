@@ -591,7 +591,7 @@ fn create_constellation<Back: hal::Backend>(
 
     // Initialize WebGL Thread entry point.
     let webgl_threads = Some(gl_factory).map(|factory| {
-        let (webgl_threads, image_handler, output_handler) =
+        let (webgl_threads, _webgl_image_handler, output_handler) =
             WebGLThreads::new(
                 factory,
                 gl,
@@ -600,7 +600,8 @@ fn create_constellation<Back: hal::Backend>(
             );
 
         // Set webrender external image handler for WebGL textures
-        webrender.set_external_image_handler(image_handler);
+        //TODO: re-enable, for now use WebGPU instead
+        //webrender.set_external_image_handler(_webgl_image_handler);
 
         // Set DOM to texture handler, if enabled.
         if let Some(output_handler) = output_handler {
@@ -610,10 +611,11 @@ fn create_constellation<Back: hal::Backend>(
         webgl_threads
     });
 
-    let (webgpu_threads, _webgpu_namespace) = WebGPUThreads::new::<Back>(
+    let (webgpu_threads, _webgpu_namespace, webgpu_image_handler) = WebGPUThreads::new::<Back>(
         webrender_api_sender.clone(),
         adapter,
     );
+    webrender.set_external_image_handler(webgpu_image_handler);
 
     let initial_state = InitialConstellationState {
         compositor_proxy,
