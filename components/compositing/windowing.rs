@@ -17,7 +17,8 @@ use std::fmt::{Debug, Error, Formatter};
 #[cfg(feature = "gleam")]
 use std::rc::Rc;
 use style_traits::DevicePixel;
-use webrender_api::{DeviceIntPoint, DevicePoint, DeviceUintSize, DeviceUintRect, ScrollLocation};
+use style_traits::cursor::CursorKind;
+use webrender_api::{DeviceUintSize, DeviceUintRect, ScrollLocation};
 
 #[derive(Clone)]
 pub enum MouseWindowEvent {
@@ -136,6 +137,13 @@ pub trait WindowMethods {
     fn get_coordinates(&self) -> EmbedderCoordinates;
     /// Does this window support a clipboard
     fn supports_clipboard(&self) -> bool;
+
+    /// Add a favicon
+    fn set_favicon(&self, ctx: TopLevelBrowsingContextId, url: ServoUrl);
+
+    /*/// Return the GL function pointer trait.
+    fn gl(&self) -> Rc<gl::Gl>;*/
+
     /// Set whether the application is currently animating.
     /// Typically, when animations are active, the window
     /// will want to avoid blocking on UI events, and just

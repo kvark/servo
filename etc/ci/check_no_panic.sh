@@ -17,8 +17,8 @@ cd "$(git rev-parse --show-toplevel)"
 PATHS=(
     "components/compositing/compositor.rs"
     "components/constellation/"
-    "ports/servo/glutin_app/mod.rs"
-    "ports/servo/glutin_app/window.rs"
+    "ports/servo/winit_app/mod.rs"
+    "ports/servo/winit_app/window.rs"
 )
 
 # Make sure the paths exist

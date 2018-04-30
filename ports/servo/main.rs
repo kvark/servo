@@ -13,7 +13,7 @@
 //!
 //! For the engine itself look next door in `components/servo/lib.rs`.
 //!
-//! [glutin]: https://github.com/tomaka/glutin
+//! [winit]: https://github.com/tomaka/winit
 
 #![cfg_attr(feature = "unstable", feature(core_intrinsics))]
 
@@ -23,9 +23,11 @@ extern crate backtrace;
 #[macro_use] extern crate bitflags;
 extern crate euclid;
 #[cfg(target_os = "windows")] extern crate gdi32;
-extern crate gleam;
-extern crate glutin;
-// The window backed by glutin
+//extern crate gleam;
+extern crate gfx_backend_vulkan as back;
+extern crate gfx_hal;
+extern crate winit;
+// The window backed by winit
 #[macro_use] extern crate log;
 #[cfg(any(target_os = "linux", target_os = "macos"))] extern crate osmesa_sys;
 extern crate servo;
@@ -37,9 +39,11 @@ extern crate winit;
 #[cfg(target_os = "windows")] extern crate winapi;
 #[cfg(target_os = "windows")] extern crate user32;
 
-mod glutin_app;
+mod winit_app;
 
 use backtrace::Backtrace;
+use compositing::windowing::WindowMethods;
+use gfx_hal::Instance;
 use servo::Servo;
 use servo::compositing::windowing::WindowEvent;
 #[cfg(target_os = "android")]
@@ -154,7 +158,7 @@ fn main() {
         process::exit(0);
     }
 
-    let window = glutin_app::create_window();
+    let window = winit_app::create_window();
 
     let mut browser = browser::Browser::new(window.clone());
 
@@ -168,7 +172,11 @@ fn main() {
 
     let target_url = cmdline_url.or(pref_url).or(blank_url).unwrap();
 
-    let mut servo = Servo::new(window.clone());
+    let instance = back::Instance::create("gfx-rs instance", 1);
+    let mut adapters = instance.enumerate_adapters();
+    let adapter = adapters.remove(0);
+    let mut surface = instance.create_surface(window.get_window());
+    let mut servo = Servo::new(window.clone(), adapter, &mut surface);
 
     let (sender, receiver) = ipc::channel().unwrap();
     servo.handle_events(vec![WindowEvent::NewBrowser(target_url, sender)]);

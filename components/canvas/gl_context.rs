@@ -11,6 +11,7 @@ use offscreen_gl_context::{GLLimits, GLVersion};
 use offscreen_gl_context::{NativeGLContext, NativeGLContextHandle, NativeGLContextMethods};
 use offscreen_gl_context::{OSMesaContext, OSMesaContextHandle};
 use std::sync::{Arc, Mutex};
+use std::rc::Rc;
 use super::webgl_thread::WebGLImpl;
 
 /// The GLContextFactory is used to create shared GL contexts with the main thread GL context.
@@ -106,6 +107,13 @@ impl GLContextFactory {
         }
     }
 
+    pub fn new_headless_context_and_gl(proxy: &CompositorProxy) -> (GLContextFactory, Rc<gl::Gl>) {
+        let headless_ctx = NativeGLContext::create_headless(&gl::GlType::default(), GLVersion::Major(3));
+        let gl_factory = GLContextFactory::Native(headless_ctx.unwrap().handle(), Some(MainThreadDispatcher::new(proxy.clone())));
+        let gl_ctx_wrapper = gl_factory.new_context(WebGLVersion::WebGL2, Size2D::new(1024, 768), GLContextAttributes::default()).expect("Failed to create gl context wrapper.");
+        (gl_factory, gl_ctx_wrapper.clone_gl())
+    }
+
     fn gl_version(webgl_version: WebGLVersion) -> GLVersion {
         match webgl_version {
             WebGLVersion::WebGL1 => GLVersion::Major(2),
@@ -162,6 +170,17 @@ impl GLContextWrapper {
             }
             GLContextWrapper::OSMesa(ref ctx) => {
                 ctx.gl()
+            }
+        }
+    }
+
+    pub fn clone_gl(&self) -> Rc<gl::Gl> {
+        match *self {
+            GLContextWrapper::Native(ref ctx) => {
+                ctx.clone_gl()
+            }
+            GLContextWrapper::OSMesa(ref ctx) => {
+                ctx.clone_gl()
             }
         }
     }

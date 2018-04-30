@@ -15,6 +15,7 @@ default = []
 
 [dependencies]
 euclid = "0.17"
+gfx-hal = { git = "https://github.com/gfx-rs/gfx.git", rev= "d78bd11" , feature = "serde"}
 gfx_traits = {path = "../gfx_traits"}
 gleam = { version = "0.4.34", optional = true }
 image = "0.18"
@@ -33,6 +34,7 @@ style_traits = {path = "../style_traits"}
 time = "0.1.17"
 webrender = {git = "https://github.com/servo/webrender", features = ["capture"]}
 webrender_api = {git = "https://github.com/servo/webrender", features = ["ipc"]}
+winit = "0.12"
 
 [build-dependencies]
 toml = "0.4.5"

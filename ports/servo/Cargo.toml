@@ -37,8 +37,9 @@ unstable = ["libservo/unstable"]
 backtrace = "0.3"
 bitflags = "1.0"
 euclid = "0.17"
-gleam = "0.4.34"
-glutin = "0.13"
+gfx-backend-vulkan = { git = "https://github.com/gfx-rs/gfx.git", rev= "d78bd11", features = ["glsl-to-spirv"] }
+gfx-hal = { git = "https://github.com/gfx-rs/gfx.git", rev= "d78bd11" , feature = "serde"}
+#gleam = "0.4.34"
 libservo = {path = "../../components/servo"}
 log = "0.4"
 tinyfiledialogs = "3.0"

@@ -8,6 +8,7 @@ use compositor_thread::{CompositorProxy, CompositorReceiver};
 use compositor_thread::{InitialCompositorState, Msg};
 use euclid::{TypedPoint2D, TypedVector2D, TypedScale};
 use gfx_traits::Epoch;
+use gfx_hal;
 #[cfg(feature = "gleam")]
 use gl;
 #[cfg(feature = "gleam")]
@@ -100,7 +101,7 @@ impl FrameTreeId {
 enum LayerPixel {}
 
 /// NB: Never block on the constellation, because sometimes the constellation blocks on us.
-pub struct IOCompositor<Window: WindowMethods> {
+pub struct IOCompositor<Window: WindowMethods, Back: gfx_hal::Backend> {
     /// The application window.
     pub window: Rc<Window>,
 
@@ -173,7 +174,7 @@ pub struct IOCompositor<Window: WindowMethods> {
     in_scroll_transaction: Option<Instant>,
 
     /// The webrender renderer.
-    webrender: webrender::Renderer,
+    webrender: webrender::Renderer<Back>,
 
     /// The active webrender document.
     webrender_document: webrender_api::DocumentId,
@@ -290,8 +291,11 @@ impl webrender_api::RenderNotifier for RenderNotifier {
     }
 }
 
-impl<Window: WindowMethods> IOCompositor<Window> {
-    fn new(window: Rc<Window>, state: InitialCompositorState) -> Self {
+impl<Window: WindowMethods, Back: gfx_hal::Backend> IOCompositor<Window, Back> {
+    fn new(window: Rc<Window>, state: InitialCompositorState<Back>) -> Self {
+        let frame_size = window.framebuffer_size();
+        let window_rect = window.window_rect();
+        let scale_factor = window.hidpi_factor();
         let composite_target = match opts::get().output_file {
             Some(_) => CompositeTarget::PngFile,
             None => CompositeTarget::Window
@@ -330,7 +334,7 @@ impl<Window: WindowMethods> IOCompositor<Window> {
         }
     }
 
-    pub fn create(window: Rc<Window>, state: InitialCompositorState) -> Self {
+    pub fn create(window: Rc<Window>, state: InitialCompositorState<Back>) -> Self {
         let mut compositor = IOCompositor::new(window, state);
 
         // Set the size of the root layer.
@@ -1281,7 +1285,7 @@ impl<Window: WindowMethods> IOCompositor<Window> {
         };
 
         // Perform the page flip. This will likely block for a while.
-        self.window.present();
+        //self.window.present();
 
         self.last_composite_time = precise_time_ns();
 

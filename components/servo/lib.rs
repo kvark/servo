@@ -35,6 +35,7 @@ pub extern crate devtools;
 pub extern crate devtools_traits;
 pub extern crate euclid;
 pub extern crate gfx;
+pub extern crate gfx_hal;
 pub extern crate ipc_channel;
 pub extern crate layout_thread;
 pub extern crate msg;
@@ -84,6 +85,7 @@ use euclid::Length;
 #[cfg(all(not(target_os = "windows"), not(target_os = "ios")))]
 use gaol::sandbox::{ChildSandbox, ChildSandboxMethods};
 use gfx::font_cache_thread::FontCacheThread;
+use gfx_hal::Instance;
 use ipc_channel::ipc::{self, IpcSender};
 use log::{Log, Metadata, Record};
 use net::resource_thread::new_resource_threads;
@@ -120,15 +122,22 @@ pub use msg::constellation_msg::{KeyState, TopLevelBrowsingContextId as BrowserI
 /// application Servo is embedded in. Clients then create an event
 /// loop to pump messages between the embedding application and
 /// various browser components.
-pub struct Servo<Window: WindowMethods + 'static> {
-    compositor: IOCompositor<Window>,
+pub struct Servo<Window: WindowMethods + 'static, Back: gfx_hal::Backend + 'static> {
+    compositor: IOCompositor<Window, Back>,
     constellation_chan: Sender<ConstellationMsg>,
     embedder_receiver: EmbedderReceiver,
     embedder_events: Vec<EmbedderMsg>,
 }
 
-impl<Window> Servo<Window> where Window: WindowMethods + 'static {
-    pub fn new(window: Rc<Window>) -> Servo<Window> {
+impl<Window, Back> Servo<Window, Back>
+    where Window: WindowMethods + 'static,
+          Back: gfx_hal::Backend + 'static
+{
+    pub fn new(
+        window: Rc<Window>,
+        adapter: gfx_hal::Adapter<Back>,
+        surface: &mut Back::Surface,
+    ) -> Servo<Window, Back> {
         // Global configuration options, parsed from the command line.
         let opts = opts::get();
 
@@ -179,18 +188,24 @@ impl<Window> Servo<Window> where Window: WindowMethods + 'static {
 
             let render_notifier = Box::new(RenderNotifier::new(compositor_proxy.clone()));
 
-            webrender::Renderer::new(window.gl(), render_notifier, webrender::RendererOptions {
-                device_pixel_ratio: coordinates.hidpi_factor.get(),
-                resource_override_path: Some(resource_path),
-                enable_aa: opts.enable_text_antialiasing,
-                debug_flags: debug_flags,
-                recorder: recorder,
-                precache_shaders: opts.precache_shaders,
-                enable_scrollbars: opts.output_file.is_none(),
-                renderer_kind: renderer_kind,
-                enable_subpixel_aa: opts.enable_subpixel_text_antialiasing,
-                ..Default::default()
-            }).expect("Unable to initialize webrender!")
+            webrender::Renderer::new(
+                render_notifier,
+                webrender::RendererOptions {
+                    device_pixel_ratio: coordinates.hidpi_factor.get(),
+                    resource_override_path: Some(resource_path),
+                    enable_aa: opts.enable_text_antialiasing,
+                    debug_flags: debug_flags,
+                    recorder: recorder,
+                    precache_shaders: opts.precache_shaders,
+                    enable_scrollbars: opts.output_file.is_none(),
+                    renderer_kind: renderer_kind,
+                    enable_subpixel_aa: opts.enable_subpixel_text_antialiasing,
+                    ..Default::default()
+                },
+                &window.get_window(),
+                adapter,
+                surface,
+            ).expect("Unable to initialize webrender!")
         };
 
         let webrender_api = webrender_api_sender.create_api();
@@ -204,6 +219,7 @@ impl<Window> Servo<Window> where Window: WindowMethods + 'static {
         // Create the constellation, which maintains the engine
         // pipelines, including the script and layout threads, as well
         // as the navigation context.
+
         let (constellation_chan, sw_senders) = create_constellation(opts.user_agent.clone(),
                                                                     opts.config_dir.clone(),
                                                                     embedder_proxy.clone(),
@@ -215,8 +231,7 @@ impl<Window> Servo<Window> where Window: WindowMethods + 'static {
                                                                     supports_clipboard,
                                                                     &mut webrender,
                                                                     webrender_document,
-                                                                    webrender_api_sender,
-                                                                    window.gl());
+                                                                    webrender_api_sender);
 
         // Send the constellation's swmanager sender to service worker manager thread
         script::init_service_workers(sw_senders);
@@ -482,18 +497,20 @@ fn create_constellation(user_agent: Cow<'static, str>,
     };
 
     // GLContext factory used to create WebGL Contexts
-    let gl_factory = if opts::get().should_use_osmesa() {
+    /*let gl_factory = if opts::get().should_use_osmesa() {
         GLContextFactory::current_osmesa_handle()
     } else {
         GLContextFactory::current_native_handle(&compositor_proxy)
-    };
+    };*/
+
+    let (gl_factory, gl) = GLContextFactory::new_headless_context_and_gl(&compositor_proxy);
 
     // Initialize WebGL Thread entry point.
-    let webgl_threads = gl_factory.map(|factory| {
+    let webgl_threads = Some(gl_factory).map(|factory| {
         let (webgl_threads, image_handler, output_handler) =
             WebGLThreads::new(
                 factory,
-                window_gl,
+                gl,
                 webrender_api_sender.clone(),
                 webvr_compositor.map(|c| c as Box<_>),
             );

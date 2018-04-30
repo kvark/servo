@@ -61,8 +61,8 @@
 * ports
   * geckolib
     * A static library to be linked into Gecko for the Stylo project.
-  * glutin
-    * Embedding implementation for the `glutin` windowing library.
+  * winit
+    * Embedding implementation for the `winit` windowing library.
 * python
   * servo
     * Implementations of servo-specific mach commands.
@@ -104,7 +104,7 @@
 * <https://github.com/servo/html5ever/>: an HTML5 parser
 * <https://github.com/servo/ipc-channel/>: an IPC implementation
 * <https://github.com/PistonDevelopers/image/>: image decoders
-* <https://github.com/tomaka/glutin/>: cross-platform windowing and input
+* <https://github.com/tomaka/winit/>: cross-platform windowing and input
 * <https://github.com/servo/rust-azure/>: bindings to Moz2D/Azure (cross-platform 2D rendering library)
 * <https://github.com/servo/rust-cssparser/>: a CSS parser
 * <https://github.com/servo/rust-selectors/>: a CSS selector matching library
